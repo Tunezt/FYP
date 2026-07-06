@@ -172,3 +172,22 @@ If literal `SupabaseVectorStore` usage matters for grading optics, it's a contai
 - Suite: 66 passed, 4 skipped (the DB-gated ones).
 
 **Run the skipped tests once Supabase exists:** `alembic upgrade head` against a disposable DB, then `INTEGRATION_DATABASE_URL=... pytest tests/test_db_integration.py`.
+
+---
+
+## Phase 9 — performance pass (2026-07-07)
+
+**Fixes found by the audit:**
+- **N+1 in the WhatsApp `get_low_stock` tool** — it looped `compute_item_velocity` (one query per item) on a hot conversational path. Rewritten to one grouped 14-day usage query + in-memory math, mirroring `/api/items`. The per-item service function remains for the post-sale single-item check and the nightly sweep (where per-item is one query each by nature and reuses the de-dup logic).
+- **Dashboard API latency now persisted**: middleware writes a `request_logs` row (channel='dashboard') for every authenticated `/api/*` call, using the business_id the auth dependency stashes on `request.state` (from the verified JWT — never a client header; never read for authorization). Streaming template download excluded. Failures swallowed (logging must never break a response).
+
+**Audit confirmations (already in place, verified):**
+- Connection pooling: pool_size=5 + pre-ping; `statement_cache_size=0` for Supabase's PgBouncer transaction pooler; `.env.example` documents using the pooler string (port 6543) in production.
+- Baseline caching: anomaly reads use `metric_baselines` (nightly refresh); no 30-day recompute on any query path.
+- Pagination: sales, expenses, receipts all server-paginated; sales joins names in the page query.
+- Parallel fetching: overview fires 4 requests concurrently; receipts sign URLs via `asyncio.gather`.
+- Indexes: all per the locked DDL (business_id + time composites, HNSW on embeddings).
+- Latency instrumentation now covers all three channels: whatsapp (raw query + intent + latency), pos (per sale), dashboard (per API call) — the CP2 evaluation dataset accumulates from first real use.
+- 66 passed / 4 skipped after changes.
+
+**Not done (deliberate):** live load verification (repeated-query cache behavior, N+1 confirmation via query logs) needs a real database — folded into the same post-credential checklist as Phases 5/8.

@@ -48,6 +48,8 @@ async def _ctx(request: Request, required_scope: str) -> AsyncIterator[AuthConte
     claims = _extract_claims(request, required_scope)
     business_id = uuid.UUID(claims["business_id"])
     staff_id = uuid.UUID(claims["staff_id"]) if claims.get("staff_id") else None
+    # For the request-logging middleware (never read for authorization).
+    request.state.business_id = business_id
     async with SessionLocal() as session:
         await set_tenant(session, business_id)
         try:

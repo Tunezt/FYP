@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.periods import PERIODS, period_range
 from app.models import Business, Expense, Item, Sale
-from app.services.velocity import compute_item_velocity
+from app.services.velocity import VELOCITY_WINDOW_DAYS
 
 ToolExecutor = Callable[[AsyncSession, Business, dict], Awaitable[dict]]
 
@@ -310,18 +310,33 @@ async def get_low_stock(session: AsyncSession, business: Business, args: dict) -
     items = (
         (await session.execute(select(Item).order_by(Item.name))).scalars().all()
     )
+    # Velocity for all items from ONE grouped query (mirrors /api/items) —
+    # a per-item loop here would be an N+1 on the WhatsApp hot path.
+    since = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
+    usage_rows = (
+        await session.execute(
+            select(Sale.item_id, func.sum(Sale.quantity))
+            .where(Sale.sold_at >= since)
+            .group_by(Sale.item_id)
+        )
+    ).all()
+    usage = {item_id: Decimal(qty) for item_id, qty in usage_rows}
+
     risky = []
     for item in items:
-        reading = await compute_item_velocity(session, item)
+        daily = usage.get(item.id, Decimal(0)) / VELOCITY_WINDOW_DAYS
+        days_remaining = (
+            (item.current_stock / daily).quantize(Decimal("0.1")) if daily > 0 else None
+        )
         below_threshold = item.current_stock <= item.reorder_threshold
-        low_days = reading.days_remaining is not None and reading.days_remaining <= 3
+        low_days = days_remaining is not None and days_remaining <= 3
         if below_threshold or low_days:
             risky.append(
                 {
                     "name": item.name,
                     "current_stock": _num(item.current_stock),
                     "unit": item.unit,
-                    "days_remaining": _num(reading.days_remaining),
+                    "days_remaining": _num(days_remaining),
                     "below_reorder_threshold": below_threshold,
                 }
             )

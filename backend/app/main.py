@@ -24,11 +24,33 @@ app.add_middleware(
 
 @app.middleware("http")
 async def latency_header(request: Request, call_next):
-    """Wall-clock latency on every response. Persistent per-interaction logging
-    (request_logs) happens in the handlers that know the business context."""
+    """Wall-clock latency header on every response, plus a persistent
+    request_logs row for authenticated dashboard API calls (WhatsApp messages
+    and POS sales write their own richer rows in their handlers)."""
     start = time.perf_counter()
     response = await call_next(request)
-    response.headers["X-Response-Time-Ms"] = str(int((time.perf_counter() - start) * 1000))
+    latency_ms = int((time.perf_counter() - start) * 1000)
+    response.headers["X-Response-Time-Ms"] = str(latency_ms)
+
+    business_id = getattr(request.state, "business_id", None)
+    path = request.url.path
+    if business_id is not None and path.startswith("/api") and path != "/api/stock-template":
+        try:
+            from app.core.db import tenant_session
+            from app.models import RequestLog
+
+            async with tenant_session(business_id) as session:
+                session.add(
+                    RequestLog(
+                        business_id=business_id,
+                        channel="dashboard",
+                        path=path,
+                        latency_ms=latency_ms,
+                        status="ok" if response.status_code < 400 else str(response.status_code),
+                    )
+                )
+        except Exception:
+            logger.exception("request_logs write failed (non-fatal)")
     return response
 
 
