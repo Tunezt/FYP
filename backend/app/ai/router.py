@@ -79,4 +79,8 @@ async def handle_text(session: AsyncSession, business: Business, text: str) -> R
 
     facts = await executor(session, business, dict(call.args or {}))
     reply = await compose_reply(business, text, call.name, facts)
-    return RoutedReply(intent=call.name, reply=reply)
+    # request_logs vocabulary: the RAG path is logged as 'rag' (per Section 6),
+    # data tools keep their specific names (strictly more evaluable than the
+    # generic 'function_call').
+    intent = "rag" if call.name == "search_history" else call.name
+    return RoutedReply(intent=intent, reply=reply)

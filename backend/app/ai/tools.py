@@ -369,3 +369,49 @@ async def record_expense(session: AsyncSession, business: Business, args: dict) 
         "category": expense.category,
         "description": expense.description,
     }
+
+
+# ── RAG path (Phase 4) ───────────────────────────────────────────────────────
+
+
+@tool(
+    types.FunctionDeclaration(
+        name="search_history",
+        description=(
+            "Search past purchase receipts / nota history when the answer lives "
+            "in unstructured records rather than current numbers: 'pernah beli "
+            "gula dari supplier ini?', 'kapan terakhir beli susu', 'have I "
+            "bought X before', 'biasanya beli arabica di mana'."
+        ),
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "query": types.Schema(
+                    type=types.Type.STRING,
+                    description="The owner's question, rephrased as a search query if helpful.",
+                )
+            },
+            required=["query"],
+        ),
+    )
+)
+async def search_history(session: AsyncSession, business: Business, args: dict) -> dict:
+    from app.services.rag import search_receipts
+
+    documents = await search_receipts(session, business.id, args.get("query", ""))
+    if not documents:
+        return {
+            "matches": [],
+            "note": "No matching receipts in history — either it was never bought via a recorded nota, or receipts haven't been photographed yet.",
+        }
+    return {
+        "matches": [
+            {
+                "content": d.page_content,
+                "supplier": d.metadata.get("supplier"),
+                "date": d.metadata.get("occurred_at"),
+                "total_amount": d.metadata.get("total_amount"),
+            }
+            for d in documents
+        ]
+    }
