@@ -135,25 +135,142 @@ async def _process_message(message: dict) -> None:
     )
 
 
+def _confirmation_prompt(parsed: dict) -> str:
+    from app.services.receipts import summarize_parse
+
+    header = (
+        "Ini yang aku baca dari fotonya 👀"
+        if parsed.get("document_type") == "stock_ledger"
+        else "Ini yang aku baca dari notanya 👀"
+    )
+    return (
+        f"{header}\n\n{summarize_parse(parsed)}\n\n"
+        "Sudah benar? Balas *YA* untuk simpan, atau kasih tau bagian yang salah."
+    )
+
+
 async def _handle_text(business: Business, text: str) -> tuple[str, str]:
+    from app.ai.composer import compose_reply
     from app.ai.router import handle_text as route_text
+    from app.ai.vision import revise_parse
+    from app.services.receipts import (
+        classify_reply_keyword,
+        commit_parse,
+        create_pending,
+        discard_pending,
+        get_active_pending,
+    )
 
     async with tenant_session(business.id) as session:
+        pending = await get_active_pending(session, business.id)
+
+        if pending is not None:
+            verdict = classify_reply_keyword(text)
+            payload = pending.payload
+
+            if verdict == "confirm":
+                facts = await commit_parse(
+                    session, business, payload["parsed"], payload["image_path"]
+                )
+                await discard_pending(session, pending)
+                reply = await compose_reply(business, text, "vision_confirm", facts)
+                return "vision_confirm", reply
+
+            if verdict == "deny":
+                await discard_pending(session, pending)
+                return (
+                    "vision_deny",
+                    "Oke, aku batalkan — nggak ada yang disimpan. "
+                    "Kirim ulang fotonya kalau mau coba lagi 👍",
+                )
+
+            # Anything else: maybe a correction, maybe an unrelated question.
+            revision = await revise_parse(payload["parsed"], text)
+            if not revision["unrelated"]:
+                await create_pending(session, business, revision["parsed"], payload["image_path"])
+                return "vision_revise", _confirmation_prompt(revision["parsed"])
+            # Unrelated → keep the pending and answer normally below.
+
         routed = await route_text(session, business, text)
         return routed.intent, routed.reply
 
 
 async def _handle_image(business: Business, message: dict) -> tuple[str, str | None]:
-    # Vision path lands in Phase 3.
-    return "vision", (
-        "Fitur baca foto struk sedang disiapkan — sebentar lagi ya! "
-        "(Receipt photo reading is coming shortly.)"
+    from app.ai.composer import compose_reply
+    from app.ai.vision import parse_business_document
+    from app.services.receipts import commit_parse, create_pending, needs_confirmation
+    from app.whatsapp.client import download_media
+    from app.whatsapp.storage import upload_receipt_image
+
+    media_id = message.get("image", {}).get("id")
+    if not media_id:
+        return "vision", "Fotonya nggak kebaca — coba kirim ulang ya."
+
+    # Immediate ack — vision parsing takes far longer than a text round-trip.
+    await send_text(
+        business.owner_phone, "Fotonya sudah kuterima, lagi kubaca dulu ya… 🧾"
     )
+
+    image_bytes, mime_type = await download_media(media_id)
+    image_path = await upload_receipt_image(business.id, image_bytes, mime_type)
+    parsed = await parse_business_document(image_bytes, mime_type)
+
+    if parsed.get("document_type") == "other" or not parsed.get("items"):
+        return (
+            "vision",
+            "Hmm, itu kayaknya bukan nota atau buku stok — aku nggak nemu daftar "
+            "barang di fotonya. Coba foto ulang yang lebih jelas ya 🙏",
+        )
+
+    async with tenant_session(business.id) as session:
+        if needs_confirmation(parsed):
+            await create_pending(session, business, parsed, image_path)
+            return "vision", _confirmation_prompt(parsed)
+
+        facts = await commit_parse(session, business, parsed, image_path)
+        reply = await compose_reply(
+            business, "(owner sent a receipt photo)", "vision", facts
+        )
+        return "vision", reply
+
+
+_XLSX_MIMES = {
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+}
 
 
 async def _handle_document(business: Business, message: dict) -> tuple[str, str | None]:
-    # Excel import path lands in Phase 3.
-    return "document", (
-        "Fitur impor Excel sedang disiapkan — sebentar lagi ya! "
-        "(Excel import is coming shortly.)"
+    from app.ai.composer import compose_reply
+    from app.services.stock_import import (
+        StockTemplateError,
+        apply_stock_template,
+        parse_stock_template,
     )
+    from app.whatsapp.client import download_media
+
+    doc = message.get("document", {})
+    filename = (doc.get("filename") or "").lower()
+    if doc.get("mime_type") not in _XLSX_MIMES and not filename.endswith((".xlsx", ".xls")):
+        return (
+            "document",
+            "File itu belum bisa kubaca — kirim file Excel (.xlsx) pakai template "
+            "stok ya. Templatnya bisa diunduh dari dashboard 📄",
+        )
+
+    data, _mime = await download_media(doc.get("id", ""))
+    try:
+        rows, warnings = parse_stock_template(data)
+    except StockTemplateError:
+        return (
+            "document",
+            "Excelnya kebuka, tapi aku nggak nemu kolom *nama* dan *jumlah*. "
+            "Pakai template dari dashboard ya, atau pastikan baris pertama berisi "
+            "judul kolom.",
+        )
+
+    async with tenant_session(business.id) as session:
+        facts = await apply_stock_template(session, business, rows)
+    facts["warnings"] = warnings
+    reply = await compose_reply(business, "(owner sent a stock template)", "document", facts)
+    return "document", reply
