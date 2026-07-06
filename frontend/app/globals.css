@@ -110,6 +110,51 @@ body {
   }
 }
 
+/* driver.js tour popover — restyled to the glass system */
+.driver-popover {
+  background: var(--glass-strong) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--glass-border);
+  border-radius: 1.25rem !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 12px 40px rgba(20, 20, 50, 0.25) !important;
+  font-family: inherit;
+}
+
+.driver-popover-title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.driver-popover-description {
+  color: var(--ink-soft) !important;
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.driver-popover-progress-text {
+  color: var(--ink-faint) !important;
+  font-size: 0.75rem;
+}
+
+.driver-popover-navigation-btns button {
+  border-radius: 0.9rem !important;
+  padding: 0.4rem 0.9rem !important;
+  font-weight: 600;
+  text-shadow: none !important;
+  border: 1px solid var(--glass-border) !important;
+  background: var(--glass) !important;
+  color: var(--ink) !important;
+}
+
+.driver-popover-navigation-btns button.driver-popover-next-btn,
+.driver-popover-navigation-btns button.driver-popover-done-btn {
+  background-image: linear-gradient(135deg, #5e5ce6 0%, #8b5cf6 60%, #a855f7 100%) !important;
+  color: #fff !important;
+  border: none !important;
+}
+
 /* Reduce motion for users who ask for it */
 @media (prefers-reduced-motion: reduce) {
   *,

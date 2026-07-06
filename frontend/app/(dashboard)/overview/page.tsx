@@ -8,6 +8,7 @@ import type { AlertRow, InventoryItem, Overview, TrendPoint } from "@/lib/types"
 import { Glass, Plate, SectionTitle, SeverityBadge, Skeleton, EmptyState } from "@/components/ui";
 import { IconArrowDown, IconArrowUp, IconChat } from "@/components/icons";
 import { HelpTip } from "@/components/HelpTip";
+import { OnboardingTour } from "@/components/OnboardingTour";
 
 export default function OverviewPage() {
   // Four independent fetches fire in parallel on mount — no waterfall.
@@ -25,6 +26,7 @@ export default function OverviewPage() {
 
   return (
     <div className="animate-fade-up space-y-8">
+      <OnboardingTour enabled={o !== null && !o.onboarding_completed} />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="ink-faint text-sm">
@@ -41,7 +43,7 @@ export default function OverviewPage() {
       </header>
 
       {/* Today — the one number the owner came for */}
-      <Glass className="overflow-hidden">
+      <Glass className="overflow-hidden" data-tour="today">
         <div className="px-6 pb-2 pt-6 md:px-8">
           <p className="ink-soft text-sm font-medium">Penjualan hari ini</p>
           {o ? (
@@ -103,7 +105,7 @@ export default function OverviewPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* This month — quiet plate, rows not cards */}
-        <Plate className="px-6 py-5">
+        <Plate className="px-6 py-5" data-tour="month">
           <SectionTitle
             hint={
               <HelpTip title="Laba bulan ini">
@@ -144,7 +146,7 @@ export default function OverviewPage() {
         </Plate>
 
         {/* Needs attention */}
-        <Glass className="px-6 py-5">
+        <Glass className="px-6 py-5" data-tour="attention">
           <SectionTitle
             hint={
               <HelpTip title="Perlu perhatian">

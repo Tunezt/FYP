@@ -6,27 +6,22 @@ import { useState } from "react";
  * tinted flats ("plate") carry secondary content so the page has texture
  * variety instead of wall-to-wall frosted cards. */
 
-export function Glass({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return <section className={`glass-card ${className}`}>{children}</section>;
+type SurfaceProps = React.HTMLAttributes<HTMLElement> & { children: React.ReactNode };
+
+export function Glass({ children, className = "", ...rest }: SurfaceProps) {
+  return (
+    <section className={`glass-card ${className}`} {...rest}>
+      {children}
+    </section>
+  );
 }
 
-export function Plate({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+export function Plate({ children, className = "", style, ...rest }: SurfaceProps) {
   return (
     <section
       className={`rounded-3xl bg-accent-gradient-soft ${className}`}
-      style={{ border: "1px solid var(--hairline)" }}
+      style={{ border: "1px solid var(--hairline)", ...style }}
+      {...rest}
     >
       {children}
     </section>

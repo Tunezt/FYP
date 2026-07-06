@@ -50,7 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <span className="h-9 w-9 rounded-xl bg-accent-gradient shadow-pop" />
           <span className="text-lg font-bold tracking-tight">Warung Pintar</span>
         </Link>
-        <nav className="flex flex-col gap-1">
+        <nav className="flex flex-col gap-1" data-tour="nav">
           {NAV.map(({ href, label, Icon }) => {
             const active = pathname.startsWith(href);
             return (
