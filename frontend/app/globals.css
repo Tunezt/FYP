@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── iOS-Native Glass design system ──────────────────────────────────────────
+   Light/dark adaptive everywhere EXCEPT the POS route, which forces the light
+   high-contrast variant (bright shop counters fight dark translucent glass).
+   The POS layout sets data-theme="pos-light" on <html> to opt out. */
+
+:root {
+  --bg-base: #f2f3f8;
+  --bg-mesh-1: rgba(94, 92, 230, 0.16);
+  --bg-mesh-2: rgba(168, 85, 247, 0.11);
+  --bg-mesh-3: rgba(56, 189, 248, 0.1);
+  --ink: #17172b;
+  --ink-soft: #5b5b74;
+  --ink-faint: #9494ab;
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass-strong: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --hairline: rgba(23, 23, 43, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="pos-light"]) {
+    --bg-base: #0c0c14;
+    --bg-mesh-1: rgba(94, 92, 230, 0.22);
+    --bg-mesh-2: rgba(168, 85, 247, 0.14);
+    --bg-mesh-3: rgba(56, 189, 248, 0.08);
+    --ink: #f3f3fa;
+    --ink-soft: #a9a9c4;
+    --ink-faint: #6b6b88;
+    --glass: rgba(255, 255, 255, 0.06);
+    --glass-strong: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --hairline: rgba(255, 255, 255, 0.09);
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  color: var(--ink);
+  background-color: var(--bg-base);
+  background-image: radial-gradient(1100px 700px at 8% -10%, var(--bg-mesh-1), transparent 60%),
+    radial-gradient(900px 620px at 100% 12%, var(--bg-mesh-2), transparent 55%),
+    radial-gradient(760px 540px at 45% 110%, var(--bg-mesh-3), transparent 60%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@layer components {
+  .glass-card {
+    @apply rounded-3xl border backdrop-blur-xl;
+    background: var(--glass);
+    border-color: var(--glass-border);
+    box-shadow: 0 1px 1px rgba(255, 255, 255, 0.35) inset, 0 8px 32px rgba(20, 20, 50, 0.1);
+  }
+
+  .glass-strong {
+    background: var(--glass-strong);
+  }
+
+  .hairline-b {
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .ink-soft {
+    color: var(--ink-soft);
+  }
+
+  .ink-faint {
+    color: var(--ink-faint);
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-semibold text-white transition-all duration-200 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100;
+    background-image: linear-gradient(135deg, #5e5ce6 0%, #8b5cf6 60%, #a855f7 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 6px 20px rgba(94, 92, 230, 0.35);
+  }
+
+  .btn-accent:hover {
+    filter: brightness(1.06);
+  }
+
+  .btn-quiet {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border px-5 py-3 font-medium transition-all duration-200 active:scale-[0.97];
+    background: var(--glass);
+    border-color: var(--glass-border);
+    color: var(--ink);
+  }
+
+  .field {
+    @apply w-full rounded-2xl border px-4 py-3 outline-none transition-shadow duration-200;
+    background: var(--glass-strong);
+    border-color: var(--glass-border);
+    color: var(--ink);
+  }
+
+  .field:focus {
+    box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.35);
+  }
+
+  .field::placeholder {
+    color: var(--ink-faint);
+  }
+}
+
+/* Reduce motion for users who ask for it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

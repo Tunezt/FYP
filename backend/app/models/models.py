@@ -1,0 +1,234 @@
+"""SQLAlchemy models — a 1:1 mirror of the DDL in alembic/versions/0001_initial_schema.py.
+
+The schema itself (7 core entities + support tables, RLS policies, indexes) is
+defined in raw SQL in the migration; these models exist for query construction
+and must not drift from it.
+"""
+import uuid
+from datetime import datetime
+from decimal import Decimal
+
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    Text,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def _uuid_pk() -> Mapped[uuid.UUID]:
+    return mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+
+
+def _now() -> Mapped[datetime]:
+    return mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+
+staff_role = Enum("owner", "staff", name="staff_role", create_type=False)
+expense_source = Enum("manual", "receipt", name="expense_source", create_type=False)
+alert_type = Enum("anomaly", "low_stock", name="alert_type", create_type=False)
+alert_severity = Enum("low", "medium", "high", name="alert_severity", create_type=False)
+
+
+class Business(Base):
+    __tablename__ = "businesses"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    business_type: Mapped[str] = mapped_column(Text, nullable=False, server_default="cafe")
+    owner_phone: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    whatsapp_number: Mapped[str | None] = mapped_column(Text)
+    language_preference: Mapped[str] = mapped_column(Text, nullable=False, server_default="id")
+    timezone: Mapped[str] = mapped_column(Text, nullable=False, server_default="Asia/Jakarta")
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _now()
+
+
+class Staff(Base):
+    __tablename__ = "staff"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(staff_role, nullable=False, server_default="staff")
+    phone: Mapped[str | None] = mapped_column(Text)
+    pin_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+
+
+class Item(Base):
+    __tablename__ = "items"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    unit: Mapped[str] = mapped_column(Text, nullable=False)
+    current_stock: Mapped[Decimal] = mapped_column(
+        Numeric(12, 3), nullable=False, server_default="0"
+    )
+    cost_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    sell_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    reorder_threshold: Mapped[Decimal] = mapped_column(
+        Numeric(12, 3), nullable=False, server_default="0"
+    )
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class Sale(Base):
+    __tablename__ = "sales"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id"), nullable=False
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    total_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    staff_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("staff.id"), nullable=False
+    )
+    sold_at: Mapped[datetime] = _now()
+
+
+class Expense(Base):
+    __tablename__ = "expenses"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    category: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(expense_source, nullable=False, server_default="manual")
+    receipt_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("receipts.id", ondelete="SET NULL")
+    )
+    occurred_at: Mapped[datetime] = _now()
+    created_at: Mapped[datetime] = _now()
+
+
+class Receipt(Base):
+    __tablename__ = "receipts"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    image_url: Mapped[str] = mapped_column(Text, nullable=False)
+    parsed_data: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'"))
+    supplier: Mapped[str | None] = mapped_column(Text)
+    total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _now()
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    type: Mapped[str] = mapped_column(alert_type, nullable=False)
+    related_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id")
+    )
+    metric: Mapped[str | None] = mapped_column(Text)
+    severity: Mapped[str] = mapped_column(alert_severity, nullable=False, server_default="medium")
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    is_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_acknowledged: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    created_at: Mapped[datetime] = _now()
+
+
+class MetricBaseline(Base):
+    __tablename__ = "metric_baselines"
+
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("businesses.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    metric: Mapped[str] = mapped_column(Text, primary_key=True)
+    rolling_mean: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    rolling_stddev: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    computed_at: Mapped[datetime] = _now()
+
+
+class RequestLog(Base):
+    __tablename__ = "request_logs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    business_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id")
+    )
+    channel: Mapped[str] = mapped_column(Text, nullable=False)
+    path: Mapped[str | None] = mapped_column(Text)
+    raw_query: Mapped[str | None] = mapped_column(Text)
+    classified_intent: Mapped[str | None] = mapped_column(Text)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _now()
+
+
+# ── Support tables added during the build (additive; logged in docs/progress.md) ──
+
+
+class PendingConfirmation(Base):
+    """Holds a parsed-but-unconfirmed extraction (vision receipt / stock-book /
+    Excel import) while we wait for the owner's WhatsApp YES. Business data is
+    only written to real tables after confirmation — this is the persistence
+    the Section 4 confirmation gate requires."""
+
+    __tablename__ = "pending_confirmations"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)  # 'receipt' | 'stock_import'
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _now()
+
+
+class LoginOtp(Base):
+    """Server-side OTP state for dashboard registration/login. Keyed by phone
+    (which may not belong to any business yet during registration), so it is
+    deliberately not business-scoped and carries no RLS policy. Stores a hash,
+    never the code itself."""
+
+    __tablename__ = "login_otps"
+
+    phone: Mapped[str] = mapped_column(Text, primary_key=True)
+    code_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _now()
