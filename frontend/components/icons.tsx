@@ -125,3 +125,33 @@ export const IconSpark = (p: IconProps) => (
     <path d="M12 3.5 13.8 9l5.7.2-4.5 3.5 1.6 5.5L12 14.8 7.4 18.2 9 12.7 4.5 9.2 10.2 9 12 3.5Z" />
   </Svg>
 );
+
+export const IconShop = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.5 9.5 6 4.5h12l1.5 5" />
+    <path d="M4.5 9.5h15v2a2.2 2.2 0 0 1-2.2 2.2c-1.3 0-2.3-1-2.3-2.2 0 1.2-1 2.2-2.5 2.2S10 12.7 10 11.5c0 1.2-1 2.2-2.3 2.2A2.2 2.2 0 0 1 5.5 11.5" />
+    <path d="M6 13.5V20h12v-6.5" />
+    <path d="M9.5 20v-4h5v4" />
+  </Svg>
+);
+
+export const IconLogout = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M13.5 4.5H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h6.5" />
+    <path d="M16 8.5 19.5 12 16 15.5" />
+    <path d="M9.5 12h10" />
+  </Svg>
+);
+
+export const IconChevronRight = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m9.5 5.5 6.5 6.5-6.5 6.5" />
+  </Svg>
+);
+
+export const IconTrendUp = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 17.5 9.5 12l3.5 3.5 7-7.5" />
+    <path d="M15.5 8h4.5v4.5" />
+  </Svg>
+);

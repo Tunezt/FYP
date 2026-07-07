@@ -8,6 +8,7 @@ import { useState } from "react";
 
 type SurfaceProps = React.HTMLAttributes<HTMLElement> & { children: React.ReactNode };
 
+/** Hero surface — frosted glass. Budget: ONE per page. */
 export function Glass({ children, className = "", ...rest }: SurfaceProps) {
   return (
     <section className={`glass-card ${className}`} {...rest}>
@@ -16,15 +17,62 @@ export function Glass({ children, className = "", ...rest }: SurfaceProps) {
   );
 }
 
-export function Plate({ children, className = "", style, ...rest }: SurfaceProps) {
+/** Quiet secondary surface — flat warm white, no blur. */
+export function Plate({ children, className = "", ...rest }: SurfaceProps) {
   return (
-    <section
-      className={`rounded-3xl bg-accent-gradient-soft ${className}`}
-      style={{ border: "1px solid var(--hairline)", ...style }}
-      {...rest}
-    >
+    <section className={`plate ${className}`} {...rest}>
       {children}
     </section>
+  );
+}
+
+/** Day header for chronological lists: "Hari ini · Selasa        Rp 360.000" */
+export function DayHeader({
+  label,
+  sub,
+  meta,
+}: {
+  label: string;
+  sub?: string | null;
+  meta?: React.ReactNode;
+}) {
+  return (
+    <div className="day-header">
+      <p className="text-sm font-bold">
+        {label}
+        {sub && <span className="ink-faint ml-2 text-xs font-medium">{sub}</span>}
+      </p>
+      {meta && <p className="ink-soft text-xs font-semibold tabular-nums">{meta}</p>}
+    </div>
+  );
+}
+
+/** Small warm identity tile for item rows (no product photos in the data —
+ * initials on a soft tint carry recognition instead). */
+const TILE_TONES = [
+  "bg-accent-100 text-accent-800",
+  "bg-orange-100 text-orange-800",
+  "bg-sky-100 text-sky-800",
+  "bg-amber-100 text-amber-800",
+  "bg-rose-100 text-rose-800",
+];
+
+export function Tile({ label, className = "" }: { label: string; className?: string }) {
+  const initials = label
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+  let hash = 0;
+  for (const ch of label) hash = (hash * 31 + ch.charCodeAt(0)) & 0xffff;
+  const tone = TILE_TONES[hash % TILE_TONES.length];
+  return (
+    <span
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${tone} ${className}`}
+      aria-hidden
+    >
+      {initials}
+    </span>
   );
 }
 
@@ -48,21 +96,10 @@ export function SectionTitle({
   );
 }
 
-const SEVERITY_STYLES: Record<string, string> = {
-  high: "bg-red-500/15 text-red-600 dark:text-red-400",
-  medium: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-  low: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-};
-
 export function SeverityBadge({ severity }: { severity: string }) {
   const label = severity === "high" ? "penting" : severity === "medium" ? "sedang" : "info";
-  return (
-    <span
-      className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${SEVERITY_STYLES[severity] ?? SEVERITY_STYLES.low}`}
-    >
-      {label}
-    </span>
-  );
+  const cls = severity === "high" ? "pill-bad" : severity === "medium" ? "pill-warn" : "pill-good";
+  return <span className={cls}>{label}</span>;
 }
 
 export function EmptyState({

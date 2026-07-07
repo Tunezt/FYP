@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatQty, formatRupiah } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
-import { EmptyState, Glass, SectionTitle, Sheet, Skeleton } from "@/components/ui";
+import { EmptyState, Glass, Sheet, Skeleton, Tile } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
 
@@ -26,13 +26,21 @@ const EMPTY_DRAFT: Draft = {
   reorder_threshold: "0",
 };
 
-function riskLabel(item: InventoryItem): { text: string; tone: string } | null {
-  if (Number(item.current_stock) <= 0) return { text: "habis", tone: "bg-red-500/15 text-red-500" };
+function isAtRisk(item: InventoryItem): boolean {
+  return (
+    item.below_reorder_threshold || (item.days_remaining !== null && item.days_remaining <= 3)
+  );
+}
+
+function riskPill(item: InventoryItem): { text: string; cls: string } {
+  const stock = Number(item.current_stock);
+  if (stock <= 0) return { text: "habis", cls: "pill-bad" };
+  if (item.days_remaining !== null && item.days_remaining <= 1)
+    return { text: `±${item.days_remaining} hari`, cls: "pill-bad" };
   if (item.days_remaining !== null && item.days_remaining <= 3)
-    return { text: `±${item.days_remaining} hari`, tone: "bg-amber-500/15 text-amber-600" };
-  if (item.below_reorder_threshold)
-    return { text: "di bawah batas", tone: "bg-amber-500/15 text-amber-600" };
-  return null;
+    return { text: `±${item.days_remaining} hari`, cls: "pill-warn" };
+  if (item.below_reorder_threshold) return { text: "di bawah minimum", cls: "pill-warn" };
+  return { text: "aman", cls: "pill-good" };
 }
 
 export default function InventoryPage() {
@@ -43,6 +51,16 @@ export default function InventoryPage() {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { risky, safe } = useMemo(() => {
+    const all = items.data ?? [];
+    return {
+      risky: all
+        .filter(isAtRisk)
+        .sort((a, b) => (a.days_remaining ?? 99) - (b.days_remaining ?? 99)),
+      safe: all.filter((i) => !isAtRisk(i)),
+    };
+  }, [items.data]);
 
   function openAdd() {
     setDraft(EMPTY_DRAFT);
@@ -84,7 +102,7 @@ export default function InventoryPage() {
       setEditing(null);
       items.reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal menyimpan");
+      setError(e instanceof Error ? e.message : "Gagal menyimpan — coba lagi ya.");
     } finally {
       setBusy(false);
     }
@@ -93,10 +111,10 @@ export default function InventoryPage() {
   const sheetOpen = adding || editing !== null;
 
   return (
-    <div className="animate-fade-up space-y-6">
+    <div className="animate-fade-up space-y-7">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Stok</h1>
+          <h1 className="text-[1.65rem] font-bold tracking-tight md:text-3xl">Stok</h1>
           <p className="ink-soft mt-1 flex items-center gap-2 text-sm">
             Perkiraan hari tersisa dihitung dari penjualan 14 hari terakhir
             <HelpTip title="Hari tersisa">
@@ -116,47 +134,31 @@ export default function InventoryPage() {
         <Glass>
           <EmptyState emoji="📦" title="Stok masih kosong">
             Tambah barang di sini, atau kirim foto buku stok / file Excel ke asisten WhatsApp —
-            nanti diisi otomatis.
+            nanti terisi otomatis.
           </EmptyState>
         </Glass>
       ) : (
-        <ul className="grid gap-2.5 md:grid-cols-2">
-          {items.data.map((item) => {
-            const risk = riskLabel(item);
-            return (
-              <li key={item.id}>
-                <button
-                  onClick={() => openEdit(item)}
-                  className="flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left transition-all hover:bg-[color:var(--glass)]"
-                  style={{ border: "1px solid var(--hairline)" }}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{item.name}</p>
-                    <p className="ink-faint text-xs">
-                      {Number(item.sell_price) > 0
-                        ? `jual ${formatRupiah(item.sell_price)}`
-                        : "bahan baku"}
-                      {item.avg_daily_usage ? ` · ±${item.avg_daily_usage}/hari` : ""}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="font-bold tabular-nums">
-                      {formatQty(item.current_stock)}{" "}
-                      <span className="ink-soft text-xs font-normal">{item.unit}</span>
-                    </p>
-                    {risk ? (
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${risk.tone}`}>
-                        {risk.text}
-                      </span>
-                    ) : (
-                      <span className="ink-faint text-[11px]">aman</span>
-                    )}
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          {risky.length > 0 && (
+            <section>
+              <div className="mb-1 flex items-baseline gap-2">
+                <h2 className="text-base font-bold">Perlu perhatian</h2>
+                <span className="pill-warn">{risky.length}</span>
+              </div>
+              <ItemRows items={risky} onEdit={openEdit} />
+            </section>
+          )}
+          <section>
+            <h2 className="mb-1 text-base font-bold">
+              {risky.length > 0 ? "Aman" : "Semua barang"}
+            </h2>
+            {safe.length === 0 ? (
+              <p className="ink-faint py-4 text-sm">Semua barang sedang butuh perhatian 😅</p>
+            ) : (
+              <ItemRows items={safe} onEdit={openEdit} />
+            )}
+          </section>
+        </>
       )}
 
       <Sheet
@@ -223,7 +225,7 @@ export default function InventoryPage() {
             />
           </Field>
           {error && (
-            <p className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600">
+            <p className="rounded-2xl px-4 py-3 text-sm font-medium" style={{ background: "var(--bad-bg)", color: "var(--bad)" }}>
               {error}
             </p>
           )}
@@ -237,6 +239,39 @@ export default function InventoryPage() {
         </div>
       </Sheet>
     </div>
+  );
+}
+
+function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: InventoryItem) => void }) {
+  return (
+    <ul>
+      {items.map((item) => {
+        const pill = riskPill(item);
+        return (
+          <li key={item.id}>
+            <button onClick={() => onEdit(item)} className="list-row w-full text-left">
+              <Tile label={item.name} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{item.name}</p>
+                <p className="ink-faint text-xs">
+                  {Number(item.sell_price) > 0
+                    ? `jual ${formatRupiah(item.sell_price)}`
+                    : "bahan baku"}
+                  {item.avg_daily_usage ? ` · ±${item.avg_daily_usage} ${item.unit}/hari` : ""}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-sm font-bold tabular-nums">
+                  {formatQty(item.current_stock)}{" "}
+                  <span className="ink-faint text-xs font-normal">{item.unit}</span>
+                </p>
+                <span className={pill.cls}>{pill.text}</span>
+              </div>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

@@ -335,10 +335,13 @@ function SellScreen({
                 }`}
               >
                 <span className="text-base font-bold leading-tight">{item.name}</span>
-                <span className="text-accent-600 font-semibold">
+                <span className="font-semibold text-accent-700">
                   {formatRupiah(item.sell_price)}
                 </span>
-                <span className={`mt-1 text-xs font-medium ${low ? "text-amber-600" : "ink-faint"}`}>
+                <span
+                  className={`mt-1 text-xs font-medium ${low ? "" : "ink-faint"}`}
+                  style={low ? { color: "var(--warn)" } : undefined}
+                >
                   {out ? "habis" : `sisa ${formatQty(stock)} ${item.unit}`}
                   {low && !out ? " · hampir habis" : ""}
                 </span>
@@ -375,7 +378,10 @@ function SellScreen({
             </div>
 
             {error && (
-              <p className="mt-4 rounded-2xl bg-red-500/10 px-4 py-3 text-center text-sm font-medium text-red-600">
+              <p
+                className="mt-4 rounded-2xl px-4 py-3 text-center text-sm font-medium"
+                style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+              >
                 {error}
               </p>
             )}
@@ -391,7 +397,10 @@ function SellScreen({
       {flash && (
         <div className="pointer-events-none fixed inset-x-0 bottom-8 z-30 flex justify-center">
           <div className="glass-card glass-strong animate-scale-in flex items-center gap-3 px-6 py-4 shadow-pop">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white">
+            <span
+              className="flex h-9 w-9 items-center justify-center rounded-full text-white"
+              style={{ background: "var(--good)" }}
+            >
               ✓
             </span>
             <div>

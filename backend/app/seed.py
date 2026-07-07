@@ -17,6 +17,7 @@ import asyncio
 import random
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, select
 
@@ -107,9 +108,11 @@ async def seed() -> None:
             for _ in range(n_sales):
                 item, _w = rng.choices(sellable, weights=[w for _, w in sellable])[0]
                 qty = Decimal(rng.choices([1, 1, 1, 2], weights=[6, 6, 6, 2])[0])
-                sold_at = day.replace(
+                # Business hours in the café's own timezone (07:00–20:59 WIB),
+                # stored as UTC — not UTC-hour times that read as 3 AM sales.
+                sold_at = day.astimezone(ZoneInfo("Asia/Jakarta")).replace(
                     hour=rng.randint(7, 20), minute=rng.randint(0, 59), second=0, microsecond=0
-                )
+                ).astimezone(timezone.utc)
                 session.add(
                     Sale(
                         business_id=business_id, item_id=item.id, quantity=qty,

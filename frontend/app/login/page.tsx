@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, OWNER_TOKEN_KEY } from "@/lib/api";
-import { IconChat } from "@/components/icons";
+import { IconChat, IconShop } from "@/components/icons";
 
 type Step = "phone" | "code";
 
@@ -56,11 +56,11 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm animate-scale-in">
         <div className="mb-8 text-center">
-          <span className="mx-auto block h-14 w-14 rounded-2xl bg-accent-gradient shadow-pop" />
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-gradient text-white shadow-pop">
+            <IconShop className="h-7 w-7" />
+          </span>
           <h1 className="mt-4 text-2xl font-bold tracking-tight">Warung Pintar</h1>
-          <p className="ink-soft mt-1 text-sm">
-            Kelola usaha lewat WhatsApp — dashboard ini bonusnya.
-          </p>
+          <p className="ink-soft mt-1 text-sm">Kelola usahamu, makin mudah.</p>
         </div>
 
         <div className="glass-card px-6 py-6">
@@ -131,7 +131,10 @@ export default function LoginPage() {
           )}
 
           {error && (
-            <p className="mt-4 rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600">
+            <p
+              className="mt-4 rounded-2xl px-4 py-3 text-sm font-medium"
+              style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+            >
               {error}
             </p>
           )}

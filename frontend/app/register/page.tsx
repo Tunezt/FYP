@@ -23,6 +23,17 @@ const LANGUAGES = [
 
 type Step = 1 | 2 | 3;
 
+function ErrorNote({ children }: { children: React.ReactNode }) {
+  return (
+    <p
+      className="rounded-2xl px-4 py-3 text-sm font-medium"
+      style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+    >
+      {children}
+    </p>
+  );
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [regToken, setRegToken] = useState<string | null | "missing">(null);
@@ -86,7 +97,7 @@ export default function RegisterPage() {
       sessionStorage.removeItem("wp_registration_token");
       setStep(2);
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail : "Pendaftaran gagal — coba lagi.");
+      setError(e instanceof ApiError ? e.detail : "Pendaftaran gagal — coba lagi ya.");
     } finally {
       setBusy(false);
     }
@@ -105,7 +116,7 @@ export default function RegisterPage() {
       setStaffName("");
       setStaffPin("");
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail : "Gagal menambah staf.");
+      setError(e instanceof ApiError ? e.detail : "Gagal menambah staf — coba lagi ya.");
     } finally {
       setBusy(false);
     }
@@ -132,7 +143,11 @@ export default function RegisterPage() {
           <span
             key={s}
             className={`h-2 rounded-full transition-all duration-300 ${
-              s === step ? "w-8 bg-accent-500" : s < step ? "w-2 bg-accent-500" : "w-2 bg-[color:var(--hairline)]"
+              s === step
+                ? "w-8 bg-accent-600"
+                : s < step
+                  ? "w-2 bg-accent-600"
+                  : "w-2 bg-[color:var(--hairline)]"
             }`}
           />
         ))}
@@ -146,7 +161,13 @@ export default function RegisterPage() {
           <div className="mt-5 space-y-4">
             <label className="block">
               <span className="ink-soft mb-1.5 block text-xs font-medium">Nama usaha</span>
-              <input className="field" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="cth. Kopi Kenangan Senja" autoFocus />
+              <input
+                className="field"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                placeholder="cth. Kopi Kenangan Senja"
+                autoFocus
+              />
             </label>
 
             <div>
@@ -169,22 +190,40 @@ export default function RegisterPage() {
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Nama kamu</span>
-                <input className="field" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="cth. Ibu Ratna" />
+                <input
+                  className="field"
+                  value={ownerName}
+                  onChange={(e) => setOwnerName(e.target.value)}
+                  placeholder="cth. Ibu Ratna"
+                />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">PIN kasir kamu (4 angka)</span>
-                <input className="field tabular-nums" inputMode="numeric" maxLength={4} value={ownerPin} onChange={(e) => setOwnerPin(e.target.value.replace(/\D/g, ""))} placeholder="••••" />
+                <span className="ink-soft mb-1.5 block text-xs font-medium">
+                  PIN kasir kamu (4 angka)
+                </span>
+                <input
+                  className="field tabular-nums"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={ownerPin}
+                  onChange={(e) => setOwnerPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="••••"
+                />
               </label>
             </div>
 
             <div>
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Bahasa asisten WhatsApp</span>
+              <span className="ink-soft mb-1.5 block text-xs font-medium">
+                Bahasa asisten WhatsApp
+              </span>
               <div className="flex flex-wrap gap-2">
                 {LANGUAGES.map((l) => (
                   <button
                     key={l.value}
                     onClick={() => setLanguage(l.value)}
-                    className={`rounded-2xl px-4 py-2 text-sm font-medium ${language === l.value ? "btn-accent px-4 py-2" : "btn-quiet px-4 py-2"}`}
+                    className={`rounded-2xl px-4 py-2 text-sm font-medium ${
+                      language === l.value ? "btn-accent px-4 py-2" : "btn-quiet px-4 py-2"
+                    }`}
                   >
                     {l.label}
                   </button>
@@ -193,7 +232,7 @@ export default function RegisterPage() {
               <p className="ink-faint mt-1.5 text-xs">Campur-campur juga dimengerti kok.</p>
             </div>
 
-            {error && <p className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600">{error}</p>}
+            {error && <ErrorNote>{error}</ErrorNote>}
 
             <button
               onClick={createBusiness}
@@ -217,19 +256,39 @@ export default function RegisterPage() {
             {staffList.length > 0 && (
               <ul className="flex flex-wrap gap-2">
                 {staffList.map((name) => (
-                  <li key={name} className="flex items-center gap-2 rounded-2xl px-3 py-1.5 text-sm font-medium" style={{ border: "1px solid var(--hairline)" }}>
+                  <li
+                    key={name}
+                    className="flex items-center gap-2 rounded-2xl px-3 py-1.5 text-sm font-medium"
+                    style={{ border: "1px solid var(--hairline)" }}
+                  >
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-gradient text-[10px] font-bold text-white">
                       {initials(name)}
                     </span>
-                    {name} <IconCheck className="h-3.5 w-3.5 text-emerald-500" />
+                    {name} <IconCheck className="h-3.5 w-3.5 text-[color:var(--good)]" />
                   </li>
                 ))}
               </ul>
             )}
             <div className="flex gap-2">
-              <input className="field flex-1" placeholder="Nama staf" value={staffName} onChange={(e) => setStaffName(e.target.value)} />
-              <input className="field w-28 tabular-nums" placeholder="PIN" inputMode="numeric" maxLength={4} value={staffPin} onChange={(e) => setStaffPin(e.target.value.replace(/\D/g, ""))} />
-              <button onClick={addStaff} disabled={busy || !staffName.trim() || staffPin.length !== 4} className="btn-quiet px-4">
+              <input
+                className="field flex-1"
+                placeholder="Nama staf"
+                value={staffName}
+                onChange={(e) => setStaffName(e.target.value)}
+              />
+              <input
+                className="field w-28 tabular-nums"
+                placeholder="PIN"
+                inputMode="numeric"
+                maxLength={4}
+                value={staffPin}
+                onChange={(e) => setStaffPin(e.target.value.replace(/\D/g, ""))}
+              />
+              <button
+                onClick={addStaff}
+                disabled={busy || !staffName.trim() || staffPin.length !== 4}
+                className="btn-quiet px-4"
+              >
                 +
               </button>
             </div>
@@ -250,7 +309,7 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {error && <p className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600">{error}</p>}
+            {error && <ErrorNote>{error}</ErrorNote>}
 
             <div className="flex gap-3">
               <button onClick={() => setStep(3)} className="btn-accent flex-1 py-3.5">

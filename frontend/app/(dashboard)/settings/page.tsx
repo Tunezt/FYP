@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import type { Business, StaffMember } from "@/lib/types";
-import { CopyField, Glass, Plate, SectionTitle, Sheet, Skeleton } from "@/components/ui";
+import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
 import { initials } from "@/lib/format";
@@ -45,7 +45,7 @@ export default function SettingsPage() {
       setStaffDraft({ name: "", pin: "" });
       staff.reload();
     } catch (e) {
-      setStaffError(e instanceof Error ? e.message : "Gagal menambah staf");
+      setStaffError(e instanceof Error ? e.message : "Gagal menambah staf — coba lagi ya.");
     } finally {
       setStaffBusy(false);
     }
@@ -62,16 +62,16 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="animate-fade-up space-y-8">
-      <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Pengaturan</h1>
+    <div className="animate-fade-up max-w-3xl space-y-8">
+      <h1 className="text-[1.65rem] font-bold tracking-tight md:text-3xl">Pengaturan</h1>
 
       {/* Business profile */}
       <section>
-        <SectionTitle>Profil usaha</SectionTitle>
+        <h2 className="mb-2 text-base font-bold">Profil usaha</h2>
         {business.loading ? (
           <Skeleton className="h-40" />
         ) : (
-          <Glass className="space-y-3 px-6 py-5">
+          <Plate className="space-y-3 px-6 py-5">
             <label className="block">
               <span className="ink-soft mb-1.5 block text-xs font-medium">Nama usaha</span>
               <input
@@ -98,36 +98,29 @@ export default function SettingsPage() {
                 {savingProfile ? "Menyimpan…" : "Simpan perubahan"}
               </button>
             )}
-          </Glass>
+          </Plate>
         )}
       </section>
 
       {/* Staff */}
       <section>
-        <SectionTitle
-          action={
-            <button onClick={() => setStaffSheet(true)} className="btn-quiet px-3 py-1.5 text-sm">
-              <IconPlus className="h-4 w-4" /> Tambah staf
-            </button>
-          }
-        >
-          Staf kasir
-        </SectionTitle>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-base font-bold">Staf kasir</h2>
+          <button onClick={() => setStaffSheet(true)} className="btn-quiet px-3 py-1.5 text-sm">
+            <IconPlus className="h-4 w-4" /> Tambah staf
+          </button>
+        </div>
         {staff.loading ? (
           <Skeleton className="h-24" />
         ) : (
-          <ul className="grid gap-2 sm:grid-cols-2">
+          <ul>
             {(staff.data ?? []).map((member) => (
-              <li
-                key={member.id}
-                className={`flex items-center gap-3 rounded-2xl px-4 py-3 ${member.is_active ? "" : "opacity-45"}`}
-                style={{ border: "1px solid var(--hairline)" }}
-              >
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-gradient text-sm font-bold text-white">
+              <li key={member.id} className={`list-row ${member.is_active ? "" : "opacity-45"}`}>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-gradient text-sm font-bold text-white">
                   {initials(member.name)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{member.name}</p>
+                  <p className="truncate text-sm font-semibold">{member.name}</p>
                   <p className="ink-faint text-xs">
                     {member.role === "owner" ? "pemilik" : "staf"}
                     {!member.is_active && " · nonaktif"}
@@ -139,7 +132,7 @@ export default function SettingsPage() {
                       await mutate(`/auth/staff/${member.id}/deactivate`);
                       staff.reload();
                     }}
-                    className="ink-faint shrink-0 text-xs hover:text-red-500"
+                    className="ink-faint shrink-0 text-xs hover:text-[color:var(--bad)]"
                   >
                     nonaktifkan
                   </button>
@@ -152,16 +145,13 @@ export default function SettingsPage() {
 
       {/* POS pairing */}
       <section>
-        <SectionTitle
-          hint={
-            <HelpTip title="Layar kasir">
-              Buka tautan ini sekali di browser tablet/HP kasir. Setelah itu perangkat selalu
-              langsung masuk ke layar kasir usaha ini — staf tinggal pilih nama dan masukkan PIN.
-            </HelpTip>
-          }
-        >
+        <h2 className="mb-2 flex items-center gap-2 text-base font-bold">
           Layar kasir (POS)
-        </SectionTitle>
+          <HelpTip title="Layar kasir">
+            Buka tautan ini sekali di browser tablet/HP kasir. Setelah itu perangkat selalu
+            langsung masuk ke layar kasir usaha ini — staf tinggal pilih nama dan masukkan PIN.
+          </HelpTip>
+        </h2>
         <Plate className="space-y-3 px-6 py-5">
           <p className="ink-soft text-sm">
             Hubungkan perangkat kasir dengan tautan berpasangan. Tautan berlaku setahun dan hanya
@@ -179,7 +169,7 @@ export default function SettingsPage() {
 
       {/* Stock template */}
       <section>
-        <SectionTitle>Template stok</SectionTitle>
+        <h2 className="mb-2 text-base font-bold">Template stok</h2>
         <p className="ink-soft mb-3 max-w-lg text-sm">
           Isi template Excel ini lalu kirim ke asisten WhatsApp untuk mengisi stok awal sekaligus.
           Bisa juga langsung foto buku stok — nanti dibaca otomatis.
@@ -187,7 +177,6 @@ export default function SettingsPage() {
         <a
           href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/stock-template`}
           onClick={(e) => {
-            // Authenticated download: fetch with token, save as blob.
             e.preventDefault();
             const token = localStorage.getItem("wp_owner_token");
             void fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/stock-template`, {
@@ -232,7 +221,10 @@ export default function SettingsPage() {
             />
           </label>
           {staffError && (
-            <p className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600">
+            <p
+              className="rounded-2xl px-4 py-3 text-sm font-medium"
+              style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+            >
               {staffError}
             </p>
           )}

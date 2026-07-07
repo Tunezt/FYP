@@ -2,38 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── iOS-Native Glass design system ──────────────────────────────────────────
-   Light/dark adaptive everywhere EXCEPT the POS route, which forces the light
-   high-contrast variant (bright shop counters fight dark translucent glass).
-   The POS layout sets data-theme="pos-light" on <html> to opt out. */
+/* ── Warung Pintar design system — "warung hangat" warm-light glass ──────────
+   Owner-approved direction (session 2): warm off-white surfaces, frosted white
+   cards, forest-green accent, one hero glass surface per page, day-grouped
+   open lists. Dark variant follows the same warmth (deep green-tinted).
+   The POS route forces light via data-theme="pos-light" on <html>. */
 
 :root {
-  --bg-base: #f2f3f8;
-  --bg-mesh-1: rgba(94, 92, 230, 0.16);
-  --bg-mesh-2: rgba(168, 85, 247, 0.11);
-  --bg-mesh-3: rgba(56, 189, 248, 0.1);
-  --ink: #17172b;
-  --ink-soft: #5b5b74;
-  --ink-faint: #9494ab;
-  --glass: rgba(255, 255, 255, 0.62);
-  --glass-strong: rgba(255, 255, 255, 0.82);
-  --glass-border: rgba(255, 255, 255, 0.55);
-  --hairline: rgba(23, 23, 43, 0.08);
+  --bg-base: #f3f1ea;
+  --bg-wash-1: rgba(43, 122, 78, 0.07);
+  --bg-wash-2: rgba(194, 112, 61, 0.05);
+  --bg-wash-3: rgba(255, 255, 255, 0.85);
+  --ink: #1d221e;
+  --ink-soft: #59645d;
+  --ink-faint: #8b958e;
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-strong: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(29, 34, 30, 0.07);
+  --hairline: rgba(29, 34, 30, 0.09);
+  --accent: #2b7a4e;
+  --accent-deep: #236743;
+  --accent-soft: rgba(43, 122, 78, 0.1);
+  --chart-1: #2b7a4e; /* validated vs #fbfaf8 (dataviz six checks) */
+  --chart-2: #c2703d;
+  --chart-grid: rgba(29, 34, 30, 0.07);
+  --good: #2b7a4e;
+  --warn: #a05c10;
+  --warn-bg: rgba(180, 106, 28, 0.13);
+  --bad: #b3423a;
+  --bad-bg: rgba(179, 66, 58, 0.11);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="pos-light"]) {
-    --bg-base: #0c0c14;
-    --bg-mesh-1: rgba(94, 92, 230, 0.22);
-    --bg-mesh-2: rgba(168, 85, 247, 0.14);
-    --bg-mesh-3: rgba(56, 189, 248, 0.08);
-    --ink: #f3f3fa;
-    --ink-soft: #a9a9c4;
-    --ink-faint: #6b6b88;
-    --glass: rgba(255, 255, 255, 0.06);
-    --glass-strong: rgba(255, 255, 255, 0.1);
-    --glass-border: rgba(255, 255, 255, 0.12);
+    --bg-base: #10160f;
+    --bg-wash-1: rgba(63, 154, 104, 0.1);
+    --bg-wash-2: rgba(201, 126, 70, 0.06);
+    --bg-wash-3: rgba(255, 255, 255, 0.03);
+    --ink: #eaf0ea;
+    --ink-soft: #a4b1a7;
+    --ink-faint: #6d7a70;
+    --glass: rgba(255, 255, 255, 0.055);
+    --glass-strong: rgba(255, 255, 255, 0.09);
+    --glass-border: rgba(255, 255, 255, 0.1);
     --hairline: rgba(255, 255, 255, 0.09);
+    --accent: #3f9a68;
+    --accent-deep: #55b184;
+    --accent-soft: rgba(63, 154, 104, 0.16);
+    --chart-1: #3f9a68; /* validated vs #15211b */
+    --chart-2: #c97e46;
+    --chart-grid: rgba(255, 255, 255, 0.08);
+    --good: #55b184;
+    --warn: #d99a3e;
+    --warn-bg: rgba(217, 154, 62, 0.14);
+    --bad: #d9705f;
+    --bad-bg: rgba(217, 112, 95, 0.13);
   }
 }
 
@@ -45,24 +68,34 @@ body {
 body {
   color: var(--ink);
   background-color: var(--bg-base);
-  background-image: radial-gradient(1100px 700px at 8% -10%, var(--bg-mesh-1), transparent 60%),
-    radial-gradient(900px 620px at 100% 12%, var(--bg-mesh-2), transparent 55%),
-    radial-gradient(760px 540px at 45% 110%, var(--bg-mesh-3), transparent 60%);
+  background-image: radial-gradient(1000px 640px at 12% -8%, var(--bg-wash-1), transparent 60%),
+    radial-gradient(900px 600px at 105% 8%, var(--bg-wash-2), transparent 55%),
+    radial-gradient(1200px 500px at 50% -20%, var(--bg-wash-3), transparent 70%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  font-feature-settings: "cv11"; /* Inter: open single-story a alternative off; keep defaults otherwise */
 }
 
 @layer components {
+  /* Frosted card — the HERO surface. One per page; everything else is plate/rows. */
   .glass-card {
     @apply rounded-3xl border backdrop-blur-xl;
     background: var(--glass);
     border-color: var(--glass-border);
-    box-shadow: 0 1px 1px rgba(255, 255, 255, 0.35) inset, 0 8px 32px rgba(20, 20, 50, 0.1);
+    box-shadow: 0 1px 2px rgba(24, 32, 26, 0.04), 0 10px 30px rgba(24, 32, 26, 0.07);
   }
 
   .glass-strong {
     background: var(--glass-strong);
+  }
+
+  /* Quiet secondary surface — tinted flat, no blur, lighter shadow. */
+  .plate {
+    @apply rounded-3xl;
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 1px 2px rgba(24, 32, 26, 0.03);
   }
 
   .hairline-b {
@@ -77,40 +110,81 @@ body {
     color: var(--ink-faint);
   }
 
+  /* Day header for chronological lists — the scanning anchor. */
+  .day-header {
+    @apply sticky top-0 z-10 -mx-1 flex items-baseline justify-between gap-3 px-1 pb-2 pt-4;
+    background: linear-gradient(to bottom, var(--bg-base) 75%, transparent);
+  }
+
+  /* Open list row — quiet, hairline-separated, no per-row container. */
+  .list-row {
+    @apply flex items-center gap-3 py-3;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .list-row:last-child {
+    border-bottom: none;
+  }
+
   .btn-accent {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-semibold text-white transition-all duration-200 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100;
-    background-image: linear-gradient(135deg, #5e5ce6 0%, #8b5cf6 60%, #a855f7 100%);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 6px 20px rgba(94, 92, 230, 0.35);
+    background: var(--accent);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 5px 16px rgba(43, 122, 78, 0.3);
   }
 
   .btn-accent:hover {
-    filter: brightness(1.06);
+    background: var(--accent-deep);
   }
 
   .btn-quiet {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl border px-5 py-3 font-medium transition-all duration-200 active:scale-[0.97];
-    background: var(--glass);
+    background: var(--glass-strong);
     border-color: var(--glass-border);
     color: var(--ink);
+    box-shadow: 0 1px 2px rgba(24, 32, 26, 0.04);
+  }
+
+  .btn-quiet:hover {
+    border-color: var(--hairline);
   }
 
   .field {
     @apply w-full rounded-2xl border px-4 py-3 outline-none transition-shadow duration-200;
     background: var(--glass-strong);
-    border-color: var(--glass-border);
+    border-color: var(--hairline);
     color: var(--ink);
   }
 
   .field:focus {
-    box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.35);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
   .field::placeholder {
     color: var(--ink-faint);
   }
+
+  /* Status pills (quantity/severity) — icon-adjacent text, never color alone. */
+  .pill-good {
+    @apply rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    background: var(--accent-soft);
+    color: var(--good);
+  }
+
+  .pill-warn {
+    @apply rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+
+  .pill-bad {
+    @apply rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    background: var(--bad-bg);
+    color: var(--bad);
+  }
 }
 
-/* driver.js tour popover — restyled to the glass system */
+/* driver.js tour popover — restyled to the system */
 .driver-popover {
   background: var(--glass-strong) !important;
   color: var(--ink) !important;
@@ -118,7 +192,7 @@ body {
   border-radius: 1.25rem !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 12px 40px rgba(20, 20, 50, 0.25) !important;
+  box-shadow: 0 12px 40px rgba(24, 32, 26, 0.22) !important;
   font-family: inherit;
 }
 
@@ -150,7 +224,7 @@ body {
 
 .driver-popover-navigation-btns button.driver-popover-next-btn,
 .driver-popover-navigation-btns button.driver-popover-done-btn {
-  background-image: linear-gradient(135deg, #5e5ce6 0%, #8b5cf6 60%, #a855f7 100%) !important;
+  background: var(--accent) !important;
   color: #fff !important;
   border: none !important;
 }

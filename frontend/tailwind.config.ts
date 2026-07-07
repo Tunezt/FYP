@@ -17,32 +17,36 @@ const config: Config = {
         ],
       },
       colors: {
+        // Forest-green accent ramp (owner-approved reference, 2026-07-07;
+        // supersedes the original blue-violet — see docs/progress.md).
         accent: {
-          50: "#eef1ff",
-          100: "#dfe4ff",
-          200: "#c5ccff",
-          300: "#a2a9fe",
-          400: "#7f7ffa",
-          500: "#5e5ce6", // iOS indigo — primary accent
-          600: "#4f46d6",
-          700: "#4238b8",
-          800: "#373094",
-          900: "#302e75",
+          50: "#f0f7f2",
+          100: "#dcefe3",
+          200: "#bbdfc9",
+          300: "#8ec7a6",
+          400: "#5aa87e",
+          500: "#3a9161",
+          600: "#2b7a4e", // primary UI accent + light-mode chart series 1
+          700: "#236743",
+          800: "#1e5338",
+          900: "#19442f",
         },
-        violet: {
-          500: "#8b5cf6",
+        terra: {
+          // money-out / second chart series (validated vs the green)
+          400: "#d99a6c",
+          500: "#c2703d",
+          600: "#a85c2f",
         },
       },
       backgroundImage: {
-        "accent-gradient": "linear-gradient(135deg, #5e5ce6 0%, #8b5cf6 55%, #a855f7 100%)",
+        "accent-gradient": "linear-gradient(135deg, #35895a 0%, #2b7a4e 55%, #1e5338 100%)",
         "accent-gradient-soft":
-          "linear-gradient(135deg, rgba(94,92,230,0.14) 0%, rgba(139,92,246,0.10) 100%)",
+          "linear-gradient(135deg, rgba(43,122,78,0.10) 0%, rgba(43,122,78,0.05) 100%)",
       },
       boxShadow: {
-        glass: "0 1px 1px rgba(255,255,255,0.6) inset, 0 8px 32px rgba(30,30,60,0.12)",
-        "glass-dark": "0 1px 0 rgba(255,255,255,0.08) inset, 0 8px 32px rgba(0,0,0,0.45)",
-        pop: "0 2px 8px rgba(30,30,60,0.08), 0 12px 40px rgba(30,30,60,0.16)",
-        key: "0 1px 0 rgba(255,255,255,0.9) inset, 0 2px 6px rgba(30,30,60,0.10)",
+        glass: "0 1px 2px rgba(24,32,26,0.04), 0 10px 30px rgba(24,32,26,0.07)",
+        pop: "0 2px 6px rgba(24,32,26,0.06), 0 16px 44px rgba(24,32,26,0.14)",
+        key: "0 1px 0 rgba(255,255,255,0.85) inset, 0 2px 6px rgba(24,32,26,0.08)",
       },
       borderRadius: {
         "4xl": "2rem",
