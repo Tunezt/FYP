@@ -50,11 +50,11 @@ export function DayHeader({
 /** Small warm identity tile for item rows (no product photos in the data —
  * initials on a soft tint carry recognition instead). */
 const TILE_TONES = [
-  "bg-accent-100 text-accent-800",
-  "bg-orange-100 text-orange-800",
-  "bg-sky-100 text-sky-800",
-  "bg-amber-100 text-amber-800",
-  "bg-rose-100 text-rose-800",
+  "bg-accent-100 text-accent-800 dark:bg-accent-900 dark:text-accent-200",
+  "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
+  "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
+  "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300",
 ];
 
 export function Tile({ label, className = "" }: { label: string; className?: string }) {
@@ -73,26 +73,6 @@ export function Tile({ label, className = "" }: { label: string; className?: str
     >
       {initials}
     </span>
-  );
-}
-
-export function SectionTitle({
-  children,
-  hint,
-  action,
-}: {
-  children: React.ReactNode;
-  hint?: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="mb-3 flex items-baseline justify-between gap-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest ink-soft">
-        {children}
-        {hint}
-      </h2>
-      {action}
-    </div>
   );
 }
 

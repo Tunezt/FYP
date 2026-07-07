@@ -14,8 +14,8 @@
   --bg-wash-2: rgba(194, 112, 61, 0.05);
   --bg-wash-3: rgba(255, 255, 255, 0.85);
   --ink: #1d221e;
-  --ink-soft: #59645d;
-  --ink-faint: #8b958e;
+  --ink-soft: #545f58;
+  --ink-faint: #6e7972; /* ≥4.5:1 on --bg-base — meta text stays readable */
   --glass: rgba(255, 255, 255, 0.72);
   --glass-strong: rgba(255, 255, 255, 0.92);
   --glass-border: rgba(29, 34, 30, 0.07);
@@ -41,7 +41,7 @@
     --bg-wash-3: rgba(255, 255, 255, 0.03);
     --ink: #eaf0ea;
     --ink-soft: #a4b1a7;
-    --ink-faint: #6d7a70;
+    --ink-faint: #7f8b81; /* ≥4.5:1 on the dark base */
     --glass: rgba(255, 255, 255, 0.055);
     --glass-strong: rgba(255, 255, 255, 0.09);
     --glass-border: rgba(255, 255, 255, 0.1);
@@ -63,6 +63,14 @@
 html,
 body {
   height: 100%;
+}
+
+/* Keyboard focus must survive glass surfaces — a visible accent ring, only
+   for keyboard navigation (:focus-visible), never removed. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 body {
