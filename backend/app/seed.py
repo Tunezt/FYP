@@ -10,7 +10,7 @@ Creates **Kopi Kenangan Senja** (fictional, Jakarta) with:
 Idempotent: re-running deletes and recreates the demo business (cascade).
 
 Demo credentials:
-  owner phone  +62 812-0000-1111  (OTP arrives via WhatsApp; in dev the code is logged)
+  owner phone  +62 812-000-1111  (OTP arrives via WhatsApp; in dev the code is logged)
   owner PIN    1234   | staff Sari PIN 2345 | staff Budi PIN 3456
 """
 import asyncio

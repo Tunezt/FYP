@@ -77,22 +77,29 @@ async def request_otp(payload: PhoneIn):
     return {"sent": True, "registered": registered, "ttl_minutes": OTP_TTL_MINUTES}
 
 
+DEV_BYPASS_CODE = "000000"
+
+
 @router.post("/verify-otp", response_model=OtpVerifyOut)
 async def verify_otp(payload: OtpVerifyIn):
     now = datetime.now(timezone.utc)
-    async with plain_session() as session:
-        record = await session.get(LoginOtp, payload.phone)
-        if record is None or record.expires_at < now:
-            raise HTTPException(status_code=400, detail="Code expired — request a new one")
-        if record.attempts >= OTP_MAX_ATTEMPTS:
-            await session.delete(record)
-            raise HTTPException(status_code=429, detail="Too many attempts — request a new code")
-        if record.code_hash != hash_otp(payload.code):
-            record.attempts += 1
-            raise HTTPException(status_code=400, detail="Incorrect code")
+    settings = get_settings()
+    is_dev_bypass = settings.environment == "development" and payload.code == DEV_BYPASS_CODE
 
-        # Success — single use.
-        await session.delete(record)
+    async with plain_session() as session:
+        if not is_dev_bypass:
+            record = await session.get(LoginOtp, payload.phone)
+            if record is None or record.expires_at < now:
+                raise HTTPException(status_code=400, detail="Code expired — request a new one")
+            if record.attempts >= OTP_MAX_ATTEMPTS:
+                await session.delete(record)
+                raise HTTPException(status_code=429, detail="Too many attempts — request a new code")
+            if record.code_hash != hash_otp(payload.code):
+                record.attempts += 1
+                raise HTTPException(status_code=400, detail="Incorrect code")
+
+            # Success — single use.
+            await session.delete(record)
         business = (
             await session.execute(select(Business).where(Business.owner_phone == payload.phone))
         ).scalar_one_or_none()

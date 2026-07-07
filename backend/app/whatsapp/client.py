@@ -10,7 +10,7 @@ import re
 
 import httpx
 
-from app.core.config import get_settings
+from app.core.config import get_settings, is_placeholder
 
 logger = logging.getLogger("whatsapp")
 
@@ -22,8 +22,30 @@ def normalize_phone(phone: str) -> str:
     return re.sub(r"\D", "", phone)
 
 
+def to_international_phone(digits: str) -> str:
+    """Converts a user-typed *local* number to the international wa_id format
+    stored in businesses.owner_phone. Without this, a real owner typing their
+    number the natural local way (leading 0 — exactly what the login form's
+    own placeholder "0812 3456 7890" tells them to do) would never match
+    their existing account and would be silently routed into registration
+    every time.
+
+    Heuristic (this product targets Indonesia + Malaysia only, per
+    language_preference id/ms/en): already-international numbers (62.../
+    60...) pass through; a leading 01 is Malaysia's local mobile prefix; any
+    other leading 0 is treated as Indonesian.
+    """
+    if digits.startswith("62") or digits.startswith("60"):
+        return digits
+    if digits.startswith("01"):
+        return "60" + digits[1:]
+    if digits.startswith("0"):
+        return "62" + digits[1:]
+    return digits
+
+
 def _dry_run() -> bool:
-    return get_settings().whatsapp_access_token == "placeholder"
+    return is_placeholder(get_settings().whatsapp_access_token)
 
 
 def _headers() -> dict:

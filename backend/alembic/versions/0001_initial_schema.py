@@ -185,14 +185,80 @@ create policy tenant_isolation on {table}
 """
 
 
+def _split_statements(sql: str) -> list[str]:
+    """Splits on top-level `;` only — ignores `;` inside `--` line comments
+    or single-quoted strings (this schema's comments include prose with
+    semicolons, e.g. "additive; see docs/progress.md", which a naive
+    ``sql.split(";")`` would wrongly treat as a statement boundary)."""
+    statements: list[str] = []
+    current: list[str] = []
+    in_comment = False
+    in_string = False
+    i, n = 0, len(sql)
+    while i < n:
+        ch = sql[i]
+        if in_comment:
+            current.append(ch)
+            in_comment = ch != "\n"
+        elif in_string:
+            current.append(ch)
+            if ch == "'":
+                in_string = False
+        elif ch == "-" and sql[i : i + 2] == "--":
+            in_comment = True
+            current.append(ch)
+        elif ch == "'":
+            in_string = True
+            current.append(ch)
+        elif ch == ";":
+            current.append(ch)
+            statements.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+        i += 1
+    if "".join(current).strip():
+        statements.append("".join(current))
+    return statements
+
+
+def _has_sql(statement: str) -> bool:
+    """True if the statement has any non-comment content (a statement made
+    of only comment lines is a no-op, and some drivers error on it)."""
+    return any(line.split("--", 1)[0].strip() for line in statement.splitlines())
+
+
+def _execute_statements(sql: str) -> None:
+    """Executes each top-level statement separately.
+
+    Required with the asyncpg driver: SQLAlchemy's asyncpg dialect always
+    executes via PREPARE, and Postgres refuses to prepare a string
+    containing more than one command ("cannot insert multiple commands
+    into a prepared statement") — this only surfaces against a real
+    connection, which this migration had never run against until now (see
+    docs/progress.md, "blocked on credentials").
+    """
+    for statement in _split_statements(sql):
+        if _has_sql(statement):
+            op.execute(statement.strip())
+
+
 def upgrade() -> None:
-    op.execute(SCHEMA_SQL)
+    _execute_statements(SCHEMA_SQL)
     for table in RLS_TABLES:
-        op.execute(RLS_SQL_TEMPLATE.format(table=table))
+        _execute_statements(RLS_SQL_TEMPLATE.format(table=table))
+    # `businesses` and `login_otps` are deliberately un-scoped (see their
+    # comments above) — but a Supabase project with "Enable automatic RLS"
+    # on will auto-enable RLS with zero policies on every new table, which
+    # means default-deny, not default-allow. Explicitly disable it on the
+    # two tables that must stay open, so behavior doesn't depend on that
+    # project-level dashboard toggle.
+    _execute_statements("alter table businesses disable row level security;")
+    _execute_statements("alter table login_otps disable row level security;")
 
 
 def downgrade() -> None:
-    op.execute(
+    _execute_statements(
         """
         drop table if exists login_otps, pending_confirmations, request_logs,
           metric_baselines, alerts, expenses, receipts, sales, items, staff,

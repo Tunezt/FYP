@@ -6,7 +6,7 @@
 2. Google AI Studio key → `GOOGLE_API_KEY`.
 3. Meta App + WhatsApp test number → tokens in `.env`, **both templates approved** (`docs/whatsapp-templates.md`), demo phone allow-listed, webhook registered via tunnel/Railway URL.
 4. `python -m app.seed` — creates **Kopi Kenangan Senja** with 30 days of history and a planted sales spike *yesterday*.
-5. Backend on Railway (or `uvicorn app.main:app`), frontend on Vercel (or `npm run dev`), one tablet/laptop tab for the POS, phone with WhatsApp for the owner number **+62 812-0000-1111**.
+5. Backend on Railway (or `uvicorn app.main:app`), frontend on Vercel (or `npm run dev`), one tablet/laptop tab for the POS, phone with WhatsApp for the owner number **+62 812-000-1111**.
 6. Night before the demo: run `python -m app.jobs.nightly` once so alerts exist and a template message has been delivered.
 
 **Demo credentials:** owner PIN `1234`, staff Sari `2345`, Budi `3456`.

@@ -13,7 +13,7 @@ import uuid
 
 import httpx
 
-from app.core.config import get_settings
+from app.core.config import get_settings, is_placeholder
 
 logger = logging.getLogger("storage")
 
@@ -25,7 +25,7 @@ _EXT_BY_MIME = {
 
 
 def _dry_run() -> bool:
-    return get_settings().supabase_service_role_key == "placeholder"
+    return is_placeholder(get_settings().supabase_service_role_key)
 
 
 async def upload_receipt_image(business_id: uuid.UUID, data: bytes, mime_type: str) -> str:

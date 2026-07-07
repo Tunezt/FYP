@@ -71,7 +71,7 @@ cd backend && python -m app.seed   # fictional café: Kopi Kenangan Senja, items
 ## Demo
 
 `docs/demo-script.md` is the rehearsed ±8-minute flow. Demo café: **Kopi Kenangan
-Senja** — owner +62 812-0000-1111 (PIN 1234), staff Sari (2345) / Budi (3456).
+Senja** — owner +62 812-000-1111 (PIN 1234), staff Sari (2345) / Budi (3456).
 `docs/api-contract.md` summarizes every endpoint; `docs/progress.md` is the full
 build log including what is still blocked on credentials.
 

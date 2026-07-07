@@ -6,8 +6,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Database
+    # Database. `database_url` is what the running app connects with at
+    # request time — it MUST be a role without BYPASSRLS, or Row-Level
+    # Security enforces nothing (Supabase's own `postgres` role has
+    # BYPASSRLS, which is why a second, restricted role is required; see
+    # docs/progress.md). `migration_database_url` is the elevated role used
+    # only by alembic for DDL; falls back to `database_url` if unset (e.g.
+    # a local dev Postgres with one superuser role and no RLS concerns).
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+    migration_database_url: str | None = None
 
     # Supabase storage
     supabase_url: str = "https://placeholder.supabase.co"
@@ -44,3 +51,19 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+_PLACEHOLDER_VALUES = {"placeholder", "CHANGE_ME"}
+
+
+def is_placeholder(value: str | None) -> bool:
+    """True if a credential is still unset.
+
+    Covers both this file's own default sentinel ("placeholder") and
+    .env.example's documented sentinel ("CHANGE_ME") — these previously
+    didn't match each other, so dry-run mode never actually engaged once a
+    real .env existed with unfilled WhatsApp/Supabase credentials still at
+    "CHANGE_ME": the code would attempt a real API call and fail with a
+    401/etc. instead of degrading gracefully.
+    """
+    return not value or value in _PLACEHOLDER_VALUES

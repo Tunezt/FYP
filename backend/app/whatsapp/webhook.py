@@ -14,7 +14,7 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Response
 
-from app.core.config import get_settings
+from app.core.config import get_settings, is_placeholder
 from app.whatsapp.processor import process_webhook_payload
 
 logger = logging.getLogger("webhook")
@@ -46,7 +46,7 @@ async def receive_webhook(request: Request, background: BackgroundTasks):
     settings = get_settings()
     raw = await request.body()
 
-    if settings.whatsapp_app_secret == "placeholder":
+    if is_placeholder(settings.whatsapp_app_secret):
         # No Meta app configured (local/dev simulation). Never allowed in prod.
         if settings.environment == "production":
             raise HTTPException(status_code=500, detail="WHATSAPP_APP_SECRET not configured")

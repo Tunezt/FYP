@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.whatsapp.client import normalize_phone
+from app.whatsapp.client import normalize_phone, to_international_phone
 
 
 class PhoneIn(BaseModel):
@@ -12,7 +12,7 @@ class PhoneIn(BaseModel):
     @field_validator("phone")
     @classmethod
     def _normalize(cls, v: str) -> str:
-        digits = normalize_phone(v)
+        digits = to_international_phone(normalize_phone(v))
         if len(digits) < 7:
             raise ValueError("Phone number looks too short")
         return digits
