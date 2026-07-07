@@ -90,13 +90,17 @@ async def verify_otp(payload: OtpVerifyIn):
         if not is_dev_bypass:
             record = await session.get(LoginOtp, payload.phone)
             if record is None or record.expires_at < now:
-                raise HTTPException(status_code=400, detail="Code expired — request a new one")
+                raise HTTPException(
+                    status_code=400, detail="Kodenya sudah kedaluwarsa — minta kode baru ya"
+                )
             if record.attempts >= OTP_MAX_ATTEMPTS:
                 await session.delete(record)
-                raise HTTPException(status_code=429, detail="Too many attempts — request a new code")
+                raise HTTPException(
+                    status_code=429, detail="Terlalu banyak percobaan — minta kode baru ya"
+                )
             if record.code_hash != hash_otp(payload.code):
                 record.attempts += 1
-                raise HTTPException(status_code=400, detail="Incorrect code")
+                raise HTTPException(status_code=400, detail="Kodenya salah — cek lagi ya")
 
             # Success — single use.
             await session.delete(record)
@@ -120,9 +124,13 @@ async def register(payload: RegisterIn):
     try:
         claims = decode_token(payload.registration_token)
     except pyjwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Registration session expired — verify again")
+        raise HTTPException(
+            status_code=401, detail="Sesi pendaftaran sudah berakhir — verifikasi nomormu lagi ya"
+        )
     if claims.get("scope") != "register":
-        raise HTTPException(status_code=401, detail="Invalid registration token")
+        raise HTTPException(
+            status_code=401, detail="Sesi pendaftaran tidak dikenali — mulai lagi dari halaman masuk"
+        )
     phone = claims["phone"]
 
     async with plain_session() as session:
@@ -130,7 +138,9 @@ async def register(payload: RegisterIn):
             await session.execute(select(Business.id).where(Business.owner_phone == phone))
         ).scalar_one_or_none()
         if exists:
-            raise HTTPException(status_code=409, detail="This phone already has a business")
+            raise HTTPException(
+                status_code=409, detail="Nomor ini sudah punya usaha terdaftar — silakan masuk saja"
+            )
         business = Business(
             name=payload.business_name,
             business_type=payload.business_type,
@@ -191,9 +201,9 @@ async def create_staff(payload: StaffCreateIn, ctx: OwnerCtx):
 async def deactivate_staff(staff_id: str, ctx: OwnerCtx):
     staff = await ctx.session.get(Staff, staff_id)
     if staff is None:
-        raise HTTPException(status_code=404, detail="Staff member not found")
+        raise HTTPException(status_code=404, detail="Staf tidak ditemukan")
     if staff.role == "owner":
-        raise HTTPException(status_code=400, detail="The owner account cannot be deactivated")
+        raise HTTPException(status_code=400, detail="Akun pemilik tidak bisa dinonaktifkan")
     staff.is_active = False
     return staff
 

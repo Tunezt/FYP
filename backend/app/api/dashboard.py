@@ -41,7 +41,7 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 async def _business(ctx) -> Business:
     business = await ctx.session.get(Business, ctx.business_id)
     if business is None:
-        raise HTTPException(status_code=404, detail="Business not found")
+        raise HTTPException(status_code=404, detail="Usaha tidak ditemukan")
     return business
 
 
@@ -233,7 +233,7 @@ async def create_item(payload: ItemCreateIn, ctx: OwnerCtx):
 async def update_item(item_id: uuid.UUID, payload: ItemUpdateIn, ctx: OwnerCtx):
     item = await ctx.session.get(Item, item_id)
     if item is None:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
     changes = payload.model_dump(exclude_none=True)
     for field, value in changes.items():
         setattr(item, field, value)
@@ -348,7 +348,7 @@ async def alerts(ctx: OwnerCtx, limit: int = Query(default=50, ge=1, le=200)):
 async def acknowledge_alert(alert_id: uuid.UUID, ctx: OwnerCtx):
     alert = await ctx.session.get(Alert, alert_id)
     if alert is None:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise HTTPException(status_code=404, detail="Peringatan tidak ditemukan")
     alert.is_acknowledged = True
     item_name = None
     if alert.related_item_id:

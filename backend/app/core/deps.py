@@ -29,18 +29,19 @@ class AuthContext:
 def _extract_claims(request: Request, required_scope: str) -> dict:
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing bearer token")
+        raise HTTPException(status_code=401, detail="Belum masuk — silakan masuk dulu ya")
     try:
         claims = decode_token(header.removeprefix("Bearer "))
     except pyjwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        raise HTTPException(status_code=401, detail="Sesi sudah berakhir — silakan masuk lagi ya")
     if claims.get("scope") != required_scope:
         # Explicit rejection, not a silent downgrade: a POS token on an
-        # owner-only route (or vice versa) is a 403.
-        raise HTTPException(
-            status_code=403,
-            detail=f"This endpoint requires {required_scope} access",
+        # owner-only route (or vice versa) is a 403. The scope name stays in
+        # the message (tests assert on it; useful for debugging too).
+        audience = (
+            "pemilik usaha (akses owner)" if required_scope == "owner" else "perangkat kasir (akses pos)"
         )
+        raise HTTPException(status_code=403, detail=f"Fitur ini khusus {audience}")
     return claims
 
 

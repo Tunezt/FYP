@@ -36,9 +36,11 @@ def _pairing_business_id(pairing_token: str) -> uuid.UUID:
     try:
         claims = decode_token(pairing_token)
     except pyjwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid pairing link — ask the owner for a new QR")
+        raise HTTPException(
+            status_code=401, detail="Tautan kasir tidak berlaku — minta tautan baru ke pemilik ya"
+        )
     if claims.get("scope") != "pos-pairing":
-        raise HTTPException(status_code=401, detail="Invalid pairing link")
+        raise HTTPException(status_code=401, detail="Tautan kasir tidak dikenali")
     return uuid.UUID(claims["business_id"])
 
 
@@ -49,7 +51,7 @@ async def pos_business(pairing_token: str):
     async with tenant_session(business_id) as session:
         business = await session.get(Business, business_id)
         if business is None:
-            raise HTTPException(status_code=404, detail="Business not found")
+            raise HTTPException(status_code=404, detail="Usaha tidak ditemukan")
         staff = (
             (
                 await session.execute(
@@ -101,7 +103,7 @@ async def pos_record_sale(payload: SaleIn, ctx: PosCtx):
             unit_price=payload.unit_price,
         )
     except ItemNotFound:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
     except InsufficientStock as exc:
         raise HTTPException(
             status_code=409,

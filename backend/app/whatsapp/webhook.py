@@ -31,7 +31,7 @@ async def verify_webhook(
     settings = get_settings()
     if hub_mode == "subscribe" and hub_verify_token == settings.whatsapp_verify_token:
         return Response(content=hub_challenge, media_type="text/plain")
-    raise HTTPException(status_code=403, detail="Verify token mismatch")
+    raise HTTPException(status_code=403, detail="Verify token tidak cocok")
 
 
 def _signature_valid(raw_body: bytes, header: str | None, app_secret: str) -> bool:
@@ -49,15 +49,15 @@ async def receive_webhook(request: Request, background: BackgroundTasks):
     if is_placeholder(settings.whatsapp_app_secret):
         # No Meta app configured (local/dev simulation). Never allowed in prod.
         if settings.environment == "production":
-            raise HTTPException(status_code=500, detail="WHATSAPP_APP_SECRET not configured")
+            raise HTTPException(status_code=500, detail="WHATSAPP_APP_SECRET belum dikonfigurasi")
         logger.warning("Signature validation skipped — placeholder app secret (dev only)")
     elif not _signature_valid(raw, request.headers.get("X-Hub-Signature-256"), settings.whatsapp_app_secret):
-        raise HTTPException(status_code=403, detail="Invalid signature")
+        raise HTTPException(status_code=403, detail="Signature tidak sah")
 
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        raise HTTPException(status_code=400, detail="JSON tidak sah")
 
     # Ack fast; the real work (LLM, DB, reply) happens after the response.
     background.add_task(process_webhook_payload, payload)
