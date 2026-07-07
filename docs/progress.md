@@ -240,3 +240,32 @@ Everything in Phases 0–10 was written and unit-tested but had never run agains
 - Full suite re-verified with the real key present: **70/70 passing** (mocked-Gemini unit tests unaffected; DB-integration tests still pass against `app_role`).
 
 **Not yet done:** live Gemini **vision** quality on real handwritten stock books (top remaining technical risk), WhatsApp template submission/live send, Railway/Vercel deploy.
+
+---
+
+## Session 2 — UI rebuild + error localization + verification status (2026-07-07)
+
+### Part 1 — full UI/design rebuild ✔
+- **Critique first** (per instruction): scored the old dashboard honestly at **24/40** on Nielsen heuristics; verdict "yes, it reads AI-generated" — container monoculture (every row the same glass pill), the banned hero-metric template, undifferentiated chronological lists, flat 12–16px type cluster (confirmed by the automated detector), stretched-phone desktop layout. Automated scan false positives noted (em-dashes/number sequences in CSS comments).
+- **Design context done properly this time**: interactive questions answered by the owner + a visual reference image. Confirmed: *warung hangat* personality, moderate desktop density, full commit to one-hero-surface-per-page, scope = dashboard + login/register + POS touch-up. **Owner reference supersedes the brief's blue-violet accent → forest green, warm-light-first** (flagged, not silent — glass materials + Inter stay locked). `.impeccable.md` rewritten from the real answers.
+- **Chart colors validated computationally** (dataviz six-checks validator): light `#2b7a4e`/`#c2703d` on `#fbfaf8`, dark `#3f9a68`/`#c97e46` on `#15211b` — all checks pass, incl. CVD separation ≥15 ΔE; expenses series moved from gray (failed chroma floor) to terracotta.
+- **Rebuilt**: tokens (warm off-white bg, frosted-white hero cards, quiet plates, hairline day-grouped open rows, status pills, solid-green buttons), reference-grammar StatCards (icon tile → label+HelpTip → display number → delta chip → sparkline), floating sidebar (brand block + nav + owner card with real owner name), mobile tab bar, all six dashboard pages, login/register restyle, POS color alignment. **Day-grouped lists everywhere the critique flagged**: sales (per-day totals "15 transaksi · Rp 360.000"), expenses (per-day − totals), alerts; rows time-ordered, headers sticky.
+- **Real bug found & fixed during verification**: client-side day grouping used the *browser* timezone while all backend numbers use the *business* timezone — sales page "Hari ini" disagreed with the overview (452k vs 360k) on this machine. `lib/dates.ts` now buckets/labels/times in `business.timezone` (Intl-based); verified matching (15 tx · Rp 360.000 on both).
+- Seed fix (not applied to the live DB — rerun `python -m app.seed` when convenient): sale timestamps now generate in WIB business hours 07:00–20:59 instead of UTC hours that displayed as 3-AM sales.
+- **Polish pass**: `:focus-visible` accent rings (keyboard focus survives glass), `--ink-faint` darkened to ≥4.5:1 AA in both modes, dark-mode Tile tones, orphaned SectionTitle removed. Layout skill not separately invoked — it was conditional on spacing still feeling off; the rebuild itself implemented the critique's layout fixes (day grouping, surface budget, 4pt rhythm).
+- Verified against the live DB in the running app (structure + computed styles + zero console errors; 1 glass surface per page confirmed). **Tooling note:** the preview screenshot capture broke mid-session (all captures time out; eval/snapshot/inspect fine) — visual verification used DOM/style inspection; the owner has the live preview panel for eyeballing.
+
+### Part 2 — Indonesian error strings ✔
+- All 24 `HTTPException` details across `api/auth.py`, `api/pos.py`, `api/dashboard.py`, `whatsapp/webhook.py`, `core/deps.py` audited; every English string localized to warm-casual Indonesian ("Kodenya salah — cek lagi ya"). The 403 scope message keeps the word "owner" (a role-separation test asserts on it).
+- Regression guard: `tests/test_error_localization.py` — AST-walks those files, extracts every `detail=` literal (f-string fragments included), fails if any lacks a word-boundary Indonesian marker; also fails if the scan finds suspiciously few strings (self-checking). Suite: **67 passed + 4 DB-gated; the 4 integration tests re-run this session against the real Supabase `app_role` — pass (71 total green).**
+
+### Part 3 — credentialed verification (honest status)
+| Item | Status |
+|---|---|
+| Live Gemini text classification/composition | ✔ verified in Phase 12 (not redone, per instruction) |
+| **Live Gemini vision on real handwritten receipts** | ⏸ **waiting on the owner's 3–5 photos** — the flow is ready to run the moment they arrive |
+| Meta template submission / webhook / round trip | ✖ **blocked: no Meta credentials** (`WHATSAPP_ACCESS_TOKEN`/`PHONE_NUMBER_ID` still placeholders; only APP_SECRET filled). `docs/whatsapp-templates.md` remains copy-paste ready |
+| Live nightly alert (`python -m app.jobs.nightly`) | ✖ blocked on the above (needs approved Utility template) |
+| Railway + Vercel deploy | ✖ **blocked: neither CLI installed/authenticated** — `railway login`/`vercel login` are interactive; ready to drive them once the owner logs in |
+
+Nothing above is marked verified without having actually run live.
