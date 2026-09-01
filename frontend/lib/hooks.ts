@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError, getOwnerToken, OWNER_TOKEN_KEY } from "@/lib/api";
+import { demoData, isDemo } from "@/lib/demo";
 
 /** Owner-scoped GET with auth redirect. Multiple hooks on one page fetch in
  * parallel (each fires its own request immediately on mount — no waterfall). */
@@ -15,6 +16,14 @@ export function useOwnerData<T>(path: string | null) {
 
   const load = useCallback(() => {
     if (!path) return;
+    if (isDemo()) {
+      // Short-circuit before any request: demo mode never touches the API.
+      const fixture = demoData(path);
+      setData(fixture as T);
+      setError(fixture === null ? "Mode demo: data contoh belum tersedia di sini" : null);
+      setLoading(false);
+      return;
+    }
     const token = getOwnerToken();
     if (!token) {
       router.replace("/login");
@@ -52,6 +61,10 @@ export function useOwnerMutation() {
   const router = useRouter();
   return useCallback(
     async <T,>(path: string, body?: unknown, method?: string): Promise<T> => {
+      if (isDemo()) {
+        // Accept-and-discard: the UI flow completes, fixtures stay unchanged.
+        return {} as T;
+      }
       const token = getOwnerToken();
       if (!token) {
         router.replace("/login");

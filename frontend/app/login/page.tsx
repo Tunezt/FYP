@@ -1,20 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, OWNER_TOKEN_KEY } from "@/lib/api";
+import { demoAllowed, enableDemo } from "@/lib/demo";
 import { IconChat, IconShop } from "@/components/icons";
 
 type Step = "phone" | "code";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [showDemo, setShowDemo] = useState(false);
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // ?demo=1 jumps straight in; otherwise just reveal the button.
+    setShowDemo(demoAllowed());
+    if (demoAllowed() && new URLSearchParams(window.location.search).get("demo") === "1") {
+      enableDemo();
+      router.replace("/overview");
+    }
+  }, [router]);
+
+  function startDemo() {
+    enableDemo();
+    router.replace("/overview");
+  }
 
   async function requestOtp() {
     setBusy(true);
@@ -23,7 +39,13 @@ export default function LoginPage() {
       await api<{ sent: boolean }>("/auth/request-otp", { body: { phone } });
       setStep("code");
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail : "Tidak bisa terhubung ke server.");
+      if (e instanceof ApiError) {
+        setError(e.detail);
+      } else {
+        setError(
+          "Tidak bisa terhubung ke server. Pastikan backend berjalan di http://localhost:8000."
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -137,6 +159,18 @@ export default function LoginPage() {
             >
               {error}
             </p>
+          )}
+
+          {showDemo && (
+            <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--hairline)" }}>
+              <button onClick={startDemo} className="btn-quiet w-full py-3 text-sm">
+                Lihat mode demo (tanpa database)
+              </button>
+              <p className="ink-faint mt-2 text-center text-[11px] leading-relaxed">
+                Menampilkan dashboard dengan data contoh — untuk melihat tampilan saat database
+                belum terhubung.
+              </p>
+            </div>
           )}
         </div>
 
