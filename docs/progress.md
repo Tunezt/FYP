@@ -428,3 +428,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Nothing converted; the existing `numeric(12,2)` / `numeric(12,3)` / `numeric(14,4)` columns are correct.
 **Deviation:** none
 **Next:** M0-T5
+
+### [M0-T5] RLS coverage invariant
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/tests/test_invariants.py
+**Gates:** pytest 75 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `test_all_scoped_tables_have_rls` scans `pg_class` for every plain table/partition in `public` with a `business_id` column and, via `pg_policy`, requires the full template from migration 0001: a `tenant_isolation` policy with both USING and WITH CHECK, RLS enabled, **and** RLS forced (without `force`, the table owner bypasses the policy). Explicit allowlist `{businesses, login_otps}` with the by-design reasons in a comment; a `KNOWN_SCOPED_TABLES` set of the nine tables covered today prevents a vacuous pass.
+- `test_rls_guard_detects_policyless_table` proves the failure mode: a temp table with `business_id` and no policy is reported with three gaps; after enable + policy it still reports "not forced"; after `force row level security` it is clean. All inside a rolled-back transaction.
+- Views are excluded from this scan (policies cannot attach to them). M3-T2, which turns `sales` into a view, must add the view's own isolation test — noted in the test file.
+**Deviation:** none
+**Next:** canary (5 tasks done), then M0-T6

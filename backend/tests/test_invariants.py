@@ -120,3 +120,111 @@ async def test_no_float_money_guard_detects_floats(conn):
         ("money_guard_probe", "quantity", "float8"),
         ("money_guard_probe", "unit_price", "float4"),
     ]
+
+
+# ── M0-T5: every business-scoped table carries tenant_isolation ──────────────
+
+# By-design exceptions (roadmap §1.1): `businesses` IS the tenant and has no
+# business_id; `login_otps` is keyed by phone and may predate any business. Both
+# have RLS explicitly disabled in migration 0001. Do not extend this list without
+# a roadmap-level decision.
+RLS_ALLOWLIST = {"businesses", "login_otps"}
+
+# Tables that must be covered today — guards against the scan matching nothing.
+KNOWN_SCOPED_TABLES = {
+    "staff", "items", "sales", "expenses", "receipts", "alerts",
+    "metric_baselines", "request_logs", "pending_confirmations",
+}
+
+# Plain tables and partitions only: policies do not attach to views. M3-T2, which
+# turns `sales` into a view, owes the view its own explicit isolation test.
+SCOPED_TABLES_SQL = text(
+    """
+    select c.relname as table_name,
+           c.relrowsecurity as rls_enabled,
+           c.relforcerowsecurity as rls_forced,
+           p.polname is not null as has_policy,
+           coalesce(p.polqual is not null, false) as has_using,
+           coalesce(p.polwithcheck is not null, false) as has_with_check
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    left join pg_policy p on p.polrelid = c.oid and p.polname = 'tenant_isolation'
+    where n.oid = :schema_oid
+      and c.relkind in ('r', 'p')
+      and exists (
+        select 1 from pg_attribute a
+        where a.attrelid = c.oid and a.attname = 'business_id' and not a.attisdropped
+      )
+    order by 1
+    """
+)
+
+
+async def _rls_gaps(conn, schema_oid: int) -> dict[str, list[str]]:
+    """table -> list of problems, for every business_id table not allowlisted."""
+    rows = (await conn.execute(SCOPED_TABLES_SQL, {"schema_oid": schema_oid})).all()
+    gaps: dict[str, list[str]] = {}
+    for table, enabled, forced, has_policy, has_using, has_with_check in rows:
+        if table in RLS_ALLOWLIST:
+            continue
+        problems = []
+        if not has_policy:
+            problems.append("no tenant_isolation policy")
+        else:
+            if not has_using:
+                problems.append("policy has no USING clause")
+            if not has_with_check:
+                problems.append("policy has no WITH CHECK clause")
+        if not enabled:
+            problems.append("row level security not enabled")
+        if not forced:
+            problems.append("row level security not forced (table owner would bypass it)")
+        if problems:
+            gaps[table] = problems
+    return gaps
+
+
+async def test_all_scoped_tables_have_rls(conn):
+    """M0-T5: every table with a business_id column has the full
+    tenant_isolation template applied: policy with USING + WITH CHECK, RLS
+    enabled, RLS forced."""
+    public_oid = await _public_oid(conn)
+    rows = (await conn.execute(SCOPED_TABLES_SQL, {"schema_oid": public_oid})).all()
+    scanned = {row[0] for row in rows}
+    missing = KNOWN_SCOPED_TABLES - scanned
+    assert not missing, f"scan no longer sees known scoped tables: {sorted(missing)}"
+
+    gaps = await _rls_gaps(conn, public_oid)
+    assert gaps == {}, f"business-scoped tables without full tenant isolation: {gaps}"
+
+
+async def test_rls_guard_detects_policyless_table(conn):
+    """Proves the guard fails on a policy-less scoped table, and goes green once
+    the exact template from migration 0001 is applied. Temp table, rolled back."""
+    await conn.execute(
+        text("create temp table rls_guard_probe (id int, business_id uuid not null) on commit drop")
+    )
+    temp_oid = (await conn.execute(text("select pg_my_temp_schema()"))).scalar_one()
+    assert await _rls_gaps(conn, temp_oid) == {
+        "rls_guard_probe": [
+            "no tenant_isolation policy",
+            "row level security not enabled",
+            "row level security not forced (table owner would bypass it)",
+        ]
+    }
+
+    # Half-applied template (policy but not forced) is still a gap.
+    await conn.execute(text("alter table rls_guard_probe enable row level security"))
+    await conn.execute(
+        text(
+            "create policy tenant_isolation on rls_guard_probe"
+            " using (business_id = current_setting('app.current_business_id')::uuid)"
+            " with check (business_id = current_setting('app.current_business_id')::uuid)"
+        )
+    )
+    assert await _rls_gaps(conn, temp_oid) == {
+        "rls_guard_probe": ["row level security not forced (table owner would bypass it)"]
+    }
+
+    await conn.execute(text("alter table rls_guard_probe force row level security"))
+    assert await _rls_gaps(conn, temp_oid) == {}
