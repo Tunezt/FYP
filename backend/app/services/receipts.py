@@ -211,7 +211,8 @@ async def commit_parse(
 
 
 async def create_pending(
-    session: AsyncSession, business: Business, parsed: dict, image_path: str
+    session: AsyncSession, business: Business, parsed: dict, image_path: str,
+    kind: str | None = None, extra: dict | None = None,
 ) -> PendingConfirmation:
     # One pending at a time per business: a new photo supersedes the old wait.
     await session.execute(
@@ -219,8 +220,8 @@ async def create_pending(
     )
     pending = PendingConfirmation(
         business_id=business.id,
-        kind="stock_import" if parsed.get("document_type") == "stock_ledger" else "receipt",
-        payload={"parsed": parsed, "image_path": image_path},
+        kind=kind or ("stock_import" if parsed.get("document_type") == "stock_ledger" else "receipt"),
+        payload={"parsed": parsed, "image_path": image_path, **(extra or {})},
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=PENDING_TTL_MINUTES),
     )
     session.add(pending)

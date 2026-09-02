@@ -169,9 +169,18 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
             payload = pending.payload
 
             if verdict == "confirm":
-                facts = await commit_parse(
-                    session, business, payload["parsed"], payload["image_path"]
-                )
+                if pending.kind == "goods_receipt":
+                    # Supplier invoice (M5-T4): the matched lines become a goods
+                    # receipt; questions were skipped and are named in the reply.
+                    from app.services.invoice_draft import confirm_draft
+
+                    facts = await confirm_draft(
+                        session, business, payload["draft"], payload["image_path"], payload["parsed"]
+                    )
+                else:
+                    facts = await commit_parse(
+                        session, business, payload["parsed"], payload["image_path"]
+                    )
                 await discard_pending(session, pending)
                 reply = await compose_reply(business, text, "vision_confirm", facts)
                 return "vision_confirm", reply
@@ -187,6 +196,15 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
             # Anything else: maybe a correction, maybe an unrelated question.
             revision = await revise_parse(payload["parsed"], text)
             if not revision["unrelated"]:
+                if pending.kind == "goods_receipt":
+                    from app.services.invoice_draft import build_draft, draft_summary
+
+                    draft = await build_draft(session, business, revision["parsed"])
+                    await create_pending(
+                        session, business, revision["parsed"], payload["image_path"],
+                        kind="goods_receipt", extra={"draft": draft},
+                    )
+                    return "vision_revise", _draft_prompt(draft)
                 await create_pending(session, business, revision["parsed"], payload["image_path"])
                 return "vision_revise", _confirmation_prompt(revision["parsed"])
             # Unrelated → keep the pending and answer normally below.
@@ -222,16 +240,28 @@ async def _handle_image(business: Business, message: dict) -> tuple[str, str | N
             "barang di fotonya. Coba foto ulang yang lebih jelas ya 🙏",
         )
 
+    # Never write stock from a photo without confirmation (roadmap M5-T4): every
+    # stock-affecting photo is parked, whatever the model's confidence. The gate
+    # (`needs_confirmation`) now only decides whether the prompt flags doubt.
     async with tenant_session(business.id) as session:
-        if needs_confirmation(parsed):
-            await create_pending(session, business, parsed, image_path)
-            return "vision", _confirmation_prompt(parsed)
+        if parsed.get("document_type") == "receipt":
+            from app.services.invoice_draft import build_draft
 
-        facts = await commit_parse(session, business, parsed, image_path)
-        reply = await compose_reply(
-            business, "(owner sent a receipt photo)", "vision", facts
-        )
-        return "vision", reply
+            draft = await build_draft(session, business, parsed)
+            await create_pending(session, business, parsed, image_path, kind="goods_receipt", extra={"draft": draft})
+            return "vision", _draft_prompt(draft)
+
+        await create_pending(session, business, parsed, image_path)
+        prompt = _confirmation_prompt(parsed)
+        if needs_confirmation(parsed):
+            prompt = "⚠️ Ada bagian yang kurang jelas, tolong dicek.\n\n" + prompt
+        return "vision", prompt
+
+
+def _draft_prompt(draft: dict) -> str:
+    from app.services.invoice_draft import draft_summary
+
+    return "Ini nota belanja yang kubaca, kucocokkan dengan daftar barangmu 🧾\n\n" + draft_summary(draft)
 
 
 _XLSX_MIMES = {
