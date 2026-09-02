@@ -175,9 +175,11 @@ async def register(payload: RegisterIn):
         )
         # Standard units of measure and conversions (M4-T3) — every business
         # starts with kg/g, liter/ml and the usual warung units.
+        from app.services.accounts import ensure_standard_chart
         from app.services.units import ensure_standard_uoms
 
         await ensure_standard_uoms(session, business_id)
+        await ensure_standard_chart(session, business_id)  # M6-T1
         business = await session.get(Business, business_id)
         business_out = BusinessOut.model_validate(business)
 

@@ -27,6 +27,7 @@ from app.models import Business, Expense, Item, Order, OrderLine, Payment, Staff
 from app.services.catalog import (
     create_modifier, create_modifier_group, create_variant, ensure_default_variant, set_recipe_line,
 )
+from app.services.accounts import ensure_standard_chart
 from app.services.stock import record_movement
 from app.services.suppliers import create_supplier
 from app.services.units import ensure_standard_uoms
@@ -129,6 +130,7 @@ async def seed() -> None:
 
         # Units of measure (M4-T3): the standard set, and each item linked to its unit.
         uoms = await ensure_standard_uoms(session, business_id)
+        await ensure_standard_chart(session, business_id)  # M6-T1
         for sname, sphone, saddress in SUPPLIERS:  # M5-T1
             await create_supplier(session, business_id, name=sname, phone=sphone, address=saddress)
 

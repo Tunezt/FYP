@@ -16,8 +16,8 @@ from sqlalchemy import func, select
 from app.ai.periods import period_range
 from app.core.deps import OwnerCtx
 from app.models import (
-    Alert, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PurchaseOrder, Receipt,
-    RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
+    Account, Alert, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PurchaseOrder,
+    Receipt, RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
 )
 from app.schemas.dashboard import (
     AlertRow,
@@ -63,6 +63,9 @@ from app.schemas.dashboard import (
     GoodsReceiptCreateIn,
     GoodsReceiptOut,
     GrLineOut,
+    AccountCreateIn,
+    AccountOut,
+    AccountUpdateIn,
 )
 from app.schemas.auth import BusinessOut
 from app.services.velocity import VELOCITY_WINDOW_DAYS
@@ -703,6 +706,49 @@ async def create_goods_receipt(payload: GoodsReceiptCreateIn, ctx: OwnerCtx):
             detail = f"{detail} ({exc.detail})"
         raise HTTPException(status_code=status, detail=detail)
     return await _gr_out(ctx.session, received.receipt)
+
+
+_ACCOUNT_ERRORS = {
+    "code": (422, "Kode akun harus angka (maksimal 8 digit)"),
+    "name": (422, "Nama akun tidak boleh kosong"),
+    "duplicate": (409, "Kode akun ini sudah dipakai"),
+    "type": (422, "Jenis akun tidak dikenali"),
+    "system": (409, "Akun bawaan tidak bisa dinonaktifkan — ganti namanya saja kalau perlu"),
+}
+
+
+@router.get("/accounts", response_model=list[AccountOut])
+async def list_accounts(ctx: OwnerCtx, include_inactive: bool = Query(default=False)):
+    from app.services.accounts import chart
+
+    return [AccountOut.model_validate(a) for a in await chart(ctx.session, include_inactive=include_inactive)]
+
+
+@router.post("/accounts", response_model=AccountOut, status_code=201)
+async def add_account(payload: AccountCreateIn, ctx: OwnerCtx):
+    from app.services.accounts import AccountInvalid, create_account
+
+    try:
+        account = await create_account(ctx.session, ctx.business_id, **payload.model_dump())
+    except AccountInvalid as exc:
+        status, detail = _ACCOUNT_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return AccountOut.model_validate(account)
+
+
+@router.patch("/accounts/{account_id}", response_model=AccountOut)
+async def edit_account(account_id: uuid.UUID, payload: AccountUpdateIn, ctx: OwnerCtx):
+    from app.services.accounts import AccountInvalid, update_account
+
+    account = await ctx.session.get(Account, account_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Akun tidak ditemukan")
+    try:
+        account = await update_account(ctx.session, account, **payload.model_dump(exclude_none=True))
+    except AccountInvalid as exc:
+        status, detail = _ACCOUNT_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return AccountOut.model_validate(account)
 
 
 _RECIPE_ERRORS = {

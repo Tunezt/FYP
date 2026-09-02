@@ -755,3 +755,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Live parse quality of menu photos is unmeasured (Gemini quota, see M1-T3 part 2); the schema is ready for the same baseline script.
 **Deviation:** none
 **Next:** M6-T1 — M5 complete, tagged `checkpoint/M5`
+
+### [M6-T1] Accounts
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0014_accounts.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/accounts.py (new), backend/app/api/auth.py, backend/app/api/dashboard.py, backend/app/schemas/dashboard.py, backend/app/seed.py, backend/tests/test_accounts.py (new, 3 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py, docs/api-contract.md
+**Gates:** pytest 187 passed 0 skipped · migrations round-trip ok (0014 → 0013 → 0014) · frontend build ok · seed ok
+**Notes:**
+- Migration 0014: enum `account_type` (asset, liability, equity, revenue, expense) and `accounts` (per-business `code` unique, name, type, `is_system`, `is_active`) with RLS; the standard chart is backfilled into every existing business from the single definition in `services/accounts.py` (idempotent), and `ensure_standard_chart` runs at registration and in the seed.
+- The chart: 26 Indonesian SME accounts — Kas 1100, Bank 1110, Piutang QRIS/e-wallet 1120, Piutang usaha 1200, Persediaan 1300, Peralatan 1400; Utang usaha 2100, Utang pajak 2200, Liabilitas poin 2300, Pendapatan diterima di muka 2400; Modal 3100, Prive 3200, Laba ditahan 3900; Penjualan 4100, Diskon 4200, Retur 4300, Pendapatan lain 4900; HPP 5100, Bahan baku 5200, Gaji 5300, Sewa 5400, Listrik/air/gas 5500, Pemasaran & promo 5600, Penyusutan & barang rusak 5700, Selisih kas 5800, Beban lain 5900. Every account the roadmap's event catalogue needs is present (asserted by test). `DEBIT_NORMAL` records the normal balance per type for M6-T5; `EXPENSE_CATEGORY_ACCOUNT` maps the existing expense categories for M6-T6.
+- Merchant-extendable: `POST /api/accounts` (numeric code, unique), `PATCH` renames or deactivates; seeded accounts are `is_system` — renameable, never deactivated, because posting rules (M6-T3) reference them by code. Indonesian errors throughout.
+- Tests: chart well-formed and complete, seeding idempotent, custom accounts and every validation rule, endpoints, RLS.
+**Deviation:** none
+**Next:** M6-T2

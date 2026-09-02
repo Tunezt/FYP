@@ -59,6 +59,7 @@ modifier_selection = Enum("single", "multi", name="modifier_selection", create_t
 po_status = Enum(
     "draft", "ordered", "partially_received", "received", "cancelled", name="po_status", create_type=False
 )
+account_type = Enum("asset", "liability", "equity", "revenue", "expense", name="account_type", create_type=False)
 
 
 class Business(Base):
@@ -608,6 +609,24 @@ class GoodsReceiptLine(Base):
     unit_cost_item_unit: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     created_at: Mapped[datetime] = _now()
+
+
+class Account(Base):
+    """One line of the chart of accounts (migration 0014, roadmap M6-T1)."""
+
+    __tablename__ = "accounts"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[str] = mapped_column(account_type, nullable=False)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
 
 
 class Payment(Base):

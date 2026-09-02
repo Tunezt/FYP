@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.security import hash_pin
 from app.models import (
-    Business, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier,
+    Account, Business, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier,
     GoodsReceipt, GoodsReceiptLine, Payment, PoLine, PurchaseOrder, RecipeLine, Sale, Staff, StockMovement, Supplier,
     Uom, UomConversion,
 )
@@ -401,6 +401,23 @@ async def test_rls_isolates_goods_receipts(session_factory, two_tenants):
     async with session_factory() as session:
         await _set_tenant(session, a.id)
         session.add(GoodsReceiptLine(business_id=b.id, receipt_id=ids["gr"], item_id=ids["item"], quantity=Decimal(1), quantity_item_unit=Decimal(1)))
+        with pytest.raises(Exception):
+            await session.commit()
+
+
+async def test_rls_isolates_accounts(session_factory, two_tenants):
+    """M6-T1 / roadmap §2."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(Account(business_id=a.id, code="1100", name="Kas", type="asset"))
+        await session.commit()
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert all(r.business_id != a.id for r in (await session.execute(select(Account))).scalars())
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(Account(business_id=b.id, code="1100", name="Kas", type="asset"))
         with pytest.raises(Exception):
             await session.commit()
 

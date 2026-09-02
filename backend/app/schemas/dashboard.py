@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -259,6 +260,31 @@ class GoodsReceiptOut(BaseModel):
     notes: str | None
     subtotal: Decimal
     lines: list[GrLineOut]
+
+
+# ── Chart of accounts (M6-T1) ───────────────────────────────────────────────
+
+
+class AccountOut(BaseModel):
+    id: uuid.UUID
+    code: str
+    name: str
+    type: str
+    is_system: bool
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AccountCreateIn(BaseModel):
+    code: str = Field(min_length=1, max_length=8)
+    name: str = Field(min_length=1, max_length=120)
+    type: Literal["asset", "liability", "equity", "revenue", "expense"]
+
+
+class AccountUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    is_active: bool | None = None
 
 
 # ── Recipes (M4-T4) ─────────────────────────────────────────────────────────
