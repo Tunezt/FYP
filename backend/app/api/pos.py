@@ -19,6 +19,10 @@ from app.core.security import create_token, decode_token, verify_pin
 from app.models import Business, Item, RequestLog, Staff
 from app.schemas.pos import (
     ItemOut,
+    OrderIn,
+    OrderLineOut,
+    OrderOut,
+    PaymentOut,
     PosBusinessOut,
     PosLoginIn,
     PosLoginOut,
@@ -26,6 +30,7 @@ from app.schemas.pos import (
     SaleIn,
     SaleOut,
 )
+from app.services.orders import OrderLineSpec, PaymentMismatch, PaymentSpec, create_order
 from app.services.sales import InsufficientStock, ItemNotFound, record_sale
 from app.services.velocity import check_low_stock_for_item
 
@@ -134,4 +139,68 @@ async def pos_record_sale(payload: SaleIn, ctx: PosCtx):
         total_price=line.line_total,
         remaining_stock=recorded.remaining_stock,
         sold_at=order.sold_at,
+    )
+
+
+def _rp(amount) -> str:
+    return f"Rp {amount:,.0f}".replace(",", ".")
+
+
+@router.post("/orders", response_model=OrderOut, status_code=201)
+async def pos_create_order(payload: OrderIn, ctx: PosCtx):
+    """A multi-line order with one or more payments (M3-T3). All-or-nothing:
+    an out-of-stock line or payments that do not add up leave nothing behind."""
+    start = time.perf_counter()
+    try:
+        created = await create_order(
+            ctx.session,
+            business_id=ctx.business_id,
+            staff_id=ctx.staff_id,
+            order_type=payload.order_type,
+            lines=[
+                OrderLineSpec(item_id=l.item_id, quantity=l.quantity, unit_price=l.unit_price, notes=l.notes)
+                for l in payload.lines
+            ],
+            payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
+        )
+    except ItemNotFound:
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+    except InsufficientStock as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Stok tidak cukup — {exc.item_name} tersisa {exc.available}",
+        )
+    except PaymentMismatch as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Pembayaran {_rp(exc.paid)} tidak sama dengan total {_rp(exc.total)}",
+        )
+
+    for cl in created.lines:
+        await check_low_stock_for_item(ctx.session, ctx.business_id, cl.line.item_id)
+
+    ctx.session.add(
+        RequestLog(
+            business_id=ctx.business_id,
+            channel="pos",
+            path="/pos/orders",
+            latency_ms=int((time.perf_counter() - start) * 1000),
+            status="ok",
+        )
+    )
+    order = created.order
+    return OrderOut(
+        id=order.id,
+        order_type=order.order_type,
+        subtotal=order.subtotal,
+        total=order.total,
+        sold_at=order.sold_at,
+        lines=[
+            OrderLineOut(
+                id=cl.line.id, item_id=cl.line.item_id, item_name=cl.item_name, quantity=cl.line.quantity,
+                unit_price=cl.line.unit_price, line_total=cl.line.line_total, remaining_stock=cl.remaining_stock,
+            )
+            for cl in created.lines
+        ],
+        payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in created.payments],
     )

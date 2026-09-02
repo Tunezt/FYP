@@ -15,12 +15,14 @@ type Item = {
   sell_price: string;
   reorder_threshold: string;
 };
-type SaleResult = {
-  item_name: string;
-  quantity: string;
-  total_price: string;
-  remaining_stock: string;
+type OrderResult = {
+  id: string;
+  total: string;
+  lines: { item_name: string; quantity: string; line_total: string; remaining_stock: string }[];
+  payments: { method: string; amount: string }[];
 };
+type CartLine = { item: Item; qty: number };
+type PayMode = "cash" | "qris" | "split";
 
 type Screen =
   | { kind: "loading" }
@@ -260,8 +262,15 @@ function SellScreen({
   const [items, setItems] = useState<Item[] | null>(null);
   const [selected, setSelected] = useState<Item | null>(null);
   const [qty, setQty] = useState(1);
+  // One order = many lines + one or more payments (M3-T3). The cart is the order
+  // being built; nothing is written until "Bayar" succeeds.
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [payMode, setPayMode] = useState<PayMode>("cash");
+  const [cashPart, setCashPart] = useState("");
   const [busy, setBusy] = useState(false);
-  const [flash, setFlash] = useState<SaleResult | null>(null);
+  const [flash, setFlash] = useState<OrderResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const token = posToken ?? (typeof window !== "undefined" ? localStorage.getItem(POS_TOKEN_KEY) : null);
 
@@ -276,20 +285,64 @@ function SellScreen({
     [items]
   );
 
-  async function confirmSale() {
-    if (!selected || busy) return;
+  const cartQty = (itemId: string) => cart.find((l) => l.item.id === itemId)?.qty ?? 0;
+  const cartCount = cart.reduce((n, l) => n + l.qty, 0);
+  const cartTotal = cart.reduce((s, l) => s + Number(l.item.sell_price) * l.qty, 0);
+
+  function addToCart(item: Item, n: number) {
+    setCart((c) => {
+      const existing = c.find((l) => l.item.id === item.id);
+      const max = Number(item.current_stock);
+      if (existing) {
+        return c.map((l) =>
+          l.item.id === item.id ? { ...l, qty: Math.min(max, l.qty + n) } : l
+        );
+      }
+      return [...c, { item, qty: Math.min(max, n) }];
+    });
+  }
+
+  function changeLine(itemId: string, delta: number) {
+    setCart((c) =>
+      c
+        .map((l) =>
+          l.item.id === itemId
+            ? { ...l, qty: Math.min(Number(l.item.current_stock), l.qty + delta) }
+            : l
+        )
+        .filter((l) => l.qty > 0)
+    );
+  }
+
+  const cashAmount = payMode === "cash" ? cartTotal : payMode === "qris" ? 0 : Number(cashPart || 0);
+  const qrisAmount = cartTotal - cashAmount;
+  const splitValid = payMode !== "split" || (cashAmount > 0 && cashAmount < cartTotal);
+
+  async function confirmOrder() {
+    if (cart.length === 0 || busy || !splitValid) return;
     setBusy(true);
     setError(null);
+    const payments = [
+      ...(cashAmount > 0 ? [{ method: "cash", amount: cashAmount }] : []),
+      ...(qrisAmount > 0 ? [{ method: "qris", amount: qrisAmount }] : []),
+    ];
     try {
-      const res = await api<SaleResult>("/pos/sales", {
+      const res = await api<OrderResult>("/pos/orders", {
         token,
-        body: { item_id: selected.id, quantity: qty },
+        body: {
+          lines: cart.map((l) => ({ item_id: l.item.id, quantity: l.qty })),
+          payments,
+          order_type: "takeaway",
+        },
       });
       setFlash(res);
-      setSelected(null);
-      setQty(1);
+      setCart([]);
+      setCartOpen(false);
+      setPaying(false);
+      setPayMode("cash");
+      setCashPart("");
       loadItems();
-      setTimeout(() => setFlash(null), 2200);
+      setTimeout(() => setFlash(null), 2600);
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.detail : "Gagal menyimpan — coba lagi.");
     } finally {
@@ -321,6 +374,7 @@ function SellScreen({
             const stock = Number(item.current_stock);
             const low = stock <= Number(item.reorder_threshold);
             const out = stock <= 0;
+            const inCart = cartQty(item.id);
             return (
               <button
                 key={item.id}
@@ -334,6 +388,11 @@ function SellScreen({
                   out ? "opacity-40" : "hover:scale-[1.02] active:scale-[0.97]"
                 }`}
               >
+                {inCart > 0 && (
+                  <span className="absolute right-3 top-3 flex h-7 min-w-7 items-center justify-center rounded-full bg-accent-gradient px-2 text-xs font-bold text-white shadow-pop">
+                    {inCart}
+                  </span>
+                )}
                 <span className="text-base font-bold leading-tight">{item.name}</span>
                 <span className="font-semibold text-accent-700">
                   {formatRupiah(item.sell_price)}
@@ -377,6 +436,137 @@ function SellScreen({
               />
             </div>
 
+            <button
+              onClick={() => {
+                addToCart(selected, qty);
+                setSelected(null);
+                setQty(1);
+              }}
+              className="btn-accent mt-6 w-full py-4 text-lg"
+            >
+              Tambah {formatRupiah(Number(selected.sell_price) * qty)}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cart bar */}
+      {cart.length > 0 && !paying && (
+        <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-4">
+          <div className="glass-card glass-strong w-full max-w-2xl animate-fade-up px-5 py-3 shadow-pop">
+            {cartOpen && (
+              <ul className="hairline-b mb-3 max-h-64 overflow-y-auto pb-2">
+                {cart.map((l) => (
+                  <li key={l.item.id} className="flex items-center gap-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{l.item.name}</p>
+                      <p className="ink-faint text-xs">
+                        {formatRupiah(l.item.sell_price)} × {l.qty}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => changeLine(l.item.id, -1)}
+                        aria-label={`kurangi ${l.item.name}`}
+                        className="glass-card h-9 w-9 rounded-full text-lg font-bold active:scale-90"
+                      >
+                        −
+                      </button>
+                      <span className="w-6 text-center font-semibold tabular-nums">{l.qty}</span>
+                      <button
+                        onClick={() => changeLine(l.item.id, +1)}
+                        aria-label={`tambah ${l.item.name}`}
+                        className="glass-card h-9 w-9 rounded-full text-lg font-bold active:scale-90"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <span className="w-24 text-right text-sm font-semibold tabular-nums">
+                      {formatRupiah(Number(l.item.sell_price) * l.qty)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex items-center gap-4">
+              <button onClick={() => setCartOpen((o) => !o)} className="min-w-0 flex-1 text-left">
+                <p className="ink-faint text-xs font-medium uppercase tracking-wide">
+                  {cartCount} item · {cartOpen ? "tutup" : "lihat keranjang"}
+                </p>
+                <p className="text-2xl font-bold tabular-nums">{formatRupiah(cartTotal)}</p>
+              </button>
+              <button onClick={() => setCart([])} className="btn-quiet px-3 py-2 text-sm">
+                Kosongkan
+              </button>
+              <button
+                onClick={() => {
+                  setError(null);
+                  setPaying(true);
+                }}
+                className="btn-accent px-6 py-3 text-lg"
+              >
+                Bayar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment sheet */}
+      {paying && (
+        <div
+          className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          onClick={() => !busy && setPaying(false)}
+        >
+          <div
+            className="glass-card glass-strong w-full max-w-md animate-fade-up rounded-b-none rounded-t-4xl px-8 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="ink-faint text-xs font-medium uppercase tracking-wide">
+              {cartCount} item
+            </p>
+            <p className="text-3xl font-bold tabular-nums">{formatRupiah(cartTotal)}</p>
+
+            <div className="mt-5 grid grid-cols-3 gap-2">
+              {(
+                [
+                  ["cash", "Tunai"],
+                  ["qris", "QRIS"],
+                  ["split", "Bagi dua"],
+                ] as [PayMode, string][]
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setPayMode(mode)}
+                  className={`rounded-2xl py-3 text-sm font-semibold transition-colors ${
+                    payMode === mode ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {payMode === "split" && (
+              <div className="mt-5">
+                <label className="ink-soft text-sm" htmlFor="cash-part">
+                  Tunai (sisanya QRIS)
+                </label>
+                <input
+                  id="cash-part"
+                  inputMode="numeric"
+                  value={cashPart}
+                  onChange={(e) => setCashPart(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="0"
+                  className="glass-card mt-1 w-full rounded-2xl px-4 py-3 text-xl font-semibold tabular-nums outline-none"
+                />
+                <p className="ink-faint mt-2 text-sm">
+                  Tunai {formatRupiah(cashAmount)} · QRIS {formatRupiah(Math.max(0, qrisAmount))}
+                  {!splitValid && cashPart !== "" && " — tunai harus di antara 0 dan total"}
+                </p>
+              </div>
+            )}
+
             {error && (
               <p
                 className="mt-4 rounded-2xl px-4 py-3 text-center text-sm font-medium"
@@ -386,8 +576,12 @@ function SellScreen({
               </p>
             )}
 
-            <button onClick={confirmSale} disabled={busy} className="btn-accent mt-6 w-full py-4 text-lg">
-              {busy ? "Menyimpan…" : `Catat ${formatRupiah(Number(selected.sell_price) * qty)}`}
+            <button
+              onClick={confirmOrder}
+              disabled={busy || !splitValid}
+              className="btn-accent mt-6 w-full py-4 text-lg disabled:opacity-50"
+            >
+              {busy ? "Menyimpan…" : `Catat ${formatRupiah(cartTotal)}`}
             </button>
           </div>
         </div>
@@ -405,9 +599,14 @@ function SellScreen({
             </span>
             <div>
               <p className="font-semibold">
-                {formatQty(flash.quantity)}× {flash.item_name} · {formatRupiah(flash.total_price)}
+                {formatRupiah(flash.total)} ·{" "}
+                {flash.lines.map((l) => `${formatQty(l.quantity)}× ${l.item_name}`).join(", ")}
               </p>
-              <p className="ink-soft text-xs">sisa stok {formatQty(flash.remaining_stock)}</p>
+              <p className="ink-soft text-xs">
+                {flash.payments
+                  .map((p) => `${p.method === "cash" ? "tunai" : p.method.toUpperCase()} ${formatRupiah(p.amount)}`)
+                  .join(" + ")}
+              </p>
             </div>
           </div>
         </div>

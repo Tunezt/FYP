@@ -58,3 +58,57 @@ class SaleOut(BaseModel):
     total_price: Decimal
     remaining_stock: Decimal
     sold_at: datetime
+
+
+# ── Multi-line orders with split payment (M3-T3) ─────────────────────────────
+
+from typing import Literal  # noqa: E402
+
+PosPaymentMethod = Literal["cash", "qris", "transfer", "card", "ewallet", "other"]
+PosOrderType = Literal["dine_in", "takeaway", "delivery", "pickup"]
+
+
+class OrderLineIn(BaseModel):
+    item_id: uuid.UUID
+    quantity: Decimal = Field(gt=0, le=Decimal("999999"))
+    unit_price: Decimal | None = Field(default=None, ge=0)
+    notes: str | None = Field(default=None, max_length=200)
+
+
+class PaymentIn(BaseModel):
+    method: PosPaymentMethod
+    amount: Decimal = Field(gt=0, le=Decimal("999999999"))
+    reference: str | None = Field(default=None, max_length=120)
+
+
+class OrderIn(BaseModel):
+    lines: list[OrderLineIn] = Field(min_length=1, max_length=50)
+    payments: list[PaymentIn] = Field(min_length=1, max_length=10)
+    order_type: PosOrderType = "takeaway"
+
+
+class OrderLineOut(BaseModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    item_name: str
+    quantity: Decimal
+    unit_price: Decimal
+    line_total: Decimal
+    remaining_stock: Decimal
+
+
+class PaymentOut(BaseModel):
+    id: uuid.UUID
+    method: str
+    amount: Decimal
+    reference: str | None
+
+
+class OrderOut(BaseModel):
+    id: uuid.UUID
+    order_type: str
+    subtotal: Decimal
+    total: Decimal
+    sold_at: datetime
+    lines: list[OrderLineOut]
+    payments: list[PaymentOut]

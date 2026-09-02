@@ -573,3 +573,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Downgrade drops the view and renames back; re-upgrade skips legacy rows already present as lines, verified by gate 2. Rows in the view can now be negative-quantity reversing lines (M3-T4); readers summing revenue will net them, which is the intended accounting effect.
 **Deviation:** none
 **Next:** M3-T3
+
+### [M3-T3] POS writes orders
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/services/orders.py (new), backend/app/services/sales.py, backend/app/schemas/pos.py, backend/app/api/pos.py, backend/tests/test_orders.py (new, 4 tests), frontend/app/pos/[businessToken]/page.tsx
+**Gates:** pytest 108 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `services/orders.create_order` is now the single write path for selling: prices every line, takes stock per line with the same atomic conditional UPDATE (`current_stock >= qty`), requires payments to equal the total exactly, then writes order, lines (with `unit_cost_at_sale`), payments and one `sale` stock movement per line, all in the caller's transaction. `record_sale` (the legacy `/pos/sales` one-item call) is a thin wrapper over it, so there is one code path.
+- `POST /pos/orders` (scope `pos`): lines + payments + order type; Indonesian errors — 404 item, 409 insufficient stock naming the item and what is left, 422 payment mismatch showing both figures. Low-stock check per line as before; request log as before.
+- Done-when proved by `test_two_items_half_cash_half_qris`: 2 coffees + 1 toast = 68.000 paid 34.000 cash + 34.000 QRIS → **one order, two lines, two payments, two stock movements**, cost snapshots 8.000/9.000, stock 10→8 and 3→2, reconciliation invariant holds, both lines visible through the `sales` view. `test_out_of_stock_line_rolls_back_the_whole_order`: coffee decremented first, toast short on the second line → nothing written, coffee back at 10 (all-or-nothing is real). `test_payments_must_match_total_exactly`: 20.000 against 22.000 → nothing written. Endpoint test covers the response shape and the 422 text.
+- Kiosk: items now go into a cart (badge on the tile, expandable cart bar with +/− per line), "Bayar" opens a payment sheet with Tunai / QRIS / Bagi dua (cash amount typed, remainder QRIS, validated), one `POST /pos/orders`, success flash lists lines and payments. Verified in the browser against the running backend with the demo café.
+- No discount/tax/service charge/rounding yet — `subtotal == total` until M7-T4. `points` is not offered as a POS method until M8-T2.
+**Deviation:** none
+**Next:** M3-T4
