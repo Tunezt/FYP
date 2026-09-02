@@ -48,6 +48,12 @@ stock_movement_reason = Enum(
     "production_in", "production_out", "opname", "correction",
     name="stock_movement_reason", create_type=False,
 )
+order_type = Enum("dine_in", "takeaway", "delivery", "pickup", name="order_type", create_type=False)
+order_status = Enum("open", "completed", "voided", "refunded", name="order_status", create_type=False)
+payment_method = Enum(
+    "cash", "qris", "transfer", "card", "ewallet", "points", "other",
+    name="payment_method", create_type=False,
+)
 
 
 class Business(Base):
@@ -263,4 +269,67 @@ class StockMovement(Base):
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    created_at: Mapped[datetime] = _now()
+
+
+class Order(Base):
+    """One till transaction (migration 0005, roadmap M3). Many lines, many
+    payments. Money columns are numeric(12,2); `total` is what the customer paid."""
+
+    __tablename__ = "orders"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))  # FK arrives with M8
+    order_type: Mapped[str] = mapped_column(order_type, nullable=False, server_default="takeaway")
+    status: Mapped[str] = mapped_column(order_status, nullable=False, server_default="completed")
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    discount_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    tax_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    service_charge: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    rounding: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    sold_at: Mapped[datetime] = _now()
+    created_at: Mapped[datetime] = _now()
+
+
+class OrderLine(Base):
+    """One item on an order. `unit_cost_at_sale` is the cost snapshot that keeps
+    historical margin fixed; a reversing line (void/refund) carries a negative
+    quantity, nothing is updated in place."""
+
+    __tablename__ = "order_lines"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
+    item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), nullable=False)
+    variant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))  # FK arrives with M4
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    line_discount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    unit_cost_at_sale: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
+
+
+class Payment(Base):
+    """One payment against an order. Many per order — that is split payment."""
+
+    __tablename__ = "payments"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
+    method: Mapped[str] = mapped_column(payment_method, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    reference: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()

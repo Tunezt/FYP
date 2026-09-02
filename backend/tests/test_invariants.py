@@ -20,7 +20,9 @@ DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 # Column names that carry rupiah or quantities. Anything matching must be exact
 # `numeric`, never `real` / `double precision` (roadmap §1.3).
-MONEY_OR_QUANTITY = re.compile(r"amount|price|total|cost|stock|quantity|qty|threshold")
+MONEY_OR_QUANTITY = re.compile(
+    r"amount|price|total|cost|stock|quantity|qty|threshold|discount|charge|rounding"
+)
 
 # Every column that should be caught today. Guards against the pattern silently
 # matching nothing (e.g. after a rename) and the test passing vacuously.
@@ -36,6 +38,18 @@ KNOWN_MONEY_COLUMNS = {
     ("expenses", "amount"),
     ("stock_movements", "qty_delta"),
     ("stock_movements", "unit_cost"),
+    ("orders", "subtotal"),
+    ("orders", "discount_total"),
+    ("orders", "tax_total"),
+    ("orders", "service_charge"),
+    ("orders", "rounding"),
+    ("orders", "total"),
+    ("order_lines", "quantity"),
+    ("order_lines", "unit_price"),
+    ("order_lines", "line_discount"),
+    ("order_lines", "line_total"),
+    ("order_lines", "unit_cost_at_sale"),
+    ("payments", "amount"),
 }
 
 # pg_catalog rather than information_schema: the latter only lists columns the
@@ -136,7 +150,7 @@ RLS_ALLOWLIST = {"businesses", "login_otps"}
 KNOWN_SCOPED_TABLES = {
     "staff", "items", "sales", "expenses", "receipts", "alerts",
     "metric_baselines", "request_logs", "pending_confirmations",
-    "stock_movements",
+    "stock_movements", "orders", "order_lines", "payments",
 }
 
 # Plain tables and partitions only: policies do not attach to views. M3-T2, which

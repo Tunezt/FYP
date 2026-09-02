@@ -19,7 +19,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.security import hash_pin
-from app.models import Business, Item, Sale, Staff, StockMovement
+from app.models import Business, Item, Order, OrderLine, Payment, Sale, Staff, StockMovement
 from app.services.sales import InsufficientStock, record_sale
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
@@ -154,6 +154,57 @@ async def test_rls_isolates_stock_movements(session_factory, two_tenants):
         )
         with pytest.raises(Exception):
             await session.commit()
+
+
+async def test_rls_isolates_orders_lines_and_payments(session_factory, two_tenants):
+    """M3-T1 / roadmap §2: an order with a line and a split payment belongs to A
+    alone — B reads none of the three tables, and A cannot write into B's."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        item = Item(business_id=a.id, name="Order Item A", unit="cup", current_stock=Decimal(9),
+                    cost_price=Decimal("8000"), sell_price=Decimal("22000"))
+        session.add(item)
+        await session.flush()
+        order = Order(business_id=a.id, order_type="dine_in", subtotal=Decimal("44000"), total=Decimal("44000"))
+        session.add(order)
+        await session.flush()
+        session.add_all([
+            OrderLine(business_id=a.id, order_id=order.id, item_id=item.id, quantity=Decimal(2),
+                      unit_price=Decimal("22000"), line_total=Decimal("44000"), unit_cost_at_sale=Decimal("8000")),
+            Payment(business_id=a.id, order_id=order.id, method="cash", amount=Decimal("20000")),
+            Payment(business_id=a.id, order_id=order.id, method="qris", amount=Decimal("24000"), reference="QR-1"),
+        ])
+        await session.commit()
+        order_id, item_id = order.id, item.id
+
+    async with session_factory() as session:  # B sees nothing
+        await _set_tenant(session, b.id)
+        for model in (Order, OrderLine, Payment):
+            rows = (await session.execute(select(model))).scalars().all()
+            assert [r for r in rows if r.business_id == a.id] == []
+        assert await session.get(Order, order_id) is None
+
+    async with session_factory() as session:  # A sees it all, with exact numbers
+        await _set_tenant(session, a.id)
+        order = await session.get(Order, order_id)
+        assert order.total == Decimal("44000.00")
+        lines = (await session.execute(select(OrderLine).where(OrderLine.order_id == order_id))).scalars().all()
+        assert len(lines) == 1 and lines[0].unit_cost_at_sale == Decimal("8000.00")
+        paid = (await session.execute(select(Payment).where(Payment.order_id == order_id))).scalars().all()
+        assert sorted(p.amount for p in paid) == [Decimal("20000.00"), Decimal("24000.00")]
+
+    for smuggled in (
+        lambda oid: Order(business_id=b.id, order_type="takeaway"),
+        lambda oid: OrderLine(business_id=b.id, order_id=oid, item_id=item_id, quantity=Decimal(1),
+                              unit_price=Decimal(1), line_total=Decimal(1)),
+        lambda oid: Payment(business_id=b.id, order_id=oid, method="cash", amount=Decimal(1)),
+    ):
+        async with session_factory() as session:  # A cannot write B's rows
+            await _set_tenant(session, a.id)
+            session.add(smuggled(order_id))
+            with pytest.raises(Exception):
+                await session.commit()
 
 
 async def test_concurrent_sale_of_last_unit(session_factory, two_tenants):

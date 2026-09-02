@@ -545,3 +545,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Canary run before this commit (7 tasks since the last one): clean stash, `downgrade base` → `upgrade head` through 0004, seed, full suite green.
 **Deviation:** canary was late (7 tasks instead of 5) — noted, no consequence found.
 **Next:** M3-T1 — M2 complete, tagged `checkpoint/M2`
+
+### [M3-T1] Create `orders`, `order_lines`, `payments`
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0005_orders.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/tests/test_db_integration.py, backend/tests/test_invariants.py
+**Gates:** pytest 102 passed 0 skipped · migrations round-trip ok (0005 → 0004 → 0005) · frontend build ok · seed ok
+**Notes:**
+- Three tables per spec, no outlet/terminal columns. `orders`: staff (nullable for self-service channels), `customer_id` nullable forward reference (FK arrives with M8), `order_type` enum, `status`, subtotal / discount_total / tax_total / service_charge / rounding / total all `numeric(12,2)`, `sold_at`. `order_lines`: `variant_id` nullable forward reference (M4), `quantity numeric(12,3)` with `check (quantity <> 0)` so reversing lines can be negative, `unit_price`, `line_discount`, `line_total`, **`unit_cost_at_sale numeric(12,2)`** (nullable only so backfilled history can say "unknown"), `notes`. `payments`: many-to-one on order, `method` enum, `amount` (negative on refund), `reference`.
+- `business_id` is denormalised onto `order_lines` and `payments` so the standard `tenant_isolation` template applies unchanged to all three, in the same migration. Indexes: orders (business, sold_at desc), lines by order and by (business, item), payments by order.
+- Enum values the roadmap left open, chosen and documented in the migration, extendable additively: `order_status` open · completed · voided · refunded; `payment_method` cash · qris · transfer · card · ewallet · points · other (`points` reserved for M8-T2 redemption).
+- Tests: `test_rls_isolates_orders_lines_and_payments` builds an order with a line and a cash+QRIS split for A, proves B reads none of the three tables, A reads exact figures, and A cannot insert into any of the three as B. Invariant sets extended: float guard now also matches `discount|charge|rounding`; 13 new known money columns; three new scoped tables. M0-T4 and M0-T5 pass.
+- `sales` untouched; M3-T2 is the authorised structural change.
+**Deviation:** none
+**Next:** M3-T2
