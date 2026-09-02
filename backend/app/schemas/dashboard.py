@@ -64,6 +64,7 @@ class ItemCreateIn(BaseModel):
     cost_price: Decimal = Field(ge=0, default=Decimal(0))
     sell_price: Decimal = Field(ge=0, default=Decimal(0))
     reorder_threshold: Decimal = Field(ge=0, default=Decimal(0))
+    uom_id: uuid.UUID | None = None  # M4-T3; resolved from `unit` when omitted
 
 
 class ItemUpdateIn(BaseModel):
@@ -73,6 +74,39 @@ class ItemUpdateIn(BaseModel):
     cost_price: Decimal | None = Field(default=None, ge=0)
     sell_price: Decimal | None = Field(default=None, ge=0)
     reorder_threshold: Decimal | None = Field(default=None, ge=0)
+    uom_id: uuid.UUID | None = None
+
+
+# ── Units of measure (M4-T3) ─────────────────────────────────────────────────
+
+
+class UomOut(BaseModel):
+    id: uuid.UUID
+    code: str
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class UomCreateIn(BaseModel):
+    code: str = Field(min_length=1, max_length=20)
+    name: str | None = Field(default=None, max_length=60)
+
+
+class UomConversionOut(BaseModel):
+    id: uuid.UUID
+    from_uom_id: uuid.UUID
+    to_uom_id: uuid.UUID
+    factor: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class UomConversionCreateIn(BaseModel):
+    from_uom_id: uuid.UUID
+    to_uom_id: uuid.UUID
+    factor: Decimal = Field(gt=0)      # qty_to = qty_from × factor
+    both_ways: bool = True
 
 
 # ── Variants (M4-T1) ─────────────────────────────────────────────────────────

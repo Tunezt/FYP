@@ -15,7 +15,9 @@ from sqlalchemy import func, select
 
 from app.ai.periods import period_range
 from app.core.deps import OwnerCtx
-from app.models import Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, Receipt, Sale, Staff
+from app.models import (
+    Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, Receipt, Sale, Staff, Uom, UomConversion,
+)
 from app.schemas.dashboard import (
     AlertRow,
     BusinessUpdateIn,
@@ -39,6 +41,10 @@ from app.schemas.dashboard import (
     ModifierGroupUpdateIn,
     ModifierOut,
     ModifierUpdateIn,
+    UomConversionCreateIn,
+    UomConversionOut,
+    UomCreateIn,
+    UomOut,
 )
 from app.schemas.auth import BusinessOut
 from app.services.velocity import VELOCITY_WINDOW_DAYS
@@ -227,6 +233,11 @@ async def inventory(ctx: OwnerCtx):
 @router.post("/items", response_model=InventoryItem, status_code=201)
 async def create_item(payload: ItemCreateIn, ctx: OwnerCtx):
     item = Item(business_id=ctx.business_id, **payload.model_dump())
+    if item.uom_id is None:  # M4-T3: link the free-text unit to a real one when it matches
+        from app.services.units import uom_by_code
+
+        known = await uom_by_code(ctx.session, item.unit)
+        item.uom_id = known.id if known else None
     ctx.session.add(item)
     await ctx.session.flush()
     # Opening balance goes into the ledger in the same transaction (M2-T2).
@@ -340,6 +351,56 @@ async def edit_variant(variant_id: uuid.UUID, payload: VariantUpdateIn, ctx: Own
         status, detail = _VARIANT_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
     return VariantOut.model_validate(variant)
+
+
+_UOM_ERRORS = {
+    "code": (422, "Kode satuan tidak boleh kosong"),
+    "duplicate": (409, "Satuan atau konversi ini sudah ada"),
+    "same": (422, "Satuan asal dan tujuan harus berbeda"),
+    "factor": (422, "Faktor konversi harus lebih dari nol"),
+}
+
+
+@router.get("/uoms", response_model=list[UomOut])
+async def list_uoms(ctx: OwnerCtx):
+    rows = (await ctx.session.execute(select(Uom).order_by(Uom.code))).scalars().all()
+    return [UomOut.model_validate(u) for u in rows]
+
+
+@router.post("/uoms", response_model=UomOut, status_code=201)
+async def add_uom(payload: UomCreateIn, ctx: OwnerCtx):
+    from app.services.units import UomInvalid, create_uom
+
+    try:
+        uom = await create_uom(ctx.session, ctx.business_id, code=payload.code, name=payload.name)
+    except UomInvalid as exc:
+        status, detail = _UOM_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return UomOut.model_validate(uom)
+
+
+@router.get("/uom-conversions", response_model=list[UomConversionOut])
+async def list_uom_conversions(ctx: OwnerCtx):
+    rows = (await ctx.session.execute(select(UomConversion).order_by(UomConversion.created_at))).scalars().all()
+    return [UomConversionOut.model_validate(c) for c in rows]
+
+
+@router.post("/uom-conversions", response_model=UomConversionOut, status_code=201)
+async def add_uom_conversion(payload: UomConversionCreateIn, ctx: OwnerCtx):
+    from app.services.units import UomInvalid, create_conversion
+
+    from_uom = await ctx.session.get(Uom, payload.from_uom_id)
+    to_uom = await ctx.session.get(Uom, payload.to_uom_id)
+    if from_uom is None or to_uom is None:
+        raise HTTPException(status_code=404, detail="Satuan tidak ditemukan")
+    try:
+        conv = await create_conversion(
+            ctx.session, ctx.business_id, from_uom=from_uom, to_uom=to_uom, factor=payload.factor, both_ways=payload.both_ways
+        )
+    except UomInvalid as exc:
+        status, detail = _UOM_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return UomConversionOut.model_validate(conv)
 
 
 _MODIFIER_ERRORS = {

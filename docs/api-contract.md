@@ -45,6 +45,7 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | POST | `/pos/orders/{id}/refund` | pos | `{manager_pin, restock?, note?}` — like void with `refund` movements; `restock=false` reverses money only |
 | GET | `/pos/orders/{id}/receipt` | pos | printable receipt: lines with size + modifiers as sold (snapshots), payments, totals; voided orders include reversing lines |
 | GET | `/api/items/{id}/variants` · POST same · PATCH `/api/variants/{id}` | owner | sizes/options with own prices; exactly one default per item, default mirrors the item's prices both ways |
+| GET | `/api/uoms` · POST same · GET/POST `/api/uom-conversions` | owner | units of measure per business (standard set seeded at registration) and conversion factors; items carry `uom_id` |
 | GET | `/api/items/{id}/modifier-groups` · POST same · PATCH `/api/modifier-groups/{id}` · POST `/api/modifier-groups/{id}/modifiers` · PATCH `/api/modifiers/{id}` | owner | single/multi select, required/optional (min/max); modifiers priced or free |
 
 ## Webhooks

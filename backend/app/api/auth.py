@@ -173,6 +173,11 @@ async def register(payload: RegisterIn):
                 pin_hash=hash_pin(payload.owner_pin),
             )
         )
+        # Standard units of measure and conversions (M4-T3) — every business
+        # starts with kg/g, liter/ml and the usual warung units.
+        from app.services.units import ensure_standard_uoms
+
+        await ensure_standard_uoms(session, business_id)
         business = await session.get(Business, business_id)
         business_out = BusinessOut.model_validate(business)
 

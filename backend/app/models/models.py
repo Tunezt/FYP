@@ -103,6 +103,9 @@ class Item(Base):
     reorder_threshold: Mapped[Decimal] = mapped_column(
         Numeric(12, 3), nullable=False, server_default="0"
     )
+    uom_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("uoms.id")
+    )  # migration 0009 (M4-T3); `unit` stays as the free-text label
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
 
@@ -436,6 +439,39 @@ class OrderLineModifier(Base):
     modifier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("modifiers.id"))
     name: Mapped[str] = mapped_column(Text, nullable=False)
     price_delta: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    created_at: Mapped[datetime] = _now()
+
+
+class Uom(Base):
+    """A unit of measure of one business (migration 0009, roadmap M4-T3)."""
+
+    __tablename__ = "uoms"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _now()
+
+
+class UomConversion(Base):
+    """qty_to = qty_from × factor. kg→g is 1000, g→kg is 0.001."""
+
+    __tablename__ = "uom_conversions"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    from_uom_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("uoms.id", ondelete="CASCADE"), nullable=False
+    )
+    to_uom_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("uoms.id", ondelete="CASCADE"), nullable=False
+    )
+    factor: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     created_at: Mapped[datetime] = _now()
 
 

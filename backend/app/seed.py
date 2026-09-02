@@ -26,6 +26,7 @@ from app.core.security import hash_pin
 from app.models import Business, Expense, Item, Order, OrderLine, Payment, Staff
 from app.services.catalog import create_modifier, create_modifier_group, create_variant, ensure_default_variant
 from app.services.stock import record_movement
+from app.services.units import ensure_standard_uoms
 
 # Modifier groups (M4-T2): (item, group name, selection, required, [(modifier, price_delta, default)])
 MODIFIERS = [
@@ -107,12 +108,16 @@ async def seed() -> None:
         await session.flush()
         staff_ids = [owner.id, sari.id, budi.id]
 
+        # Units of measure (M4-T3): the standard set, and each item linked to its unit.
+        uoms = await ensure_standard_uoms(session, business_id)
+
         items = []
         for name, unit, stock, cost, sell, reorder, weight in ITEMS:
             item = Item(
                 business_id=business_id, name=name, unit=unit,
                 current_stock=Decimal(stock), cost_price=Decimal(cost),
                 sell_price=Decimal(sell), reorder_threshold=Decimal(reorder),
+                uom_id=uoms[unit].id if unit in uoms else None,
             )
             session.add(item)
             items.append((item, weight))

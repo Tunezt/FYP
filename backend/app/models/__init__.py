@@ -20,4 +20,6 @@ from app.models.models import (  # noqa: F401
     SaleLegacy,
     Staff,
     StockMovement,
+    Uom,
+    UomConversion,
 )

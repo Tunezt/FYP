@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.security import hash_pin
 from app.models import (
     Business, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier,
-    Payment, Sale, Staff, StockMovement,
+    Payment, Sale, Staff, StockMovement, Uom, UomConversion,
 )
 from app.services.sales import InsufficientStock, record_sale
 
@@ -270,6 +270,36 @@ async def test_rls_isolates_modifier_tables(session_factory, two_tenants):
         lambda: ModifierGroup(business_id=b.id, item_id=ids["item"], name="X"),
         lambda: Modifier(business_id=b.id, group_id=ids["group"], name="X"),
         lambda: OrderLineModifier(business_id=b.id, order_line_id=ids["line"], name="X", price_delta=Decimal(0)),
+    ):
+        async with session_factory() as session:
+            await _set_tenant(session, a.id)
+            session.add(smuggled())
+            with pytest.raises(Exception):
+                await session.commit()
+
+
+async def test_rls_isolates_uoms(session_factory, two_tenants):
+    """M4-T3 / roadmap §2: units and conversions are per tenant."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        kg = Uom(business_id=a.id, code="kg", name="kilogram")
+        g = Uom(business_id=a.id, code="g", name="gram")
+        session.add_all([kg, g])
+        await session.flush()
+        session.add(UomConversion(business_id=a.id, from_uom_id=kg.id, to_uom_id=g.id, factor=Decimal(1000)))
+        await session.commit()
+        ids = {"kg": kg.id, "g": g.id}
+
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert all(u.business_id != a.id for u in (await session.execute(select(Uom))).scalars())
+        assert await session.get(UomConversion, ids["kg"]) is None
+        assert (await session.execute(select(UomConversion).where(UomConversion.from_uom_id == ids["kg"]))).scalars().all() == []
+
+    for smuggled in (
+        lambda: Uom(business_id=b.id, code="lb", name="pound"),
+        lambda: UomConversion(business_id=b.id, from_uom_id=ids["g"], to_uom_id=ids["kg"], factor=Decimal("0.001")),
     ):
         async with session_factory() as session:
             await _set_tenant(session, a.id)

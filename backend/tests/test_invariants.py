@@ -155,7 +155,7 @@ KNOWN_SCOPED_TABLES = {
     "staff", "items", "sales_legacy", "expenses", "receipts", "alerts",
     "metric_baselines", "request_logs", "pending_confirmations",
     "stock_movements", "orders", "order_lines", "payments", "item_variants",
-    "modifier_groups", "modifiers", "order_line_modifiers",
+    "modifier_groups", "modifiers", "order_line_modifiers", "uoms", "uom_conversions",
 }
 # `sales` is a view since migration 0006 (M3-T2); policies cannot attach to a
 # view, so its isolation rests on `security_invoker` — checked separately below

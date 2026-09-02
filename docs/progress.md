@@ -630,3 +630,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Done-when proved: `test_extra_shot_less_sugar_persists_and_prices` (unit price 27.000 = 22.000 + 5.000 + 0, two snapshot rows), `test_snapshot_survives_catalogue_edits` (renaming/repricing the modifier later leaves the line and its snapshot untouched), `test_receipt_prints_modifiers_and_pos_lists_groups` (receipt lines carry the modifiers and prices), selection-rule parametrised tests, void copying, RLS across the three tables.
 **Deviation:** none
 **Next:** M4-T3
+
+### [M4-T3] Units and conversion
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0009_uoms.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/units.py (new), backend/app/api/auth.py, backend/app/api/dashboard.py, backend/app/schemas/dashboard.py, backend/app/seed.py, backend/tests/test_units.py (new, 8 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py, docs/api-contract.md
+**Gates:** pytest 142 passed 0 skipped · migrations round-trip ok (0009 → 0008 → 0009) · frontend build ok · seed ok
+**Notes:**
+- Migration 0009: `uoms` (code, name per business), `uom_conversions` (`factor numeric(18,6)`, qty_to = qty_from × factor, unique per pair), and a **nullable `uom_id` on `items`** — the one additive column the roadmap names; `items.unit` stays as the free-text label. RLS on both tables in the same migration. Backfill per existing business: the standard Indonesian set (kg, g, liter, ml, pcs, cup, porsi, botol, bungkus, dus, kaleng, pouch, sachet, tray, ikat, pack), kg↔g and liter↔ml, and every item whose unit text matches a code linked (11/11 seeded items).
+- `services/units.py`: `ensure_standard_uoms` (idempotent; called at registration and by the seed), `convert_quantity` (direct row, else its reverse, else `UnitConversionMissing` — never a guess), `consume_stock` (converts into the item's unit, rounds to numeric(12,3) half-up, applies the same atomic conditional UPDATE as a sale, writes the ledger row). `create_uom` / `create_conversion` (reverse factor created automatically).
+- Owner API: `GET/POST /api/uoms`, `GET/POST /api/uom-conversions`; item create/update accept `uom_id`, and item creation resolves the free-text unit to a known code when possible.
+- Done-when proved by `test_consuming_250g_from_5kg_leaves_4_750` (stock 5.000 → 4.750 through the kg↔g boundary, ledger row −0.250, invariant holds). Also: 1 g → 0.001 kg is representable, 0.4 g rounds to nothing and writes no row, 1.5 g → 0.002; conversion both ways; missing conversion refused with nothing moved; an item without a unit cannot be consumed in another unit; a custom 'karung' = 25 kg conversion works alongside the standard pair; RLS across both tables.
+- Nothing consumes across units in production paths yet — that is recipes (M4-T4), which `consume_stock` was built for.
+**Deviation:** none
+**Next:** M4-T4
