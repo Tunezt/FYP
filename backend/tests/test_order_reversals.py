@@ -31,6 +31,8 @@ from app.services.orders import (
 )
 from app.services.stock import open_item_stock
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 OWNER_PIN, STAFF_PIN = "1234", "5678"
 
@@ -65,6 +67,7 @@ async def sold(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         owner = Staff(business_id=bid, name="Bu Ratna", role="owner", pin_hash=hash_pin(OWNER_PIN))
         cashier = Staff(business_id=bid, name="Kasir", pin_hash=hash_pin(STAFF_PIN))
         s.add_all([owner, cashier])

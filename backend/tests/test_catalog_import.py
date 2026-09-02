@@ -27,6 +27,8 @@ from app.services.catalog_import import (
 from app.services.stock_import import StockTemplateError
 from app.services.units import ensure_standard_uoms
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -134,6 +136,7 @@ async def empty_shop(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         await ensure_standard_uoms(s, bid)
         await s.commit()
     yield bid

@@ -24,6 +24,8 @@ from app.services.orders import OrderLineSpec, PaymentMismatch, PaymentSpec, cre
 from app.services.sales import InsufficientStock
 from app.services.stock import open_item_stock
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -57,6 +59,7 @@ async def shop(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         staff = Staff(business_id=bid, name="Kasir", pin_hash=hash_pin("1234"))
         s.add(staff)
         await s.flush()

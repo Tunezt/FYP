@@ -184,6 +184,15 @@ async def receive_goods(
         po.status = refresh_status_from_lines(po, await lines_of(session, po.id))
         po.updated_at = datetime.now(timezone.utc)
     await session.flush()
+
+    # The books (M6-T4): inventory up, supplier payable up — same transaction.
+    from app.services.posting import post_event
+
+    await post_event(
+        session, business_id, "GoodsReceived", {"inventory": receipt.subtotal},
+        source_type="goods_receipt", source_id=receipt.id,
+        memo=f"penerimaan barang #{receipt.number}", posted_at=receipt.received_at, created_by=received_by,
+    )
     return Received(receipt=receipt, lines=written, po=po)
 
 

@@ -24,6 +24,8 @@ from app.services.sales import InsufficientStock
 from app.services.stock import open_item_stock
 from app.services.units import ensure_standard_uoms
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -58,6 +60,7 @@ async def cafe(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         uoms = await ensure_standard_uoms(s, bid)
         owner = Staff(business_id=bid, name="Bu Ratna", role="owner", pin_hash=hash_pin("1234"))
         staff = Staff(business_id=bid, name="Kasir", pin_hash=hash_pin("1111"))

@@ -20,3 +20,15 @@ if not os.getenv("INTEGRATION_DATABASE_URL"):
     _url = get_settings().database_url
     if urlsplit(_url).hostname in _LOCAL_HOSTS:
         os.environ["INTEGRATION_DATABASE_URL"] = _url
+
+
+async def seed_books(session, business_id) -> None:
+    """What registration gives every real business (M6-T1/M6-T3): the chart of
+    accounts and the posting rules. Tests that sell, receive, waste or count
+    stock need them, because the posting engine (M6-T4) writes the books in
+    the same transaction and refuses to post without rules."""
+    from app.services.accounts import ensure_standard_chart
+    from app.services.posting_rules import ensure_standard_rules
+
+    await ensure_standard_chart(session, business_id)
+    await ensure_standard_rules(session, business_id)

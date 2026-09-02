@@ -795,3 +795,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - The posting engine (M6-T4) will consume these through `rules_for` / `pick_rule` and contain no account codes of its own.
 **Deviation:** none
 **Next:** M6-T4
+
+### [M6-T4] The posting engine
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/services/posting.py (new), backend/app/services/orders.py, backend/app/services/receiving.py, backend/app/services/stock.py, backend/app/services/units.py, backend/tests/test_posting.py (new, 5 tests), backend/tests/conftest.py (`seed_books`), 16 test fixtures seeded with the chart and rules, backend/tests/test_db_integration.py
+**Gates:** pytest 204 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `services/posting.py` is the single writer: `post_event(event_type, {component: amount})` looks up the business's rules (M6-T3), turns each non-zero amount into a Dr/Cr pair, and writes one journal entry (M6-T2) **in the caller's transaction**. It holds no account codes and no per-event branches; a component with no rule, or a negative amount, raises instead of being dropped. `reverse_event` flips the entries a source row posted (void).
+- Wired in, same transaction as the originating change: `create_order` → `OrderCompleted` (one `payment:<method>` component per payment, discount, tax, service charge, and COGS from the lines' cost snapshots); `void` → reversal of the sale's entry; `refund` → `refund:<method>` per reversed payment plus `cogs_reversal` when restocked; `receive_goods` → `GoodsReceived` (inventory / payable); `set_absolute_stock` (opname, correction) → `StockCounted` variance at the item's average cost; `consume_stock(reason="waste")` → `StockWasted`.
+- Done-when proved by `test_journal_failure_rolls_the_sale_back` three ways: the ledger raising (patched outage), a rule pointing at a non-existent account (refused before any write), and the database's own deferred balance constraint (a line altered after posting → the commit is refused) — each time the order, lines, payments and stock movements are gone and stock is back at 10. Also: a cash+QRIS sale posts six lines (cash, QRIS, COGS) and the trial balance holds; void/refund entries and balances; goods receipt, waste and count post with exact figures; the engine refuses unknown components, posts nothing for zero amounts, and follows a re-pointed rule with no code change.
+- Test businesses now get the chart and rules like registration does (`tests/conftest.seed_books`), since a sale in a business without books must fail rather than post nothing.
+- Opening stock and the seed's history are not capitalised (no `Persediaan` opening entry), so inventory shows negative movements from COGS until a first goods receipt — statements (M6-T5) will treat the opening balance explicitly.
+**Deviation:** none
+**Next:** canary (5 tasks since last), then M6-T5

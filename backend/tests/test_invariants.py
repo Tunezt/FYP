@@ -411,6 +411,8 @@ async def test_stock_ledger_reconciles_after_a_simulated_day(conn):
 
         async with factory() as s:
             await _set_tenant(s, business_id)
+            from tests.conftest import seed_books
+            await seed_books(s, business_id)
             staff = Staff(business_id=business_id, name="Kasir", pin_hash=hash_pin("2222"))
             s.add(staff)
             await s.flush()

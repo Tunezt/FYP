@@ -24,6 +24,8 @@ from app.services.receipts import commit_parse
 from app.services.stock import add_stock, moving_average, open_item_stock
 from app.services.units import ensure_standard_uoms
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -68,6 +70,7 @@ async def shop(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         uoms = await ensure_standard_uoms(s, bid)
         staff = Staff(business_id=bid, name="Kasir", pin_hash=hash_pin("1111"))
         # A resold item: bought in, sold as is.

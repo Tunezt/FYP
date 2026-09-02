@@ -31,6 +31,8 @@ from app.services.sales import record_sale
 from app.services.stock import open_item_stock
 from app.services.stock_import import apply_stock_template
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -59,6 +61,10 @@ async def business(session_factory):
     async with session_factory() as session:
         biz = Business(name="Ledger Test", owner_phone=f"62998{uuid.uuid4().hex[:9]}")
         session.add(biz)
+        await session.commit()
+    async with session_factory() as session:
+        await _set_tenant(session, biz.id)
+        await seed_books(session, biz.id)
         await session.commit()
     yield biz
     async with session_factory() as session:

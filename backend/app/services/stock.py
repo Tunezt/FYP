@@ -92,13 +92,15 @@ async def set_absolute_stock(
     now: datetime | None = None,
 ) -> StockMovement:
     """Replace an item's running figure with a counted one and ledger the
-    difference. Used by every 'set the stock to X' path (opname, correction)."""
+    difference. Used by every 'set the stock to X' path (opname, correction).
+    The variance is also posted to the books at the item's average cost
+    (StockCounted, M6-T4) in the same transaction."""
     old = Decimal(item.current_stock)
     new_qty = Decimal(new_qty)
     item.current_stock = new_qty
     if now is not None:
         item.updated_at = now
-    return await record_movement(
+    movement = await record_movement(
         session,
         business_id=item.business_id,
         item_id=item.id,
@@ -109,6 +111,18 @@ async def set_absolute_stock(
         unit_cost=unit_cost,
         staff_id=staff_id,
     )
+    delta = new_qty - old
+    value = (abs(delta) * Decimal(item.cost_price or 0)).quantize(MONEY)
+    if delta != 0 and value > 0:
+        from app.services.posting import post_event
+
+        await post_event(
+            session, item.business_id, "StockCounted",
+            {"variance_loss": value if delta < 0 else Decimal(0), "variance_gain": value if delta > 0 else Decimal(0)},
+            source_type="stock_movement", source_id=movement.id,
+            memo=f"selisih {reason} {item.name}: {delta:+.3f} {item.unit}", created_by=staff_id,
+        )
+    return movement
 
 
 async def add_stock(

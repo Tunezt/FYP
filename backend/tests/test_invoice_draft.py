@@ -25,6 +25,8 @@ from app.services.suppliers import create_supplier
 from app.services.units import ensure_standard_uoms
 from app.whatsapp.processor import _handle_image, _handle_text
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -59,6 +61,7 @@ async def shop(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         uoms = await ensure_standard_uoms(s, bid)
         toko = await create_supplier(s, bid, name="Toko Manis")
         gula = Item(business_id=bid, name="Gula Aren", unit="kg", current_stock=Decimal(4), cost_price=Decimal(30000), uom_id=uoms["kg"].id)

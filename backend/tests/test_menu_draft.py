@@ -18,6 +18,8 @@ from app.services.catalog import ensure_default_variant
 from app.services.menu_draft import build_menu_draft, confirm_menu_draft, menu_draft_summary
 from app.whatsapp.processor import _handle_image, _handle_text
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -51,6 +53,7 @@ async def shop(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         existing = Item(business_id=bid, name="Es Teh Manis", unit="cup", sell_price=Decimal(8000))
         s.add(existing)
         await s.flush()

@@ -21,6 +21,8 @@ from app.core.security import hash_pin
 from app.models import Business, Item, Order, OrderLine, Receipt, Staff, StockMovement
 from app.services.stock_backfill import BACKFILL_STATEMENTS, ROLLBACK_STATEMENTS
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -55,6 +57,7 @@ async def legacy_business(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         staff = Staff(business_id=bid, name="Lama", pin_hash=hash_pin("9999"))
         s.add(staff)
         await s.flush()

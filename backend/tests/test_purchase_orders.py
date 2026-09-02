@@ -29,6 +29,8 @@ from app.services.purchasing import (
 from app.services.suppliers import create_supplier, update_supplier
 from app.services.units import ensure_standard_uoms
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -61,6 +63,7 @@ async def shop(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         uoms = await ensure_standard_uoms(s, bid)
         supplier = await create_supplier(s, bid, name="Grosir Barokah")
         beans = Item(business_id=bid, name="Biji Arabica", unit="kg", current_stock=Decimal(2), cost_price=Decimal(140000), uom_id=uoms["kg"].id)

@@ -21,6 +21,8 @@ from app.services.catalog import VariantInvalid, create_variant, ensure_default_
 from app.services.orders import OrderLineSpec, PaymentSpec, VariantNotFound, create_order
 from app.services.stock import open_item_stock
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -54,6 +56,7 @@ async def latte(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         staff = Staff(business_id=bid, name="Kasir", pin_hash=hash_pin("1111"))
         item = Item(business_id=bid, name="Latte", unit="cup", current_stock=Decimal(10),
                     cost_price=Decimal(8000), sell_price=Decimal(22000))

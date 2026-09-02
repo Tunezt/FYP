@@ -178,9 +178,19 @@ async def consume_stock(
     remaining = (await session.execute(ATOMIC_DECREMENT, {"qty": qty_item_unit, "item_id": item.id})).scalar_one_or_none()
     if remaining is None:
         raise InsufficientStock(item.name, item.current_stock)
-    await record_movement(
+    movement = await record_movement(
         session, business_id=item.business_id, item_id=item.id, qty_delta=-qty_item_unit, reason=reason,
         source_type=source_type, source_id=source_id, unit_cost=unit_cost, staff_id=staff_id,
     )
     item.current_stock = Decimal(remaining)
+    if reason == "waste":
+        # Thrown away: expense at the item's average cost (StockWasted, M6-T4).
+        from app.services.posting import post_event
+
+        value = (qty_item_unit * Decimal(unit_cost if unit_cost is not None else item.cost_price or 0)).quantize(Decimal("0.01"))
+        await post_event(
+            session, item.business_id, "StockWasted", {"waste": value},
+            source_type="stock_movement", source_id=movement.id,
+            memo=f"barang rusak {item.name}: {qty_item_unit} {item.unit}", created_by=staff_id,
+        )
     return qty_item_unit

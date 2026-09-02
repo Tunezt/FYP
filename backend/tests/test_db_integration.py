@@ -27,6 +27,8 @@ from app.models import (
 )
 from app.services.sales import InsufficientStock, record_sale
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 pytestmark = pytest.mark.skipif(
@@ -68,6 +70,11 @@ async def _make_business(session_factory, suffix: str):
 async def two_tenants(session_factory):
     a = await _make_business(session_factory, "A")
     b = await _make_business(session_factory, "B")
+    for biz in (a, b):  # the books every real business has (M6-T1/M6-T3)
+        async with session_factory() as session:
+            await _set_tenant(session, biz.id)
+            await seed_books(session, biz.id)
+            await session.commit()
     yield a, b
     async with session_factory() as session:
         for biz in (a, b):
@@ -411,14 +418,15 @@ async def test_rls_isolates_accounts(session_factory, two_tenants):
     a, b = two_tenants
     async with session_factory() as session:
         await _set_tenant(session, a.id)
-        session.add(Account(business_id=a.id, code="1100", name="Kas", type="asset"))
+        session.add(Account(business_id=a.id, code="8100", name="Akun khusus A", type="asset"))
         await session.commit()
     async with session_factory() as session:
         await _set_tenant(session, b.id)
         assert all(r.business_id != a.id for r in (await session.execute(select(Account))).scalars())
+        assert (await session.execute(select(Account).where(Account.code == "8100"))).scalars().all() == []
     async with session_factory() as session:
         await _set_tenant(session, a.id)
-        session.add(Account(business_id=b.id, code="1100", name="Kas", type="asset"))
+        session.add(Account(business_id=b.id, code="8200", name="Smuggled", type="asset"))
         with pytest.raises(Exception):
             await session.commit()
 
@@ -428,10 +436,8 @@ async def test_rls_isolates_journal(session_factory, two_tenants):
     a, b = two_tenants
     async with session_factory() as session:
         await _set_tenant(session, a.id)
-        kas = Account(business_id=a.id, code="1100", name="Kas", type="asset")
-        sales = Account(business_id=a.id, code="4100", name="Penjualan", type="revenue")
-        session.add_all([kas, sales])
-        await session.flush()
+        kas = (await session.execute(select(Account).where(Account.code == "1100"))).scalar_one()
+        sales = (await session.execute(select(Account).where(Account.code == "4100"))).scalar_one()
         entry = JournalEntry(business_id=a.id, entry_no=1)
         session.add(entry)
         await session.flush()
@@ -457,11 +463,12 @@ async def test_rls_isolates_posting_rules(session_factory, two_tenants):
     a, b = two_tenants
     async with session_factory() as session:
         await _set_tenant(session, a.id)
-        session.add(PostingRule(business_id=a.id, event_type="OrderCompleted", component="cogs", debit_code="5100", credit_code="1300"))
+        session.add(PostingRule(business_id=a.id, event_type="CustomEvent", component="x", debit_code="5100", credit_code="1300"))
         await session.commit()
     async with session_factory() as session:
         await _set_tenant(session, b.id)
         assert all(r.business_id != a.id for r in (await session.execute(select(PostingRule))).scalars())
+        assert (await session.execute(select(PostingRule).where(PostingRule.event_type == "CustomEvent"))).scalars().all() == []
     async with session_factory() as session:
         await _set_tenant(session, a.id)
         session.add(PostingRule(business_id=b.id, event_type="X", component="y", debit_code="1", credit_code="2"))

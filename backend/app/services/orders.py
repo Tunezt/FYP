@@ -299,6 +299,25 @@ async def create_order(
         session.add(payment)
         created.payments.append(payment)
     await session.flush()
+
+    # 4. The books, in this same transaction (M6-T4): money in per method,
+    #    reclassifications, and cost of goods. If this fails, the sale fails.
+    from app.services.posting import post_event
+
+    components: dict[str, Decimal] = {}
+    for p in payments:
+        key = f"payment:{p.method}"
+        components[key] = components.get(key, Decimal(0)) + Decimal(p.amount)
+    components["discount"] = order.discount_total
+    components["tax"] = order.tax_total
+    components["service_charge"] = order.service_charge
+    components["cogs"] = sum(
+        ((Decimal(cl.line.unit_cost_at_sale or 0) * Decimal(cl.line.quantity)) for cl in created.lines), Decimal(0)
+    ).quantize(TWO_PLACES)
+    await post_event(
+        session, business_id, "OrderCompleted", components, source_type="order", source_id=order.id,
+        memo=f"penjualan #{str(order.id)[-8:].upper()}", posted_at=sold_at, created_by=staff_id,
+    )
     return created
 
 
@@ -459,6 +478,29 @@ async def _reverse(
 
     order.status = "voided" if kind == "void" else "refunded"
     await session.flush()
+
+    # The books (M6-T4): a void flips the sale's entry; a refund posts returns
+    # per method (and inventory back when restocked). Same transaction.
+    from app.services.posting import post_event, reverse_event
+
+    if kind == "void":
+        await reverse_event(
+            session, business_id, "OrderVoided", source_type="order", source_id=order_id,
+            original_event_type="OrderCompleted", memo=tag, posted_at=now, created_by=staff_id,
+        )
+    else:
+        components: dict[str, Decimal] = {}
+        for p in reversal.reversing_payments:
+            key = f"refund:{p.method}"
+            components[key] = components.get(key, Decimal(0)) + (-Decimal(p.amount))
+        if restock:
+            components["cogs_reversal"] = sum(
+                ((Decimal(l.unit_cost_at_sale or 0) * Decimal(-l.quantity)) for l in reversal.reversing_lines), Decimal(0)
+            ).quantize(TWO_PLACES)
+        await post_event(
+            session, business_id, "OrderRefunded", components, source_type="order", source_id=order_id,
+            memo=tag, posted_at=now, created_by=staff_id,
+        )
     return reversal
 
 

@@ -28,6 +28,8 @@ from app.services.units import (
     uom_by_code,
 )
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -62,6 +64,7 @@ async def pantry(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         uoms = await ensure_standard_uoms(s, bid)
         beans = Item(business_id=bid, name="Biji Arabica", unit="kg", current_stock=Decimal(5),
                      cost_price=Decimal(145000), uom_id=uoms["kg"].id)

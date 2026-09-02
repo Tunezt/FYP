@@ -23,6 +23,8 @@ from app.services.catalog import ModifierInvalid, create_modifier, create_modifi
 from app.services.orders import ModifierSelectionInvalid, OrderLineSpec, PaymentSpec, create_order, void_order
 from app.services.stock import open_item_stock
 
+from tests.conftest import seed_books
+
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 
@@ -58,6 +60,7 @@ async def cafe(session_factory):
         bid = biz.id
     async with session_factory() as s:
         await _set_tenant(s, bid)
+        await seed_books(s, bid)
         owner = Staff(business_id=bid, name="Bu Ratna", role="owner", pin_hash=hash_pin("1234"))
         staff = Staff(business_id=bid, name="Kasir", pin_hash=hash_pin("1111"))
         latte = Item(business_id=bid, name="Latte", unit="cup", current_stock=Decimal(10), cost_price=Decimal(8000), sell_price=Decimal(22000))
