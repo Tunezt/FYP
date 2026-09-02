@@ -287,6 +287,29 @@ class AccountUpdateIn(BaseModel):
     is_active: bool | None = None
 
 
+# ── Posting rules (M6-T3) ───────────────────────────────────────────────────
+
+
+class PostingRuleOut(BaseModel):
+    id: uuid.UUID
+    event_type: str
+    component: str
+    debit_code: str | None
+    credit_code: str | None
+    description: str | None
+    is_system: bool
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PostingRuleUpdateIn(BaseModel):
+    debit_code: str | None = Field(default=None, max_length=8)
+    credit_code: str | None = Field(default=None, max_length=8)
+    description: str | None = Field(default=None, max_length=200)
+    is_active: bool | None = None
+
+
 # ── Recipes (M4-T4) ─────────────────────────────────────────────────────────
 
 

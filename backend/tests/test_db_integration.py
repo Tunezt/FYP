@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.security import hash_pin
 from app.models import (
     Account, Business, Item, ItemVariant, JournalEntry, JournalLine, Modifier, ModifierGroup, Order, OrderLine,
-    OrderLineModifier,
+    OrderLineModifier, PostingRule,
     GoodsReceipt, GoodsReceiptLine, Payment, PoLine, PurchaseOrder, RecipeLine, Sale, Staff, StockMovement, Supplier,
     Uom, UomConversion,
 )
@@ -448,6 +448,23 @@ async def test_rls_isolates_journal(session_factory, two_tenants):
     async with session_factory() as session:
         await _set_tenant(session, a.id)
         session.add(JournalLine(business_id=b.id, entry_id=ids["entry"], account_id=ids["kas"], debit=Decimal(1)))
+        with pytest.raises(Exception):
+            await session.commit()
+
+
+async def test_rls_isolates_posting_rules(session_factory, two_tenants):
+    """M6-T3 / roadmap §2."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(PostingRule(business_id=a.id, event_type="OrderCompleted", component="cogs", debit_code="5100", credit_code="1300"))
+        await session.commit()
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert all(r.business_id != a.id for r in (await session.execute(select(PostingRule))).scalars())
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(PostingRule(business_id=b.id, event_type="X", component="y", debit_code="1", credit_code="2"))
         with pytest.raises(Exception):
             await session.commit()
 

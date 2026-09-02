@@ -16,8 +16,8 @@ from sqlalchemy import func, select
 from app.ai.periods import period_range
 from app.core.deps import OwnerCtx
 from app.models import (
-    Account, Alert, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PurchaseOrder,
-    Receipt, RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
+    Account, Alert, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PostingRule,
+    PurchaseOrder, Receipt, RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
 )
 from app.schemas.dashboard import (
     AlertRow,
@@ -66,6 +66,8 @@ from app.schemas.dashboard import (
     AccountCreateIn,
     AccountOut,
     AccountUpdateIn,
+    PostingRuleOut,
+    PostingRuleUpdateIn,
 )
 from app.schemas.auth import BusinessOut
 from app.services.velocity import VELOCITY_WINDOW_DAYS
@@ -749,6 +751,36 @@ async def edit_account(account_id: uuid.UUID, payload: AccountUpdateIn, ctx: Own
         status, detail = _ACCOUNT_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
     return AccountOut.model_validate(account)
+
+
+_RULE_ERRORS = {
+    "account": (404, "Kode akun tidak ditemukan atau sudah dinonaktifkan"),
+    "same": (422, "Akun debit dan kredit tidak boleh sama"),
+    "reversal": (422, "Aturan pembalikan tidak memakai akun — yang dibalik adalah jurnal aslinya"),
+}
+
+
+@router.get("/posting-rules", response_model=list[PostingRuleOut])
+async def list_posting_rules(ctx: OwnerCtx, event_type: str | None = Query(default=None)):
+    stmt = select(PostingRule).order_by(PostingRule.event_type, PostingRule.component)
+    if event_type:
+        stmt = stmt.where(PostingRule.event_type == event_type)
+    return [PostingRuleOut.model_validate(r) for r in (await ctx.session.execute(stmt)).scalars()]
+
+
+@router.patch("/posting-rules/{rule_id}", response_model=PostingRuleOut)
+async def edit_posting_rule(rule_id: uuid.UUID, payload: PostingRuleUpdateIn, ctx: OwnerCtx):
+    from app.services.posting_rules import PostingRuleInvalid, update_rule
+
+    rule = await ctx.session.get(PostingRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Aturan jurnal tidak ditemukan")
+    try:
+        rule = await update_rule(ctx.session, rule, **payload.model_dump(exclude_none=True))
+    except PostingRuleInvalid as exc:
+        status, detail = _RULE_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return PostingRuleOut.model_validate(rule)
 
 
 _RECIPE_ERRORS = {

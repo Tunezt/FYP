@@ -782,3 +782,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Float guard now also matches `debit|credit`.
 **Deviation:** none
 **Next:** M6-T3
+
+### [M6-T3] Posting rules
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0016_posting_rules.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/posting_rules.py (new), backend/app/api/auth.py, backend/app/api/dashboard.py, backend/app/schemas/dashboard.py, backend/app/seed.py, backend/tests/test_posting_rules.py (new, 6 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py, docs/api-contract.md
+**Gates:** pytest 199 passed 0 skipped · migrations round-trip ok (0016 → 0015 → 0016) · frontend build ok · seed ok
+**Notes:**
+- Migration 0016: `posting_rules` (per business: `event_type`, `component`, `debit_code`, `credit_code`, description, `is_system`, `is_active`; CHECKs that both codes are null together and differ), RLS, unique per (event, component); the standard set is backfilled into every business from the single definition in `services/posting_rules.py`, and seeded at registration and by the seed.
+- **Rules are data, not `if` statements.** 37 rows cover the whole event catalogue (roadmap appendix A): `OrderCompleted` with one component per payment method (cash → 1100, QRIS/card/e-wallet → 1120, transfer → 1110, points → 2300, other → 1200, all against 4100), `discount` (4200 / 4100), `tax` (4100 / 2200), `service_charge` (4100 / 4900), `cogs` (5100 / 1300); `OrderVoided` = `reversal` (null codes: reverse the source entry); `OrderRefunded` per method against 4300 plus `cogs_reversal`; `GoodsReceived` (1300 / 2100); `SupplierPaid` cash/transfer; `StockWasted`; `StockCounted` loss/gain; `ExpenseIncurred` per category with an `expense:*` fallback; `ShiftClosed` short/over; `PointsEarned` / `PointsRedeemed`. Account references are by code so renamed accounts keep working; `pick_rule` resolves `expense:parkir` to `expense:*`.
+- Owners can re-point a rule at another active account or deactivate it (`PATCH /api/posting-rules/{id}`); the reversal rule refuses accounts; debit and credit must differ; every rule's accounts must exist in the chart (asserted by test against `STANDARD_CHART`).
+- The posting engine (M6-T4) will consume these through `rules_for` / `pick_rule` and contain no account codes of its own.
+**Deviation:** none
+**Next:** M6-T4

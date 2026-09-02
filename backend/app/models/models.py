@@ -667,6 +667,27 @@ class JournalLine(Base):
     created_at: Mapped[datetime] = _now()
 
 
+class PostingRule(Base):
+    """Which accounts an event component debits and credits (migration 0016,
+    roadmap M6-T3). Rules are data; the posting engine only looks them up."""
+
+    __tablename__ = "posting_rules"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    component: Mapped[str] = mapped_column(Text, nullable=False)
+    debit_code: Mapped[str | None] = mapped_column(Text)
+    credit_code: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
 class Payment(Base):
     """One payment against an order. Many per order — that is split payment."""
 

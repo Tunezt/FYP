@@ -23,6 +23,13 @@ DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 MONEY_OR_QUANTITY = re.compile(
     r"amount|price|total|cost|stock|quantity|qty|threshold|discount|charge|rounding|debit|credit"
 )
+# Columns that merely *name* a money thing without holding a number (`debit_code`
+# on posting rules, `unit_price_written` flags) — never numeric by design.
+NOT_A_NUMBER = re.compile(r"_(code|id|type|written|at|name|key|text)$")
+
+
+def _is_money_column(column: str) -> bool:
+    return bool(MONEY_OR_QUANTITY.search(column)) and not NOT_A_NUMBER.search(column)
 
 # Every column that should be caught today. Guards against the pattern silently
 # matching nothing (e.g. after a rename) and the test passing vacuously.
@@ -111,7 +118,7 @@ async def _float_offenders(conn, schema_oid: int) -> list[tuple[str, str, str]]:
     return [
         (table, column, type_name)
         for table, column, type_name in rows
-        if MONEY_OR_QUANTITY.search(column) and type_name != "numeric"
+        if _is_money_column(column) and type_name != "numeric"
     ]
 
 
@@ -123,7 +130,7 @@ async def test_no_float_money(conn):
     """M0-T4: no money or quantity column may be real / double precision."""
     public_oid = await _public_oid(conn)
     rows = (await conn.execute(COLUMNS_SQL, {"schema_oid": public_oid})).all()
-    matched = {(t, c) for t, c, _ in rows if MONEY_OR_QUANTITY.search(c)}
+    matched = {(t, c) for t, c, _ in rows if _is_money_column(c)}
     missing = KNOWN_MONEY_COLUMNS - matched
     assert not missing, f"guard no longer sees known money columns: {sorted(missing)}"
 
@@ -171,7 +178,7 @@ KNOWN_SCOPED_TABLES = {
     "stock_movements", "orders", "order_lines", "payments", "item_variants",
     "modifier_groups", "modifiers", "order_line_modifiers", "uoms", "uom_conversions",
     "recipe_lines", "suppliers", "purchase_orders", "po_lines", "goods_receipts", "goods_receipt_lines",
-    "accounts", "journal_entries", "journal_lines",
+    "accounts", "journal_entries", "journal_lines", "posting_rules",
 }
 # `sales` is a view since migration 0006 (M3-T2); policies cannot attach to a
 # view, so its isolation rests on `security_invoker` — checked separately below
