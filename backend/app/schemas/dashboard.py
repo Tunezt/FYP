@@ -108,6 +108,70 @@ class VariantUpdateIn(BaseModel):
     is_active: bool | None = None
 
 
+# ── Modifiers (M4-T2) ────────────────────────────────────────────────────────
+
+from typing import Literal  # noqa: E402
+
+
+class ModifierOut(BaseModel):
+    id: uuid.UUID
+    group_id: uuid.UUID
+    name: str
+    price_delta: Decimal
+    is_default: bool
+    sort_order: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class ModifierGroupOut(BaseModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    name: str
+    selection: str
+    is_required: bool
+    min_select: int
+    max_select: int | None
+    sort_order: int
+    is_active: bool
+    modifiers: list[ModifierOut] = []
+
+
+class ModifierGroupCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    selection: Literal["single", "multi"] = "single"
+    is_required: bool = False
+    min_select: int = Field(default=0, ge=0, le=20)
+    max_select: int | None = Field(default=None, ge=1, le=20)
+    sort_order: int = 0
+
+
+class ModifierGroupUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    selection: Literal["single", "multi"] | None = None
+    is_required: bool | None = None
+    min_select: int | None = Field(default=None, ge=0, le=20)
+    max_select: int | None = Field(default=None, ge=1, le=20)
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class ModifierCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    price_delta: Decimal = Field(default=Decimal(0), ge=0)
+    is_default: bool = False
+    sort_order: int = 0
+
+
+class ModifierUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    price_delta: Decimal | None = Field(default=None, ge=0)
+    is_default: bool | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
 class ExpenseRow(BaseModel):
     id: uuid.UUID
     amount: Decimal

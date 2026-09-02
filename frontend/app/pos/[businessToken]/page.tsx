@@ -8,6 +8,16 @@ import { formatQty, formatRupiah, initials } from "@/lib/format";
 type StaffLite = { id: string; name: string; role: string };
 type PosBusiness = { business_name: string; staff: StaffLite[] };
 type Variant = { id: string; name: string; sell_price: string; is_default: boolean };
+type Modifier = { id: string; name: string; price_delta: string; is_default: boolean };
+type ModifierGroup = {
+  id: string;
+  name: string;
+  selection: "single" | "multi";
+  is_required: boolean;
+  min_select: number;
+  max_select: number | null;
+  modifiers: Modifier[];
+};
 type Item = {
   id: string;
   name: string;
@@ -16,6 +26,27 @@ type Item = {
   sell_price: string;
   reorder_threshold: string;
   variants: Variant[];
+  modifier_groups: ModifierGroup[];
+};
+type Receipt = {
+  order_id: string;
+  number: string;
+  business_name: string;
+  staff_name: string | null;
+  status: string;
+  sold_at: string;
+  lines: {
+    name: string;
+    variant: string | null;
+    quantity: string;
+    unit_price: string;
+    line_total: string;
+    modifiers: { name: string; price_delta: string }[];
+    notes: string | null;
+  }[];
+  subtotal: string;
+  total: string;
+  payments: { method: string; amount: string }[];
 };
 type OrderResult = {
   id: string;
@@ -23,14 +54,23 @@ type OrderResult = {
   lines: { item_name: string; quantity: string; line_total: string; remaining_stock: string }[];
   payments: { method: string; amount: string }[];
 };
-// A cart line is an item at one of its sizes (variant); stock is the item's.
-type CartLine = { item: Item; variant: Variant | null; qty: number };
+// A cart line is an item at one size (variant) with a set of chosen modifiers;
+// stock is the item's. Same item + size + modifiers merge into one line.
+type CartLine = { item: Item; variant: Variant | null; modifiers: Modifier[]; qty: number };
 type PayMode = "cash" | "qris" | "split";
 
-const lineKey = (itemId: string, variant: Variant | null) => `${itemId}:${variant?.id ?? "default"}`;
-const linePrice = (l: { item: Item; variant: Variant | null }) => Number(l.variant?.sell_price ?? l.item.sell_price);
-const lineName = (l: { item: Item; variant: Variant | null }) =>
-  l.variant && l.item.variants.length > 1 ? `${l.item.name} · ${l.variant.name}` : l.item.name;
+const lineKey = (itemId: string, variant: Variant | null, modifiers: Modifier[]) =>
+  `${itemId}:${variant?.id ?? "default"}:${modifiers.map((m) => m.id).sort().join(",")}`;
+const linePrice = (l: { item: Item; variant: Variant | null; modifiers: Modifier[] }) =>
+  Number(l.variant?.sell_price ?? l.item.sell_price) + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0);
+const lineName = (l: { item: Item; variant: Variant | null; modifiers: Modifier[] }) => {
+  const base = l.variant && l.item.variants.length > 1 ? `${l.item.name} · ${l.variant.name}` : l.item.name;
+  return l.modifiers.length ? `${base} (${l.modifiers.map((m) => m.name).join(", ")})` : base;
+};
+const defaultChoices = (item: Item): Record<string, Modifier[]> =>
+  Object.fromEntries(item.modifier_groups.map((g) => [g.id, g.modifiers.filter((m) => m.is_default)]));
+const missingRequired = (item: Item, chosen: Record<string, Modifier[]>) =>
+  item.modifier_groups.filter((g) => g.is_required && (chosen[g.id]?.length ?? 0) < Math.max(1, g.min_select));
 
 type Screen =
   | { kind: "loading" }
@@ -270,6 +310,8 @@ function SellScreen({
   const [items, setItems] = useState<Item[] | null>(null);
   const [selected, setSelected] = useState<Item | null>(null);
   const [variant, setVariant] = useState<Variant | null>(null);
+  const [chosen, setChosen] = useState<Record<string, Modifier[]>>({});
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [qty, setQty] = useState(1);
   // One order = many lines + one or more payments (M3-T3). The cart is the order
   // being built; nothing is written until "Bayar" succeeds.
@@ -299,19 +341,19 @@ function SellScreen({
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
   const cartTotal = cart.reduce((s, l) => s + linePrice(l) * l.qty, 0);
 
-  function addToCart(item: Item, v: Variant | null, n: number) {
+  function addToCart(item: Item, v: Variant | null, mods: Modifier[], n: number) {
     setCart((c) => {
-      const key = lineKey(item.id, v);
-      const others = c.filter((l) => l.item.id === item.id && lineKey(l.item.id, l.variant) !== key)
+      const key = lineKey(item.id, v, mods);
+      const others = c.filter((l) => l.item.id === item.id && lineKey(l.item.id, l.variant, l.modifiers) !== key)
         .reduce((s, l) => s + l.qty, 0);
       const room = Math.max(0, Number(item.current_stock) - others);
-      const existing = c.find((l) => lineKey(l.item.id, l.variant) === key);
+      const existing = c.find((l) => lineKey(l.item.id, l.variant, l.modifiers) === key);
       if (existing) {
         return c.map((l) =>
-          lineKey(l.item.id, l.variant) === key ? { ...l, qty: Math.min(room, l.qty + n) } : l
+          lineKey(l.item.id, l.variant, l.modifiers) === key ? { ...l, qty: Math.min(room, l.qty + n) } : l
         );
       }
-      return [...c, { item, variant: v, qty: Math.min(room, n) }];
+      return [...c, { item, variant: v, modifiers: mods, qty: Math.min(room, n) }];
     });
   }
 
@@ -319,14 +361,42 @@ function SellScreen({
     setCart((c) =>
       c
         .map((l) => {
-          if (lineKey(l.item.id, l.variant) !== key) return l;
-          const others = c.filter((o) => o.item.id === l.item.id && lineKey(o.item.id, o.variant) !== key)
+          if (lineKey(l.item.id, l.variant, l.modifiers) !== key) return l;
+          const others = c.filter((o) => o.item.id === l.item.id && lineKey(o.item.id, o.variant, o.modifiers) !== key)
             .reduce((s, o) => s + o.qty, 0);
           const room = Math.max(0, Number(l.item.current_stock) - others);
           return { ...l, qty: Math.min(room, l.qty + delta) };
         })
         .filter((l) => l.qty > 0)
     );
+  }
+
+  function toggleModifier(group: ModifierGroup, m: Modifier) {
+    setChosen((prev) => {
+      const current = prev[group.id] ?? [];
+      const has = current.some((x) => x.id === m.id);
+      let next: Modifier[];
+      if (group.selection === "single") {
+        next = has ? (group.is_required ? current : []) : [m];
+      } else if (has) {
+        next = current.filter((x) => x.id !== m.id);
+      } else if (group.max_select !== null && current.length >= group.max_select) {
+        next = current;
+      } else {
+        next = [...current, m];
+      }
+      return { ...prev, [group.id]: next };
+    });
+  }
+
+  async function printReceipt(orderId: string) {
+    try {
+      const r = await api<Receipt>(`/pos/orders/${orderId}/receipt`, { token });
+      setReceipt(r);
+      setTimeout(() => window.print(), 300);
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.detail : "Struk tidak bisa dimuat.");
+    }
   }
 
   const cashAmount = payMode === "cash" ? cartTotal : payMode === "qris" ? 0 : Number(cashPart || 0);
@@ -345,7 +415,12 @@ function SellScreen({
       const res = await api<OrderResult>("/pos/orders", {
         token,
         body: {
-          lines: cart.map((l) => ({ item_id: l.item.id, variant_id: l.variant?.id ?? null, quantity: l.qty })),
+          lines: cart.map((l) => ({
+            item_id: l.item.id,
+            variant_id: l.variant?.id ?? null,
+            modifier_ids: l.modifiers.map((m) => m.id),
+            quantity: l.qty,
+          })),
           payments,
           order_type: "takeaway",
         },
@@ -397,6 +472,7 @@ function SellScreen({
                 onClick={() => {
                   setSelected(item);
                   setVariant(item.variants.find((v) => v.is_default) ?? item.variants[0] ?? null);
+                  setChosen(defaultChoices(item));
                   setQty(1);
                   setError(null);
                 }}
@@ -462,6 +538,32 @@ function SellScreen({
               </div>
             )}
 
+            {selected.modifier_groups.map((g) => (
+              <div key={g.id} className="mt-4">
+                <p className="ink-soft text-xs font-semibold uppercase tracking-wide">
+                  {g.name}
+                  {g.is_required ? " · wajib" : g.selection === "multi" ? " · boleh lebih dari satu" : ""}
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {g.modifiers.map((m) => {
+                    const on = (chosen[g.id] ?? []).some((x) => x.id === m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => toggleModifier(g, m)}
+                        className={`rounded-2xl px-3 py-2 text-sm font-medium transition-colors ${
+                          on ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                        }`}
+                      >
+                        {m.name}
+                        {Number(m.price_delta) > 0 ? ` +${formatRupiah(m.price_delta)}` : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
             <div className="mt-6 flex items-center justify-center gap-6">
               <QtyButton label="−" onPress={() => setQty((q) => Math.max(1, q - 1))} />
               <span className="w-16 text-center text-4xl font-bold tabular-nums">{qty}</span>
@@ -471,16 +573,31 @@ function SellScreen({
               />
             </div>
 
-            <button
-              onClick={() => {
-                addToCart(selected, variant, qty);
-                setSelected(null);
-                setQty(1);
-              }}
-              className="btn-accent mt-6 w-full py-4 text-lg"
-            >
-              Tambah {formatRupiah(Number(variant?.sell_price ?? selected.sell_price) * qty)}
-            </button>
+            {(() => {
+              const mods = Object.values(chosen).flat();
+              const missing = missingRequired(selected, chosen);
+              const unit = linePrice({ item: selected, variant, modifiers: mods });
+              return (
+                <>
+                  {missing.length > 0 && (
+                    <p className="ink-faint mt-4 text-center text-sm">
+                      Pilih dulu: {missing.map((g) => g.name).join(", ")}
+                    </p>
+                  )}
+                  <button
+                    onClick={() => {
+                      addToCart(selected, variant, mods, qty);
+                      setSelected(null);
+                      setQty(1);
+                    }}
+                    disabled={missing.length > 0}
+                    className="btn-accent mt-6 w-full py-4 text-lg disabled:opacity-50"
+                  >
+                    Tambah {formatRupiah(unit * qty)}
+                  </button>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -492,7 +609,7 @@ function SellScreen({
             {cartOpen && (
               <ul className="hairline-b mb-3 max-h-64 overflow-y-auto pb-2">
                 {cart.map((l) => {
-                  const key = lineKey(l.item.id, l.variant);
+                  const key = lineKey(l.item.id, l.variant, l.modifiers);
                   return (
                     <li key={key} className="flex items-center gap-3 py-2">
                       <div className="min-w-0 flex-1">
@@ -627,7 +744,7 @@ function SellScreen({
 
       {/* Success flash */}
       {flash && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-8 z-30 flex justify-center">
+        <div className="fixed inset-x-0 bottom-8 z-30 flex justify-center">
           <div className="glass-card glass-strong animate-scale-in flex items-center gap-3 px-6 py-4 shadow-pop">
             <span
               className="flex h-9 w-9 items-center justify-center rounded-full text-white"
@@ -646,10 +763,81 @@ function SellScreen({
                   .join(" + ")}
               </p>
             </div>
+            <button onClick={() => printReceipt(flash.id)} className="btn-quiet ml-2 px-3 py-2 text-sm">
+              🖨 Cetak struk
+            </button>
           </div>
         </div>
       )}
+
+      {receipt && <ReceiptSheet receipt={receipt} onClose={() => setReceipt(null)} />}
     </main>
+  );
+}
+
+/** Printable receipt (browser print — no drivers, roadmap §4.1). Every line
+ * shows its size and modifiers as sold. */
+function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => void }) {
+  const when = new Date(receipt.sold_at).toLocaleString("id-ID", {
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  const method = (m: string) => (m === "cash" ? "Tunai" : m.toUpperCase());
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 print:bg-transparent" onClick={onClose}>
+      <style>{`@media print { body * { visibility: hidden; } #receipt, #receipt * { visibility: visible; } #receipt { position: absolute; left: 0; top: 0; width: 80mm; box-shadow: none; border-radius: 0; } }`}</style>
+      <div
+        id="receipt"
+        onClick={(e) => e.stopPropagation()}
+        className="w-[320px] rounded-2xl bg-white px-5 py-6 font-mono text-[12px] leading-5 text-black shadow-pop"
+      >
+        <p className="text-center text-sm font-bold uppercase">{receipt.business_name}</p>
+        <p className="text-center">{when}</p>
+        <p className="text-center">
+          #{receipt.number}
+          {receipt.staff_name ? ` · ${receipt.staff_name}` : ""}
+          {receipt.status !== "completed" ? ` · ${receipt.status === "voided" ? "DIBATALKAN" : "DIKEMBALIKAN"}` : ""}
+        </p>
+        <hr className="my-3 border-dashed border-black" />
+        {receipt.lines.map((l, i) => (
+          <div key={i} className="mb-2">
+            <div className="flex justify-between gap-2">
+              <span>
+                {formatQty(l.quantity)}× {l.name}
+                {l.variant && l.variant !== "Standar" ? ` (${l.variant})` : ""}
+              </span>
+              <span>{formatRupiah(l.line_total)}</span>
+            </div>
+            {l.modifiers.map((m, j) => (
+              <div key={j} className="flex justify-between gap-2 pl-4 text-[11px]">
+                <span>+ {m.name}</span>
+                <span>{Number(m.price_delta) > 0 ? formatRupiah(m.price_delta) : ""}</span>
+              </div>
+            ))}
+            {l.notes && <div className="pl-4 text-[11px] italic">{l.notes}</div>}
+          </div>
+        ))}
+        <hr className="my-3 border-dashed border-black" />
+        <div className="flex justify-between font-bold">
+          <span>TOTAL</span>
+          <span>{formatRupiah(receipt.total)}</span>
+        </div>
+        {receipt.payments.map((p, i) => (
+          <div key={i} className="flex justify-between">
+            <span>{method(p.method)}</span>
+            <span>{formatRupiah(p.amount)}</span>
+          </div>
+        ))}
+        <p className="mt-4 text-center">Terima kasih 🙏</p>
+        <div className="mt-4 flex gap-2 print:hidden">
+          <button onClick={() => window.print()} className="btn-accent flex-1 py-2 text-sm">
+            Cetak
+          </button>
+          <button onClick={onClose} className="btn-quiet flex-1 py-2 text-sm">
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

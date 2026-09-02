@@ -19,7 +19,10 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.security import hash_pin
-from app.models import Business, Item, ItemVariant, Order, OrderLine, Payment, Sale, Staff, StockMovement
+from app.models import (
+    Business, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier,
+    Payment, Sale, Staff, StockMovement,
+)
 from app.services.sales import InsufficientStock, record_sale
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
@@ -230,6 +233,49 @@ async def test_rls_isolates_item_variants(session_factory, two_tenants):
         session.add(ItemVariant(business_id=b.id, item_id=item_id, name="Smuggled", sell_price=Decimal(1)))
         with pytest.raises(Exception):
             await session.commit()
+
+
+async def test_rls_isolates_modifier_tables(session_factory, two_tenants):
+    """M4-T2 / roadmap §2: modifier_groups, modifiers and order_line_modifiers
+    are invisible across tenants and cannot be written as another tenant."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        item = Item(business_id=a.id, name="Mod Item A", unit="cup", current_stock=Decimal(2), sell_price=Decimal("10000"))
+        session.add(item)
+        await session.flush()
+        group = ModifierGroup(business_id=a.id, item_id=item.id, name="Gula")
+        session.add(group)
+        await session.flush()
+        mod = Modifier(business_id=a.id, group_id=group.id, name="Sedikit")
+        order = Order(business_id=a.id, subtotal=Decimal("10000"), total=Decimal("10000"))
+        session.add_all([mod, order])
+        await session.flush()
+        line = OrderLine(business_id=a.id, order_id=order.id, item_id=item.id, quantity=Decimal(1),
+                         unit_price=Decimal("10000"), line_total=Decimal("10000"))
+        session.add(line)
+        await session.flush()
+        session.add(OrderLineModifier(business_id=a.id, order_line_id=line.id, modifier_id=mod.id, name="Sedikit", price_delta=Decimal(0)))
+        await session.commit()
+        ids = {"item": item.id, "group": group.id, "mod": mod.id, "line": line.id}
+
+    async with session_factory() as session:  # B sees none of A's rows in any of the three
+        await _set_tenant(session, b.id)
+        for model in (ModifierGroup, Modifier, OrderLineModifier):
+            rows = (await session.execute(select(model))).scalars().all()
+            assert all(r.business_id != a.id for r in rows)
+        assert await session.get(ModifierGroup, ids["group"]) is None
+
+    for smuggled in (  # A cannot write rows claiming B, in any of the three (WITH CHECK)
+        lambda: ModifierGroup(business_id=b.id, item_id=ids["item"], name="X"),
+        lambda: Modifier(business_id=b.id, group_id=ids["group"], name="X"),
+        lambda: OrderLineModifier(business_id=b.id, order_line_id=ids["line"], name="X", price_delta=Decimal(0)),
+    ):
+        async with session_factory() as session:
+            await _set_tenant(session, a.id)
+            session.add(smuggled())
+            with pytest.raises(Exception):
+                await session.commit()
 
 
 async def test_rls_isolates_sales_view(session_factory, two_tenants):

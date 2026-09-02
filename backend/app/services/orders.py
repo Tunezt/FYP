@@ -20,7 +20,9 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Item, ItemVariant, Order, OrderLine, Payment
+from sqlalchemy import select
+
+from app.models import Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier, Payment
 from app.services.catalog import default_variant
 from app.services.sales import ATOMIC_DECREMENT, InsufficientStock, ItemNotFound
 from app.services.stock import record_movement
@@ -30,6 +32,50 @@ TWO_PLACES = Decimal("0.01")
 
 class VariantNotFound(Exception):
     pass
+
+
+class ModifierSelectionInvalid(Exception):
+    """`code`: unknown (inactive or not this item's), required (a required
+    group has nothing chosen), single (two choices in a single-select group),
+    max (over the group's max_select)."""
+
+    def __init__(self, code: str, group_name: str = ""):
+        self.code = code
+        self.group_name = group_name
+        super().__init__(f"{code}:{group_name}")
+
+
+async def _resolve_modifiers(session: AsyncSession, item: Item, modifier_ids: list[uuid.UUID]) -> list[Modifier]:
+    """Validate a line's modifier choices against the item's active groups and
+    return the Modifier rows (deduplicated, in the order given)."""
+    groups = (
+        await session.execute(
+            select(ModifierGroup).where(ModifierGroup.item_id == item.id, ModifierGroup.is_active.is_(True))
+        )
+    ).scalars().all()
+    by_group_id = {g.id: g for g in groups}
+    chosen: list[Modifier] = []
+    seen: set[uuid.UUID] = set()
+    for mid in modifier_ids or []:
+        if mid in seen:
+            continue
+        seen.add(mid)
+        m = await session.get(Modifier, mid)
+        if m is None or not m.is_active or m.group_id not in by_group_id:
+            raise ModifierSelectionInvalid("unknown")
+        chosen.append(m)
+    counts: dict[uuid.UUID, int] = {}
+    for m in chosen:
+        counts[m.group_id] = counts.get(m.group_id, 0) + 1
+    for g in groups:
+        n = counts.get(g.id, 0)
+        if g.is_required and n < max(1, g.min_select):
+            raise ModifierSelectionInvalid("required", g.name)
+        if g.selection == "single" and n > 1:
+            raise ModifierSelectionInvalid("single", g.name)
+        if g.max_select is not None and n > g.max_select:
+            raise ModifierSelectionInvalid("max", g.name)
+    return chosen
 
 
 class PaymentMismatch(Exception):
@@ -50,6 +96,7 @@ class OrderLineSpec:
     unit_price: Decimal | None = None  # None → the variant's (or item's) current sell_price
     notes: str | None = None
     variant_id: uuid.UUID | None = None  # None → the item's default variant (M4-T1)
+    modifier_ids: list[uuid.UUID] = field(default_factory=list)  # "extra shot, less sugar" (M4-T2)
 
 
 @dataclass
@@ -64,6 +111,7 @@ class CreatedLine:
     line: OrderLine
     item_name: str
     remaining_stock: Decimal
+    modifiers: list[OrderLineModifier] = field(default_factory=list)
 
 
 @dataclass
@@ -92,7 +140,7 @@ async def create_order(
     # 1. Price every line and take its stock, atomically, before any row exists.
     #    Price and cost come from the variant (explicit, else the item's default);
     #    stock is the parent item's until recipes arrive (M4-T4).
-    priced: list[tuple[OrderLineSpec, Item, ItemVariant | None, Decimal, Decimal, Decimal, Decimal]] = []
+    priced: list[tuple] = []  # (spec, item, variant, modifiers, price, cost, line_total, remaining)
     for spec in lines:
         item = await session.get(Item, spec.item_id)
         if item is None:
@@ -103,6 +151,7 @@ async def create_order(
                 raise VariantNotFound()
         else:
             variant = await default_variant(session, item.id)
+        modifiers = await _resolve_modifiers(session, item, spec.modifier_ids)
         quantity = Decimal(spec.quantity)
         result = await session.execute(ATOMIC_DECREMENT, {"qty": quantity, "item_id": item.id})
         remaining = result.scalar_one_or_none()
@@ -110,11 +159,13 @@ async def create_order(
             raise InsufficientStock(item.name, item.current_stock)
         list_price = Decimal(variant.sell_price) if variant is not None else Decimal(item.sell_price)
         cost = Decimal(variant.cost_price) if variant is not None else Decimal(item.cost_price)
-        price = Decimal(spec.unit_price) if spec.unit_price is not None else list_price
+        base = Decimal(spec.unit_price) if spec.unit_price is not None else list_price
+        # The line's unit price is all-in: base (variant) plus every chosen modifier.
+        price = (base + sum((Decimal(m.price_delta) for m in modifiers), Decimal(0))).quantize(TWO_PLACES)
         line_total = (price * quantity).quantize(TWO_PLACES)
-        priced.append((spec, item, variant, price, cost, line_total, Decimal(remaining)))
+        priced.append((spec, item, variant, modifiers, price, cost, line_total, Decimal(remaining)))
 
-    subtotal = sum((lt for _, _, _, _, _, lt, _ in priced), Decimal(0)).quantize(TWO_PLACES)
+    subtotal = sum((p[6] for p in priced), Decimal(0)).quantize(TWO_PLACES)
     total = subtotal  # discounts, tax, service charge, rounding: M7-T4
 
     # 2. Payments must cover the total exactly — a till does not close on a guess.
@@ -136,7 +187,7 @@ async def create_order(
     await session.flush()
 
     created = CreatedOrder(order=order)
-    for spec, item, variant, price, cost, line_total, remaining in priced:
+    for spec, item, variant, modifiers, price, cost, line_total, remaining in priced:
         line = OrderLine(
             business_id=business_id,
             order_id=order.id,
@@ -162,7 +213,17 @@ async def create_order(
             staff_id=staff_id,
             created_at=sold_at,
         )
-        created.lines.append(CreatedLine(line=line, item_name=item.name, remaining_stock=remaining))
+        # Snapshot the chosen modifiers: the receipt and old margins must not
+        # change when the catalogue is edited later.
+        snapshots = [
+            OrderLineModifier(
+                business_id=business_id, order_line_id=line.id, modifier_id=m.id,
+                name=m.name, price_delta=Decimal(m.price_delta),
+            )
+            for m in modifiers
+        ]
+        session.add_all(snapshots)
+        created.lines.append(CreatedLine(line=line, item_name=item.name, remaining_stock=remaining, modifiers=snapshots))
 
     for p in payments:
         payment = Payment(
@@ -284,6 +345,13 @@ async def _reverse(
         session.add(reversing)
         await session.flush()
         reversal.reversing_lines.append(reversing)
+        # The reversing line itemises the same modifiers (the receipt of a void
+        # shows what was undone).
+        for snap in (await session.execute(select(OrderLineModifier).where(OrderLineModifier.order_line_id == line.id))).scalars():
+            session.add(OrderLineModifier(
+                business_id=business_id, order_line_id=reversing.id, modifier_id=snap.modifier_id,
+                name=snap.name, price_delta=snap.price_delta,
+            ))
         if restock:
             after = (await session.execute(RESTOCK, {"qty": line.quantity, "item_id": line.item_id})).scalar_one()
             reversal.restocked[line.item_id] = Decimal(after)
@@ -317,6 +385,53 @@ async def _reverse(
     order.status = "voided" if kind == "void" else "refunded"
     await session.flush()
     return reversal
+
+
+async def load_receipt(session: AsyncSession, *, business_id: uuid.UUID, order_id: uuid.UUID) -> dict:
+    """Everything a printed receipt needs, in one shape (M4-T2)."""
+    order = await session.get(Order, order_id)
+    if order is None or order.business_id != business_id:
+        raise OrderNotFound()
+    staff_name = None
+    if order.staff_id is not None:
+        staff = await session.get(Staff, order.staff_id)
+        staff_name = staff.name if staff else None
+    lines = (
+        await session.execute(
+            select(OrderLine).where(OrderLine.order_id == order_id).order_by(OrderLine.created_at, OrderLine.id)
+        )
+    ).scalars().all()
+    line_ids = [l.id for l in lines]
+    mods_by_line: dict[uuid.UUID, list[OrderLineModifier]] = {}
+    if line_ids:
+        for snap in (await session.execute(
+            select(OrderLineModifier).where(OrderLineModifier.order_line_id.in_(line_ids)).order_by(OrderLineModifier.created_at)
+        )).scalars():
+            mods_by_line.setdefault(snap.order_line_id, []).append(snap)
+    item_names = {}
+    variant_names = {}
+    for l in lines:
+        if l.item_id not in item_names:
+            item = await session.get(Item, l.item_id)
+            item_names[l.item_id] = item.name if item else "?"
+        if l.variant_id and l.variant_id not in variant_names:
+            v = await session.get(ItemVariant, l.variant_id)
+            variant_names[l.variant_id] = v.name if v else None
+    payments = (await session.execute(select(Payment).where(Payment.order_id == order_id).order_by(Payment.created_at))).scalars().all()
+    return {
+        "order": order,
+        "staff_name": staff_name,
+        "lines": [
+            {
+                "line": l,
+                "item_name": item_names[l.item_id],
+                "variant_name": variant_names.get(l.variant_id) if l.variant_id else None,
+                "modifiers": mods_by_line.get(l.id, []),
+            }
+            for l in lines
+        ],
+        "payments": payments,
+    }
 
 
 async def void_order(

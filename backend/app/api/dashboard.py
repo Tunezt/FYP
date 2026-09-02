@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 
 from app.ai.periods import period_range
 from app.core.deps import OwnerCtx
-from app.models import Alert, Business, Expense, Item, ItemVariant, Receipt, Sale, Staff
+from app.models import Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, Receipt, Sale, Staff
 from app.schemas.dashboard import (
     AlertRow,
     BusinessUpdateIn,
@@ -33,6 +33,12 @@ from app.schemas.dashboard import (
     VariantCreateIn,
     VariantOut,
     VariantUpdateIn,
+    ModifierCreateIn,
+    ModifierGroupCreateIn,
+    ModifierGroupOut,
+    ModifierGroupUpdateIn,
+    ModifierOut,
+    ModifierUpdateIn,
 )
 from app.schemas.auth import BusinessOut
 from app.services.velocity import VELOCITY_WINDOW_DAYS
@@ -334,6 +340,103 @@ async def edit_variant(variant_id: uuid.UUID, payload: VariantUpdateIn, ctx: Own
         status, detail = _VARIANT_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
     return VariantOut.model_validate(variant)
+
+
+_MODIFIER_ERRORS = {
+    "name": (422, "Nama pilihan tidak boleh kosong"),
+    "duplicate": (409, "Nama pilihan sudah dipakai"),
+    "bounds": (422, "Minimal pilihan tidak boleh lebih besar dari maksimal"),
+}
+
+
+def _group_out(group: ModifierGroup, mods: list[Modifier]) -> ModifierGroupOut:
+    return ModifierGroupOut(
+        id=group.id, item_id=group.item_id, name=group.name, selection=group.selection,
+        is_required=group.is_required, min_select=group.min_select, max_select=group.max_select,
+        sort_order=group.sort_order, is_active=group.is_active,
+        modifiers=[ModifierOut.model_validate(m) for m in mods],
+    )
+
+
+@router.get("/items/{item_id}/modifier-groups", response_model=list[ModifierGroupOut])
+async def list_modifier_groups(item_id: uuid.UUID, ctx: OwnerCtx):
+    if await ctx.session.get(Item, item_id) is None:
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+    groups = (
+        await ctx.session.execute(
+            select(ModifierGroup).where(ModifierGroup.item_id == item_id).order_by(ModifierGroup.sort_order, ModifierGroup.name)
+        )
+    ).scalars().all()
+    mods = (
+        await ctx.session.execute(
+            select(Modifier).where(Modifier.group_id.in_([g.id for g in groups])).order_by(Modifier.sort_order, Modifier.name)
+        )
+    ).scalars().all() if groups else []
+    by_group: dict[uuid.UUID, list[Modifier]] = {}
+    for m in mods:
+        by_group.setdefault(m.group_id, []).append(m)
+    return [_group_out(g, by_group.get(g.id, [])) for g in groups]
+
+
+@router.post("/items/{item_id}/modifier-groups", response_model=ModifierGroupOut, status_code=201)
+async def add_modifier_group(item_id: uuid.UUID, payload: ModifierGroupCreateIn, ctx: OwnerCtx):
+    from app.services.catalog import ModifierInvalid, create_modifier_group
+
+    item = await ctx.session.get(Item, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+    try:
+        group = await create_modifier_group(ctx.session, item, **payload.model_dump())
+    except ModifierInvalid as exc:
+        status, detail = _MODIFIER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return _group_out(group, [])
+
+
+@router.patch("/modifier-groups/{group_id}", response_model=ModifierGroupOut)
+async def edit_modifier_group(group_id: uuid.UUID, payload: ModifierGroupUpdateIn, ctx: OwnerCtx):
+    from app.services.catalog import ModifierInvalid, update_modifier_group
+
+    group = await ctx.session.get(ModifierGroup, group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Kelompok pilihan tidak ditemukan")
+    try:
+        group = await update_modifier_group(ctx.session, group, **payload.model_dump(exclude_none=True))
+    except ModifierInvalid as exc:
+        status, detail = _MODIFIER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    mods = (await ctx.session.execute(select(Modifier).where(Modifier.group_id == group.id).order_by(Modifier.sort_order, Modifier.name))).scalars().all()
+    return _group_out(group, mods)
+
+
+@router.post("/modifier-groups/{group_id}/modifiers", response_model=ModifierOut, status_code=201)
+async def add_modifier(group_id: uuid.UUID, payload: ModifierCreateIn, ctx: OwnerCtx):
+    from app.services.catalog import ModifierInvalid, create_modifier
+
+    group = await ctx.session.get(ModifierGroup, group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Kelompok pilihan tidak ditemukan")
+    try:
+        modifier = await create_modifier(ctx.session, group, **payload.model_dump())
+    except ModifierInvalid as exc:
+        status, detail = _MODIFIER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return ModifierOut.model_validate(modifier)
+
+
+@router.patch("/modifiers/{modifier_id}", response_model=ModifierOut)
+async def edit_modifier(modifier_id: uuid.UUID, payload: ModifierUpdateIn, ctx: OwnerCtx):
+    from app.services.catalog import ModifierInvalid, update_modifier
+
+    modifier = await ctx.session.get(Modifier, modifier_id)
+    if modifier is None:
+        raise HTTPException(status_code=404, detail="Pilihan tidak ditemukan")
+    try:
+        modifier = await update_modifier(ctx.session, modifier, **payload.model_dump(exclude_none=True))
+    except ModifierInvalid as exc:
+        status, detail = _MODIFIER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return ModifierOut.model_validate(modifier)
 
 
 @router.get("/expenses", response_model=ExpensesPage)

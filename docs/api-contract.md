@@ -43,6 +43,9 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | POST | `/pos/orders` | pos | multi-line order + payments (cash/qris/transfer/card/ewallet/other); payments must equal total (422); per-line atomic stock guard, all-or-nothing (409); writes order, lines with `unit_cost_at_sale`, payments, stock movements |
 | POST | `/pos/orders/{id}/void` | pos | `{manager_pin, note?}` — owner PIN; reversing lines, payments and `sale_void` stock movements; original untouched; 403 wrong PIN, 409 already reversed |
 | POST | `/pos/orders/{id}/refund` | pos | `{manager_pin, restock?, note?}` — like void with `refund` movements; `restock=false` reverses money only |
+| GET | `/pos/orders/{id}/receipt` | pos | printable receipt: lines with size + modifiers as sold (snapshots), payments, totals; voided orders include reversing lines |
+| GET | `/api/items/{id}/variants` · POST same · PATCH `/api/variants/{id}` | owner | sizes/options with own prices; exactly one default per item, default mirrors the item's prices both ways |
+| GET | `/api/items/{id}/modifier-groups` · POST same · PATCH `/api/modifier-groups/{id}` · POST `/api/modifier-groups/{id}/modifiers` · PATCH `/api/modifiers/{id}` | owner | single/multi select, required/optional (min/max); modifiers priced or free |
 
 ## Webhooks
 

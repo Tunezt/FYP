@@ -23,8 +23,13 @@ from app.schemas.pos import (
     OrderLineOut,
     OrderOut,
     PaymentOut,
+    LineModifierOut,
     PosBusinessOut,
+    PosModifierGroupOut,
+    PosModifierOut,
     PosVariantOut,
+    ReceiptLineOut,
+    ReceiptOut,
     PosLoginIn,
     PosLoginOut,
     PosStaffOut,
@@ -37,6 +42,7 @@ from app.schemas.pos import (
 )
 from app.services.orders import (
     ManagerPinRejected,
+    ModifierSelectionInvalid,
     OrderLineSpec,
     OrderNotFound,
     OrderNotReversible,
@@ -45,6 +51,7 @@ from app.services.orders import (
     Reversal,
     VariantNotFound,
     create_order,
+    load_receipt,
     refund_order,
     void_order,
 )
@@ -119,11 +126,22 @@ async def pos_items(ctx: PosCtx):
     by_item: dict[uuid.UUID, list[ItemVariant]] = {}
     for v in variants:
         by_item.setdefault(v.item_id, []).append(v)
+    from app.services.catalog import modifier_catalog
+
+    groups_by_item = await modifier_catalog(ctx.session)
     return [
         ItemOut(
             id=i.id, name=i.name, unit=i.unit, current_stock=i.current_stock, sell_price=i.sell_price,
             reorder_threshold=i.reorder_threshold,
             variants=[PosVariantOut.model_validate(v) for v in by_item.get(i.id, [])],
+            modifier_groups=[
+                PosModifierGroupOut(
+                    id=g.id, name=g.name, selection=g.selection, is_required=g.is_required,
+                    min_select=g.min_select, max_select=g.max_select,
+                    modifiers=[PosModifierOut.model_validate(m) for m in mods],
+                )
+                for g, mods in groups_by_item.get(i.id, [])
+            ],
         )
         for i in items
     ]
@@ -192,8 +210,8 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             staff_id=ctx.staff_id,
             order_type=payload.order_type,
             lines=[
-                OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, quantity=l.quantity,
-                              unit_price=l.unit_price, notes=l.notes)
+                OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, modifier_ids=list(l.modifier_ids),
+                              quantity=l.quantity, unit_price=l.unit_price, notes=l.notes)
                 for l in payload.lines
             ],
             payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
@@ -202,6 +220,14 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
     except VariantNotFound:
         raise HTTPException(status_code=404, detail="Varian barang tidak ditemukan atau sudah tidak aktif")
+    except ModifierSelectionInvalid as exc:
+        messages = {
+            "unknown": "Pilihan tambahan tidak dikenali atau sudah tidak aktif",
+            "required": f"Pilihan '{exc.group_name}' wajib diisi",
+            "single": f"Pilihan '{exc.group_name}' hanya boleh satu",
+            "max": f"Pilihan '{exc.group_name}' melebihi batas maksimal",
+        }
+        raise HTTPException(status_code=422, detail=messages[exc.code])
     except InsufficientStock as exc:
         raise HTTPException(
             status_code=409,
@@ -237,10 +263,45 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
                 id=cl.line.id, item_id=cl.line.item_id, variant_id=cl.line.variant_id, item_name=cl.item_name,
                 quantity=cl.line.quantity,
                 unit_price=cl.line.unit_price, line_total=cl.line.line_total, remaining_stock=cl.remaining_stock,
+                modifiers=[LineModifierOut(name=m.name, price_delta=m.price_delta) for m in cl.modifiers],
             )
             for cl in created.lines
         ],
         payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in created.payments],
+    )
+
+
+@router.get("/orders/{order_id}/receipt", response_model=ReceiptOut)
+async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
+    """What gets printed (browser print, M4-T2): every line with its size and
+    modifiers as sold, payments, totals. Voided orders print with their
+    reversing lines so the paper says what happened."""
+    try:
+        data = await load_receipt(ctx.session, business_id=ctx.business_id, order_id=order_id)
+    except OrderNotFound:
+        raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
+    business = await ctx.session.get(Business, ctx.business_id)
+    order = data["order"]
+    return ReceiptOut(
+        order_id=order.id,
+        number=str(order.id)[-8:].upper(),
+        business_name=business.name if business else "",
+        staff_name=data["staff_name"],
+        status=order.status,
+        order_type=order.order_type,
+        sold_at=order.sold_at,
+        lines=[
+            ReceiptLineOut(
+                name=entry["item_name"], variant=entry["variant_name"], quantity=entry["line"].quantity,
+                unit_price=entry["line"].unit_price, line_total=entry["line"].line_total,
+                modifiers=[LineModifierOut(name=m.name, price_delta=m.price_delta) for m in entry["modifiers"]],
+                notes=entry["line"].notes,
+            )
+            for entry in data["lines"]
+        ],
+        subtotal=order.subtotal,
+        total=order.total,
+        payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in data["payments"]],
     )
 
 

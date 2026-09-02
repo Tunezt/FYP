@@ -54,6 +54,7 @@ payment_method = Enum(
     "cash", "qris", "transfer", "card", "ewallet", "points", "other",
     name="payment_method", create_type=False,
 )
+modifier_selection = Enum("single", "multi", name="modifier_selection", create_type=False)
 
 
 class Business(Base):
@@ -373,6 +374,69 @@ class ItemVariant(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
+
+
+class ModifierGroup(Base):
+    """A question asked when an item is sold ("Gula?", "Tambahan?"), migration
+    0008 / roadmap M4-T2. Single or multi select, required or optional."""
+
+    __tablename__ = "modifier_groups"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    selection: Mapped[str] = mapped_column(modifier_selection, nullable=False, server_default="single")
+    is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    min_select: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    max_select: Mapped[int | None] = mapped_column(Integer)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class Modifier(Base):
+    """One answer in a group: priced (`price_delta`) or free."""
+
+    __tablename__ = "modifiers"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("modifier_groups.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    price_delta: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class OrderLineModifier(Base):
+    """What was chosen on a line, snapshotted (name and price) at sale time."""
+
+    __tablename__ = "order_line_modifiers"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    order_line_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("order_lines.id"), nullable=False
+    )
+    modifier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("modifiers.id"))
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    price_delta: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    created_at: Mapped[datetime] = _now()
 
 
 class Payment(Base):

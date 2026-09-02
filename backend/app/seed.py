@@ -24,8 +24,20 @@ from sqlalchemy import delete, select
 from app.core.db import plain_session, tenant_session
 from app.core.security import hash_pin
 from app.models import Business, Expense, Item, Order, OrderLine, Payment, Staff
-from app.services.catalog import create_variant, ensure_default_variant
+from app.services.catalog import create_modifier, create_modifier_group, create_variant, ensure_default_variant
 from app.services.stock import record_movement
+
+# Modifier groups (M4-T2): (item, group name, selection, required, [(modifier, price_delta, default)])
+MODIFIERS = [
+    ("Es Kopi Susu", "Gula", "single", True,
+     [("Normal", 0, True), ("Sedikit gula", 0, False), ("Tanpa gula", 0, False)]),
+    ("Es Kopi Susu", "Tambahan", "multi", False,
+     [("Extra shot", 5000, False), ("Susu oat", 6000, False)]),
+    ("Matcha Latte", "Tambahan", "multi", False,
+     [("Extra matcha", 4000, False), ("Susu oat", 6000, False)]),
+    ("Americano", "Suhu", "single", True,
+     [("Panas", 0, True), ("Dingin", 0, False)]),
+]
 
 # Sizes for the drinks that have them (M4-T1): (item name, variant name, sell, cost)
 VARIANTS = [
@@ -116,6 +128,12 @@ async def seed() -> None:
             v = await create_variant(session, by_name[item_name], name=vname,
                                      sell_price=Decimal(sell), cost_price=Decimal(cost))
             larges[by_name[item_name].id] = v
+        for item_name, gname, selection, required, choices in MODIFIERS:
+            group = await create_modifier_group(session, by_name[item_name], name=gname,
+                                                selection=selection, is_required=required)
+            for order, (mname, delta, is_default) in enumerate(choices):
+                await create_modifier(session, group, name=mname, price_delta=Decimal(delta),
+                                      is_default=is_default, sort_order=order)
 
         sellable = [(i, w) for i, w in items if w > 0]
         sold_per_item: dict = {}  # item.id -> total quantity sold in the history

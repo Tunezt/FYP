@@ -39,6 +39,25 @@ class PosVariantOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PosModifierOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    price_delta: Decimal
+    is_default: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PosModifierGroupOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    selection: str          # single | multi
+    is_required: bool
+    min_select: int
+    max_select: int | None
+    modifiers: list[PosModifierOut]
+
+
 class ItemOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -47,6 +66,7 @@ class ItemOut(BaseModel):
     sell_price: Decimal
     reorder_threshold: Decimal
     variants: list[PosVariantOut] = []  # active variants, default first (M4-T1)
+    modifier_groups: list[PosModifierGroupOut] = []  # active groups (M4-T2)
 
     model_config = {"from_attributes": True}
 
@@ -81,9 +101,15 @@ PosOrderType = Literal["dine_in", "takeaway", "delivery", "pickup"]
 class OrderLineIn(BaseModel):
     item_id: uuid.UUID
     variant_id: uuid.UUID | None = None  # None → the item's default variant
+    modifier_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
     quantity: Decimal = Field(gt=0, le=Decimal("999999"))
     unit_price: Decimal | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=200)
+
+
+class LineModifierOut(BaseModel):
+    name: str
+    price_delta: Decimal
 
 
 class PaymentIn(BaseModel):
@@ -107,6 +133,7 @@ class OrderLineOut(BaseModel):
     unit_price: Decimal
     line_total: Decimal
     remaining_stock: Decimal
+    modifiers: list[LineModifierOut] = []
 
 
 class PaymentOut(BaseModel):
@@ -123,6 +150,30 @@ class OrderOut(BaseModel):
     total: Decimal
     sold_at: datetime
     lines: list[OrderLineOut]
+    payments: list[PaymentOut]
+
+
+class ReceiptLineOut(BaseModel):
+    name: str                       # item name
+    variant: str | None             # size, when the item has one
+    quantity: Decimal
+    unit_price: Decimal
+    line_total: Decimal
+    modifiers: list[LineModifierOut]
+    notes: str | None
+
+
+class ReceiptOut(BaseModel):
+    order_id: uuid.UUID
+    number: str                     # short human reference, last 8 of the id
+    business_name: str
+    staff_name: str | None
+    status: str
+    order_type: str
+    sold_at: datetime
+    lines: list[ReceiptLineOut]
+    subtotal: Decimal
+    total: Decimal
     payments: list[PaymentOut]
 
 

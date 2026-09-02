@@ -616,3 +616,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Dashboard UI for managing variants is not built (API only); inventory list still shows the item's default price.
 **Deviation:** none
 **Next:** M4-T2
+
+### [M4-T2] Modifiers
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0008_modifiers.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/catalog.py, backend/app/services/orders.py, backend/app/api/pos.py, backend/app/api/dashboard.py, backend/app/schemas/pos.py, backend/app/schemas/dashboard.py, backend/app/seed.py, backend/tests/test_modifiers.py (new, 10 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py, docs/api-contract.md, frontend/app/pos/[businessToken]/page.tsx
+**Gates:** pytest 133 passed 0 skipped · migrations round-trip ok (0008 → 0007 → 0008) · frontend build ok · seed ok
+**Notes:**
+- Migration 0008: `modifier_groups` (per item; `single`/`multi`, required, min/max), `modifiers` (`price_delta numeric(12,2)`, priced or free), `order_line_modifiers` (name and price **snapshotted** on the line). RLS on all three in the same migration; unique names per item/group.
+- `create_order` validates a line's choices against the item's active groups (unknown/foreign/inactive → `unknown`; required group empty → `required`; two in a single-select → `single`; over `max_select` → `max`; Indonesian 422s at the POS), prices the line as variant price + Σ deltas, and writes the snapshot rows. Voids/refunds copy the snapshots onto the reversing line so a voided receipt itemises what was undone.
+- Receipt: `GET /pos/orders/{id}/receipt` returns the printable shape (business, cashier, number, lines with size and modifiers as sold, notes, payments, totals). Kiosk: modifier chips per group in the quantity sheet (defaults preselected, required groups gate the Tambah button, single-select replaces, multi respects max), cart lines are per size + modifier set, success flash gets "Cetak struk" which renders a receipt sheet with an `@media print` stylesheet and calls `window.print()` — browser print only, no drivers (§4.1).
+- Owner API for groups and modifiers (create/list/patch; blank 422, duplicate 409, min > max 422; single-select normalises to max 1, required to min 1). Seed: Es Kopi Susu gets Gula (required: Normal/Sedikit/Tanpa) and Tambahan (Extra shot +5.000, Susu oat +6.000), Matcha Latte and Americano get groups too.
+- Done-when proved: `test_extra_shot_less_sugar_persists_and_prices` (unit price 27.000 = 22.000 + 5.000 + 0, two snapshot rows), `test_snapshot_survives_catalogue_edits` (renaming/repricing the modifier later leaves the line and its snapshot untouched), `test_receipt_prints_modifiers_and_pos_lists_groups` (receipt lines carry the modifiers and prices), selection-rule parametrised tests, void copying, RLS across the three tables.
+**Deviation:** none
+**Next:** M4-T3
