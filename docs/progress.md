@@ -406,3 +406,12 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Fresh-clone check for M0-T2's done-criterion runs against this commit next; result recorded in the following entry.
 **Deviation:** none
 **Next:** fresh-clone verification, then M0-T4
+
+### [M0-T3] Fresh-clone verification (closes M0-T2's done-criterion)
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** docs/progress.md
+**Gates:** n/a (verification-only commit; no code changed since 0bee89f)
+**Notes:** `git clone` of 0bee89f into a scratch directory, a brand-new database `wp_fresh` created and bootstrapped with `scripts/db-bootstrap.sql`, then exactly the README backend steps: new venv, `pip install -r requirements.txt`, `cp .env.example .env` (only the database name edited to `wp_fresh`), `alembic upgrade head` (0001 + 0002 applied), `python -m app.seed`, `pytest -q` → **71 passed, 0 skipped**. 20 deprecation warnings in the fresh venv vs 1 here, from newer unpinned dependency versions; no failures. Scratch clone and database dropped afterwards. Frontend `npm install`/`build` was not repeated in the clone; it is exercised by gate 3 on every commit.
+**Deviation:** none
+**Next:** M0-T4
