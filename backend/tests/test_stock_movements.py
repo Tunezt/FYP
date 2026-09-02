@@ -168,6 +168,12 @@ async def test_receipt_commit_creates_adds_and_sets(session_factory, business):
         assert crows[0].qty_delta == Decimal("12.000") and crows[0].unit_cost == Decimal("17000.00")
         await _assert_reconciled(session, created.id)
         created_id = created.id
+        # Books (M6-T6): every line carried a price, so the whole nota is
+        # inventory owed to the supplier and nothing of it is expensed.
+        from app.services.ledger import account_balances
+        balances = await account_balances(session)
+        assert balances["1300"] == Decimal("318000.00") and balances["2100"] == Decimal("318000.00")
+        assert "5200" not in balances and "1100" not in balances
 
     # A stock book photo is a count: the existing 7 kg becomes 5 kg via an opname row
     # carrying the difference and no cost (a count knows no price).

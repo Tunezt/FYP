@@ -823,3 +823,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - The existing `/api/pnl` (sales − expenses from the `expenses` table) stays as the money page's chart until M6-T6 routes expenses through the ledger; after that the ledger P&L is the single source and a statements view can replace it.
 **Deviation:** none
 **Next:** M6-T6
+
+### [M6-T6] Expenses into the ledger
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/services/expenses.py (new), backend/app/ai/tools.py (`record_expense`), backend/app/services/invoice_draft.py, backend/app/services/receipts.py, backend/app/seed.py, backend/tests/test_expenses.py (new, 5 tests), backend/tests/test_invoice_draft.py, backend/tests/test_stock_movements.py
+**Gates:** pytest 216 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `services/expenses.record_expense` is now the only writer of `expenses` rows. It posts `ExpenseIncurred {expense:<category>: amount}` in the same transaction; the rules decide the account (`gaji` → 5300, `sewa` → 5400, unknown categories fall to `expense:*` → 5900), so the tool knows no codes. Category is normalised (trim/lower, empty → `lainnya`). Invalid amounts raise before any write; if the engine refuses, the row rolls back with it (tested).
+- Done-when proved end to end minus Gemini: `handle_text` runs with a forced `record_expense` function call (the model call is the only fake), and the expense then appears on the ledger P&L under *Listrik, air & gas* with cash down by the same amount and the balance sheet still balancing.
+- Receipt-sourced expenses: the two photo paths (`confirm_draft`, legacy `commit_parse`) keep writing the full receipt total as the expense row — that is what was paid — but post only the **uncapitalised remainder** through the engine (`ledger_amount`). `confirm_draft` capitalises via the goods receipt as before; `commit_parse` now posts `GoodsReceived` for stock taken in at a written price, then expenses the rest. A purchase is never inventory and expense both (asserted in both receipt tests: 164.000 inventory + 17.000 expense; 318.000 inventory + nothing expensed).
+- Both photo paths book the goods against `Utang usaha` (payables) like a goods receipt does; settling that in cash is M7-T2's cash-out, not guessed here.
+- The seed's five expenses go through the same writer, so the local balance sheet and P&L now show them. `/api/pnl` and `get_profit` still read the `expenses` table (their "recorded expenses" figure); the ledger P&L is the accounting view.
+**Deviation:** none
+**Next:** tag `checkpoint/M6`; M7-T1

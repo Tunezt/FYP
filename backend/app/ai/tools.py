@@ -382,19 +382,19 @@ async def get_low_stock(session: AsyncSession, business: Business, args: dict) -
     )
 )
 async def record_expense(session: AsyncSession, business: Business, args: dict) -> dict:
+    """Through the one expense writer (M6-T6): the row and its journal entry
+    land in this transaction, so the expense is on the P&L the moment the
+    owner's message is handled."""
+    from app.services.expenses import ExpenseInvalid, record_expense as write_expense
+
     amount = Decimal(str(args["amount"]))
-    if amount <= 0:
+    try:
+        expense = await write_expense(
+            session, business.id, amount=amount, category=args.get("category"),
+            description=args.get("description"), source="manual",
+        )
+    except ExpenseInvalid:
         return {"ok": False, "error": "invalid_amount"}
-    expense = Expense(
-        business_id=business.id,
-        amount=amount,
-        category=args.get("category") or "lainnya",
-        description=args.get("description"),
-        source="manual",
-        occurred_at=datetime.now(timezone.utc),
-    )
-    session.add(expense)
-    await session.flush()
     return {
         "ok": True,
         "amount": _num(amount),

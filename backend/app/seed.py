@@ -23,7 +23,7 @@ from sqlalchemy import delete, select
 
 from app.core.db import plain_session, tenant_session
 from app.core.security import hash_pin
-from app.models import Business, Expense, Item, Order, OrderLine, Payment, Staff
+from app.models import Business, Item, Order, OrderLine, Payment, Staff
 from app.services.catalog import (
     create_modifier, create_modifier_group, create_variant, ensure_default_variant, set_recipe_line,
 )
@@ -266,13 +266,13 @@ async def seed() -> None:
             await post_event(session, business_id, "OrderCompleted", components, source_type="seed",
                              memo=f"penjualan {_day.isoformat()}", posted_at=posted_at)
 
+        # Expenses go through the one writer (M6-T6), so they are on the P&L.
+        from app.services.expenses import record_expense
+
         for category, description, amount, days_ago in EXPENSES:
-            session.add(
-                Expense(
-                    business_id=business_id, amount=Decimal(amount), category=category,
-                    description=description, source="manual",
-                    occurred_at=now - timedelta(days=days_ago),
-                )
+            await record_expense(
+                session, business_id, amount=Decimal(amount), category=category,
+                description=description, source="manual", occurred_at=now - timedelta(days=days_ago),
             )
 
     print(f"Seeded 'Kopi Kenangan Senja' (business_id={business_id})")

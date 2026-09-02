@@ -174,7 +174,8 @@ async def confirm_draft(
     an expense as before. Questions are skipped, and said so."""
     from datetime import datetime, timezone
 
-    from app.models import Expense, Receipt
+    from app.models import Receipt
+    from app.services.expenses import record_expense
     from app.services.receipts import _parse_date
     from app.services.receiving import GrLineSpec, receive_goods
 
@@ -191,6 +192,7 @@ async def confirm_draft(
     facts: dict = {"saved": True, "document_type": "receipt", "receipt_id": str(receipt.id),
                    "supplier": draft.get("supplier_name") or draft.get("supplier_text"),
                    "skipped": [q["name_read"] for q in draft["questions"]], "stock_effects": []}
+    capitalised = Decimal(0)
     if draft["matched"]:
         received = await receive_goods(
             session, business.id, supplier_id=supplier_id, received_by=received_by,
@@ -201,6 +203,7 @@ async def confirm_draft(
                 for m in draft["matched"]
             ],
         )
+        capitalised = Decimal(received.receipt.subtotal)
         facts["goods_receipt_id"] = str(received.receipt.id)
         facts["goods_receipt_number"] = received.receipt.number
         for line, m in zip(received.lines, draft["matched"]):
@@ -213,11 +216,14 @@ async def confirm_draft(
 
     total = _dec(draft.get("total_amount"))
     if total > 0:
-        session.add(Expense(
-            business_id=business.id, amount=total, category="bahan baku",
+        # Books (M6-T6): the matched lines are already inventory (GoodsReceived);
+        # only the remainder of the total — unmatched lines, rounding — is expensed.
+        await record_expense(
+            session, business.id, amount=total, category="bahan baku",
             description=f"Nota {draft.get('supplier_name') or draft.get('supplier_text') or 'pembelian'}",
-            source="receipt", receipt_id=receipt.id, occurred_at=occurred_at,
-        ))
+            source="receipt", receipt_id=receipt.id, occurred_at=occurred_at, created_by=received_by,
+            ledger_amount=max(total - capitalised, Decimal(0)),
+        )
         facts["expense_recorded"] = True
         facts["total_amount"] = float(total)
     await session.flush()

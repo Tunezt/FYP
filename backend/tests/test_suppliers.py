@@ -50,6 +50,11 @@ async def shop(session_factory):
         s.add(biz)
         await s.commit()
         bid = biz.id
+    async with session_factory() as s:  # receipt photos keep books now (M6-T6)
+        await _set_tenant(s, bid)
+        from tests.conftest import seed_books
+        await seed_books(s, bid)
+        await s.commit()
     yield bid
     async with session_factory() as s:
         row = await s.get(Business, bid)

@@ -16,7 +16,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Business, Expense, Item, PendingConfirmation, Receipt
+from app.models import Business, Item, PendingConfirmation, Receipt
 from app.services.catalog import ensure_default_variant, sync_default_from_item
 from app.services.stock import add_stock, open_item_stock, set_absolute_stock
 
@@ -111,6 +111,7 @@ async def commit_parse(
     await link_receipt(session, receipt)
 
     stock_effects: list[dict] = []
+    capitalised = Decimal(0)  # stock taken in at a written price (M6-T6)
     for entry in parsed.get("items", []):
         name = (entry.get("name") or "").strip()
         if not name:
@@ -145,6 +146,8 @@ async def commit_parse(
                 source_type="receipt", source_id=receipt.id, unit_cost=known_cost,
             )
             await ensure_default_variant(session, item)  # M4-T1
+            if doc_type != "stock_ledger" and known_cost is not None:
+                capitalised += qty * known_cost
             stock_effects.append({"item": name, "action": "created", "stock": float(qty), "unit": unit})
         elif doc_type == "stock_ledger":
             old = match.current_stock
@@ -165,23 +168,33 @@ async def commit_parse(
             )
             if known_cost is not None:
                 await sync_default_from_item(session, match)
+                capitalised += qty * known_cost
             stock_effects.append(
                 {"item": match.name, "action": "added", "added": float(qty), "stock": float(match.current_stock), "unit": match.unit}
             )
 
     expense_amount = _dec(parsed.get("total_amount"))
-    if doc_type == "receipt" and expense_amount > 0:
-        session.add(
-            Expense(
-                business_id=business.id,
-                amount=expense_amount,
-                category="bahan baku",
-                description=f"Nota {parsed.get('supplier') or 'pembelian'}",
-                source="receipt",
-                receipt_id=receipt.id,
-                occurred_at=occurred_at,
+    if doc_type == "receipt":
+        from app.services.expenses import record_expense
+        from app.services.posting import post_event
+
+        # Books (M6-T6): what went into stock at a written price is inventory
+        # (GoodsReceived, as a goods receipt posts); only the remainder of the
+        # total is expensed, so a purchase is never inventory and expense both.
+        capitalised = capitalised.quantize(Decimal("0.01"))
+        if capitalised > 0:
+            await post_event(
+                session, business.id, "GoodsReceived", {"inventory": capitalised},
+                source_type="receipt", source_id=receipt.id,
+                memo=f"nota {parsed.get('supplier') or 'pembelian'}", posted_at=occurred_at,
             )
-        )
+        if expense_amount > 0:
+            await record_expense(
+                session, business.id, amount=expense_amount, category="bahan baku",
+                description=f"Nota {parsed.get('supplier') or 'pembelian'}", source="receipt",
+                receipt_id=receipt.id, occurred_at=occurred_at,
+                ledger_amount=max(expense_amount - capitalised, Decimal(0)),
+            )
 
     await session.flush()
 

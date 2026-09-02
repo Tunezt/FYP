@@ -20,6 +20,7 @@ from app.core.db import engine as app_engine
 from app.models import Business, Expense, GoodsReceipt, GoodsReceiptLine, Item, PendingConfirmation, Receipt, StockMovement
 from app.services.catalog import ensure_default_variant
 from app.services.invoice_draft import build_draft, confirm_draft, draft_summary, match_item
+from app.services.ledger import account_balances
 from app.services.stock import open_item_stock
 from app.services.suppliers import create_supplier
 from app.services.units import ensure_standard_uoms
@@ -161,6 +162,11 @@ async def test_confirming_creates_goods_receipt_for_matched_lines_only(session_f
         assert expense.amount == Decimal("181000.00") and expense.receipt_id == photo.id
         assert [m.reason for m in (await s.execute(select(StockMovement).where(StockMovement.source_type == "goods_receipt"))).scalars()] == ["purchase", "purchase"]
         assert await _gaps(s) == []
+        # Books (M6-T6): matched goods are inventory owed to the supplier; only
+        # the 17.000 the receipt has beyond them (Kecap BH) is an expense.
+        balances = await account_balances(s)
+        assert balances["1300"] == Decimal("164000.00") and balances["2100"] == Decimal("164000.00")
+        assert balances["5200"] == Decimal("17000.00") and balances["1100"] == Decimal("-17000.00")
 
 
 async def test_photo_never_writes_stock_without_a_reply_and_one_ya_confirms(session_factory, shop):
