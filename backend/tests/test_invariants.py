@@ -480,3 +480,91 @@ async def test_stock_ledger_reconciles_after_a_simulated_day(conn):
                     await s.delete(row)
                 await s.commit()
         await engine.dispose()
+
+
+BALANCE_SHEET_SQL = text(
+    """
+    select coalesce(sum(case when a.type = 'asset'     then l.debit - l.credit else 0 end), 0) as assets,
+           coalesce(sum(case when a.type = 'liability' then l.credit - l.debit else 0 end), 0) as liabilities,
+           coalesce(sum(case when a.type = 'equity'    then l.credit - l.debit else 0 end), 0) as equity,
+           coalesce(sum(case when a.type = 'revenue'   then l.credit - l.debit else 0 end), 0)
+         - coalesce(sum(case when a.type = 'expense'   then l.debit - l.credit else 0 end), 0) as earnings,
+           count(*) as n_lines
+    from journal_lines l
+    join accounts a on a.id = l.account_id
+    """
+)
+
+
+async def test_balance_sheet_balances(conn):
+    """M6-T5: in every business, assets = liabilities + equity + current earnings —
+    read straight off the journal and through the statement service. A posted
+    day of this test's own goes in first, so the check is never vacuous (the
+    seed writes history without journal entries)."""
+    import uuid
+    from decimal import Decimal
+
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.core.security import hash_pin
+    from app.models import Business, Item, Staff
+    from app.services.orders import OrderLineSpec, PaymentSpec, create_order, refund_order
+    from app.services.receiving import GrLineSpec, receive_goods
+    from app.services.statements import balance_sheet
+    from app.services.stock import open_item_stock, set_absolute_stock
+    from app.services.units import consume_stock
+
+    engine = create_async_engine(DB_URL, connect_args={"statement_cache_size": 0})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    business_id = None
+    try:
+        async with factory() as s:
+            biz = Business(name="Neraca Day", owner_phone=f"62996{uuid.uuid4().hex[:9]}")
+            s.add(biz)
+            await s.commit()
+            business_id = biz.id
+        async with factory() as s:
+            await _set_tenant(s, business_id)
+            from tests.conftest import seed_books
+            await seed_books(s, business_id)
+            owner = Staff(business_id=business_id, name="Owner", role="owner", pin_hash=hash_pin("1234"))
+            kopi = Item(business_id=business_id, name="Kopi", unit="cup", current_stock=Decimal(10),
+                        cost_price=Decimal(7000), sell_price=Decimal(20000))
+            s.add_all([owner, kopi])
+            await s.flush()
+            await open_item_stock(s, kopi, unit_cost=kopi.cost_price)
+            created = await create_order(s, business_id=business_id, staff_id=owner.id,
+                                         lines=[OrderLineSpec(item_id=kopi.id, quantity=Decimal(3))],
+                                         payments=[PaymentSpec(method="cash", amount=Decimal(40000)),
+                                                   PaymentSpec(method="qris", amount=Decimal(20000))])
+            await receive_goods(s, business_id, lines=[GrLineSpec(item_id=kopi.id, quantity=Decimal(5), unit_cost=Decimal(7500))])
+            await consume_stock(s, kopi, Decimal(1), reason="waste", source_type="test")
+            await set_absolute_stock(s, kopi, Decimal(9), reason="opname", source_type="test")
+            await refund_order(s, business_id=business_id, order_id=created.order.id, staff_id=owner.id,
+                               manager_pin="1234", note="test", restock=True)
+            await s.commit()
+
+        n_lines_total = 0
+        for bid in (await conn.execute(text("select id from businesses order by created_at"))).scalars().all():
+            await conn.rollback()
+            await _set_tenant(conn, bid)
+            assets, liabilities, equity, earnings, n_lines = (await conn.execute(BALANCE_SHEET_SQL)).one()
+            n_lines_total += n_lines
+            assert Decimal(assets) == Decimal(liabilities) + Decimal(equity) + Decimal(earnings), (
+                f"business {bid}: assets {assets} != liabilities {liabilities} + equity {equity} + earnings {earnings}"
+            )
+            async with factory() as s:
+                await _set_tenant(s, bid)
+                sheet = await balance_sheet(s)
+            assert sheet.balances, f"business {bid}: statement service says the sheet does not balance"
+            assert sheet.assets_total == Decimal(assets) and sheet.current_earnings == Decimal(earnings)
+        await conn.rollback()
+        assert n_lines_total > 0, "no journal lines anywhere — the check ran vacuously"
+    finally:
+        if business_id is not None:
+            async with factory() as s:
+                row = await s.get(Business, business_id)
+                if row:
+                    await s.delete(row)
+                await s.commit()
+        await engine.dispose()

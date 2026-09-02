@@ -310,6 +310,41 @@ class PostingRuleUpdateIn(BaseModel):
     is_active: bool | None = None
 
 
+# ── Statements (M6-T5) ──────────────────────────────────────────────────────
+
+
+class StatementLineOut(BaseModel):
+    code: str
+    name: str
+    amount: Decimal
+
+
+class ProfitAndLossOut(BaseModel):
+    since: date  # inclusive, business-local
+    until: date  # inclusive, business-local
+    revenue: list[StatementLineOut]
+    revenue_total: Decimal
+    cogs: list[StatementLineOut]
+    cogs_total: Decimal
+    gross_profit: Decimal
+    expenses: list[StatementLineOut]
+    expenses_total: Decimal
+    net_profit: Decimal
+
+
+class BalanceSheetOut(BaseModel):
+    as_of: date  # end of this business-local day
+    assets: list[StatementLineOut]
+    assets_total: Decimal
+    liabilities: list[StatementLineOut]
+    liabilities_total: Decimal
+    equity: list[StatementLineOut]
+    equity_total: Decimal
+    current_earnings: Decimal
+    liabilities_and_equity_total: Decimal
+    balances: bool
+
+
 # ── Recipes (M4-T4) ─────────────────────────────────────────────────────────
 
 

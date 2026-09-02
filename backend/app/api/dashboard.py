@@ -5,7 +5,7 @@ queries (no per-row loops against the DB); list views are paginated.
 import asyncio
 import io
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -20,6 +20,9 @@ from app.models import (
     PurchaseOrder, Receipt, RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
 )
 from app.schemas.dashboard import (
+    BalanceSheetOut,
+    ProfitAndLossOut,
+    StatementLineOut,
     AlertRow,
     BusinessUpdateIn,
     ExpensesPage,
@@ -781,6 +784,63 @@ async def edit_posting_rule(rule_id: uuid.UUID, payload: PostingRuleUpdateIn, ct
         status, detail = _RULE_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
     return PostingRuleOut.model_validate(rule)
+
+
+# ── Statements (M6-T5) ──────────────────────────────────────────────────────
+
+
+def _local_day_bounds(tz: ZoneInfo, day: date) -> tuple[datetime, datetime]:
+    """[start, next day start) of a business-local calendar day, in UTC."""
+    start = datetime.combine(day, time.min, tzinfo=tz)
+    return start.astimezone(timezone.utc), (start + timedelta(days=1)).astimezone(timezone.utc)
+
+
+def _statement_lines(lines) -> list[StatementLineOut]:
+    return [StatementLineOut(code=l.code, name=l.name, amount=l.amount) for l in lines]
+
+
+@router.get("/statements/profit-loss", response_model=ProfitAndLossOut)
+async def statement_profit_loss(
+    ctx: OwnerCtx, since: date | None = Query(default=None), until: date | None = Query(default=None),
+):
+    """Laba rugi over inclusive business-local dates; default: this month to date."""
+    from app.services.statements import profit_and_loss
+
+    business = await _business(ctx)
+    tz = ZoneInfo(business.timezone)
+    until = until or datetime.now(tz).date()
+    since = since or until.replace(day=1)
+    if until < since:
+        raise HTTPException(status_code=422, detail="Tanggal akhir tidak boleh sebelum tanggal awal")
+    start_utc, _ = _local_day_bounds(tz, since)
+    _, end_utc = _local_day_bounds(tz, until)
+    report = await profit_and_loss(ctx.session, since=start_utc, until=end_utc)
+    return ProfitAndLossOut(
+        since=since, until=until,
+        revenue=_statement_lines(report.revenue), revenue_total=report.revenue_total,
+        cogs=_statement_lines(report.cogs), cogs_total=report.cogs_total, gross_profit=report.gross_profit,
+        expenses=_statement_lines(report.expenses), expenses_total=report.expenses_total, net_profit=report.net_profit,
+    )
+
+
+@router.get("/statements/balance-sheet", response_model=BalanceSheetOut)
+async def statement_balance_sheet(ctx: OwnerCtx, as_of: date | None = Query(default=None)):
+    """Neraca at the end of a business-local day; default today."""
+    from app.services.statements import balance_sheet
+
+    business = await _business(ctx)
+    tz = ZoneInfo(business.timezone)
+    as_of = as_of or datetime.now(tz).date()
+    _, end_utc = _local_day_bounds(tz, as_of)
+    sheet = await balance_sheet(ctx.session, until=end_utc)
+    return BalanceSheetOut(
+        as_of=as_of,
+        assets=_statement_lines(sheet.assets), assets_total=sheet.assets_total,
+        liabilities=_statement_lines(sheet.liabilities), liabilities_total=sheet.liabilities_total,
+        equity=_statement_lines(sheet.equity), equity_total=sheet.equity_total,
+        current_earnings=sheet.current_earnings, liabilities_and_equity_total=sheet.liabilities_and_equity_total,
+        balances=sheet.balances,
+    )
 
 
 _RECIPE_ERRORS = {

@@ -179,6 +179,7 @@ async def seed() -> None:
         sellable = [(i, w) for i, w in items if w > 0]
         sold_per_item: dict = {}  # item.id -> total quantity sold in the history
         sale_movements: list[tuple] = []  # (item, qty, sold_at, line, staff_id, unit_cost) — ledgered after the loop
+        day_books: dict = {}  # local date -> (posted_at, {component: amount}) — journalled per day after the loop
         for day_offset in range(30, 0, -1):
             day = now - timedelta(days=day_offset)
             weekend = day.weekday() >= 5
@@ -216,11 +217,15 @@ async def seed() -> None:
                     unit_cost_at_sale=unit_cost, created_at=sold_at,
                 )
                 session.add(line)
+                method = rng.choices(["cash", "qris"], weights=[7, 3])[0]
                 session.add(Payment(
-                    business_id=business_id, order_id=order.id,
-                    method=rng.choices(["cash", "qris"], weights=[7, 3])[0],
+                    business_id=business_id, order_id=order.id, method=method,
                     amount=total, created_at=sold_at,
                 ))
+                close_of_day = sold_at.astimezone(ZoneInfo("Asia/Jakarta")).replace(hour=21, minute=0).astimezone(timezone.utc)
+                _, components = day_books.setdefault(close_of_day.date(), (close_of_day, {}))
+                components[f"payment:{method}"] = components.get(f"payment:{method}", Decimal(0)) + total
+                components["cogs"] = components.get("cogs", Decimal(0)) + unit_cost * qty
                 sold_per_item[item.id] = sold_per_item.get(item.id, Decimal(0)) + qty
                 sale_movements.append((item, qty, sold_at, line, staff_id, unit_cost))
         await session.flush()
@@ -242,6 +247,24 @@ async def seed() -> None:
                 reason="sale", source_type="sale", source_id=line.id,
                 unit_cost=unit_cost, staff_id=staff_id, created_at=sold_at,
             )
+
+        # Books (M6-T4/M6-T5): the opening stock is capitalised as owner's
+        # capital and the history's sales post through the engine, one summary
+        # entry per day, so the statements show a real month.
+        from app.services.ledger import LineSpec, post_entry
+        from app.services.posting import post_event
+
+        opening_value = sum(
+            ((Decimal(item.current_stock) + sold_per_item.get(item.id, Decimal(0))) * Decimal(item.cost_price) for item, _w in items),
+            Decimal(0),
+        )
+        await post_entry(
+            session, business_id, lines=[LineSpec("1300", debit=opening_value), LineSpec("3100", credit=opening_value)],
+            memo="Modal awal: persediaan pembukaan", source_type="seed", event_type="OpeningBalance", posted_at=opened_at,
+        )
+        for _day, (posted_at, components) in sorted(day_books.items()):
+            await post_event(session, business_id, "OrderCompleted", components, source_type="seed",
+                             memo=f"penjualan {_day.isoformat()}", posted_at=posted_at)
 
         for category, description, amount, days_ago in EXPENSES:
             session.add(

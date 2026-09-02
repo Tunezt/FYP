@@ -809,3 +809,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Opening stock and the seed's history are not capitalised (no `Persediaan` opening entry), so inventory shows negative movements from COGS until a first goods receipt — statements (M6-T5) will treat the opening balance explicitly.
 **Deviation:** none
 **Next:** canary (5 tasks since last), then M6-T5
+
+### [M6-T5] Statements
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/services/statements.py (new), backend/app/api/dashboard.py (`GET /api/statements/profit-loss`, `GET /api/statements/balance-sheet`), backend/app/schemas/dashboard.py, backend/app/seed.py, backend/tests/test_statements.py (new, 6 tests), backend/tests/test_invariants.py (`test_balance_sheet_balances`)
+**Gates:** pytest 211 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- Both statements read straight off the journal through the chart's account types, one grouped query each, balances in the account's normal direction. P&L over a half-open UTC window: revenue accounts (contra accounts such as diskon/retur show negative there, not as expenses), cost of goods sold = the 51xx block, everything else under expense is operating expense; gross and net profit derived. Balance sheet up to an instant: assets, liabilities, equity, plus *current earnings* (revenue − expenses to date) because the ledger has no closing entries.
+- `BalanceSheet.balances` (assets = liabilities + equity + current earnings) is computed, surfaced by the API, and enforced as an invariant: `test_balance_sheet_balances` runs a posted day of its own (sale, receipt, waste, count, refund) and then checks every business two ways — raw SQL over `journal_lines` and the statement service — refusing to pass vacuously.
+- Known week (24–30 Aug 2026) test: a sale the day before, a cash+QRIS sale, a goods receipt on credit, a rent expense posted through `ExpenseIncurred`, and a waste posted after the week; exact lines and totals asserted for the week, a wider window, the receipt-only day, the sheet at week start / week end / now, and the API's inclusive business-local dates (WIB) including the 422 for a reversed range.
+- The seed now keeps books: opening stock is capitalised (`Persediaan` / `Modal pemilik`, event `OpeningBalance`) and the 30-day history posts one `OrderCompleted` summary entry per day, so the local balance sheet reads as a real shop rather than negative inventory. Seed time unchanged (~2.6 s).
+- The existing `/api/pnl` (sales − expenses from the `expenses` table) stays as the money page's chart until M6-T6 routes expenses through the ledger; after that the ledger P&L is the single source and a statements view can replace it.
+**Deviation:** none
+**Next:** M6-T6
