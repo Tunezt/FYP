@@ -21,6 +21,37 @@ export default function SettingsPage() {
   const [staffError, setStaffError] = useState<string | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
   const [pairingBusy, setPairingBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  async function importCatalog(file: File) {
+    setImportBusy(true);
+    setImportResult(null);
+    try {
+      const token = localStorage.getItem("wp_owner_token");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/catalog-import`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream" },
+        body: file,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportResult({ ok: false, message: typeof data.detail === "string" ? data.detail : "Impor gagal." });
+        return;
+      }
+      setImportResult({
+        ok: true,
+        message:
+          `Tersimpan: ${data.items_created} barang baru, ${data.items_updated} diperbarui, ` +
+          `${data.variants} varian, ${data.modifier_groups} kelompok pilihan (${data.modifiers} pilihan), ` +
+          `${data.uoms} satuan, ${data.conversions} konversi, ${data.recipe_lines} baris resep.`,
+      });
+    } catch {
+      setImportResult({ ok: false, message: "Tidak bisa terhubung ke server." });
+    } finally {
+      setImportBusy(false);
+    }
+  }
 
   const b = business.data;
   const draft = profileDraft ?? { name: b?.name ?? "", business_type: b?.business_type ?? "cafe" };
@@ -196,6 +227,63 @@ export default function SettingsPage() {
         >
           ⬇︎ Unduh template-stok.xlsx
         </a>
+      </section>
+
+      {/* Catalogue import (M4-T6) */}
+      <section>
+        <h2 className="mb-2 text-base font-bold">Impor katalog</h2>
+        <p className="ink-soft mb-3 max-w-lg text-sm">
+          Satu berkas Excel untuk barang, ukuran (varian), pilihan tambahan, satuan, konversi, dan resep.
+          Semua baris diperiksa dulu — kalau ada yang salah, tidak ada yang disimpan dan setiap baris bermasalah disebutkan.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              const token = localStorage.getItem("wp_owner_token");
+              void fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/catalog-template`, {
+                headers: { Authorization: `Bearer ${token}` },
+              })
+                .then((r) => r.blob())
+                .then((blob) => {
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = "template-katalog.xlsx";
+                  link.click();
+                  URL.revokeObjectURL(url);
+                });
+            }}
+            className="btn-quiet px-5 py-2.5 text-sm"
+          >
+            ⬇︎ Unduh template-katalog.xlsx
+          </button>
+          <label className="btn-accent cursor-pointer px-5 py-2.5 text-sm">
+            {importBusy ? "Memeriksa…" : "⬆︎ Impor berkas Excel"}
+            <input
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              disabled={importBusy}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void importCatalog(file);
+              }}
+            />
+          </label>
+        </div>
+        {importResult && (
+          <p
+            className="mt-3 max-w-lg rounded-2xl px-4 py-3 text-sm"
+            style={
+              importResult.ok
+                ? { background: "var(--good-bg, var(--accent-soft))", color: "var(--good)" }
+                : { background: "var(--bad-bg)", color: "var(--bad)" }
+            }
+          >
+            {importResult.message}
+          </p>
+        )}
       </section>
 
       <Sheet open={staffSheet} onClose={() => setStaffSheet(false)} title="Staf baru">

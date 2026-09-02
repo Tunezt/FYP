@@ -673,3 +673,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Done-when proved by `test_buy_at_two_prices_sell_and_old_margin_does_not_move`: 2 @ 20.000 + 2 @ 30.000 → average 25.000; the sale snapshots exactly 25.000 (line and movement) with margin 20.000; buying 3 @ 60.000 moves today's average to 42.500 but the old line, its margin and `get_profit` for the period stay at 25.000; the next sale snapshots 42.500. Recipe: beans 5 kg @100.000 + 5 kg @140.000 → 120.000/kg; a large latte's COGS is 24 g × 120.000 + 180 ml × 17.000 = 5.940,00 exactly and does not move when beans later cost 200.000. Receipt photo: 3 kg @38.000 on 4 kg @30.000 → 33.428,57 on the item and its default variant.
 **Deviation:** none
 **Next:** canary (5 tasks since last), then M4-T6
+
+### [M4-T6] Bulk catalogue import
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/services/catalog_import.py (new), backend/app/api/dashboard.py, backend/tests/test_catalog_import.py (new, 6 tests), docs/api-contract.md, frontend/app/(dashboard)/settings/page.tsx
+**Gates:** pytest 159 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- One workbook, six loosely-named sheets: Barang (the existing stock template, unchanged semantics), Varian, Pilihan, Satuan, Konversi, Resep. A workbook whose only sheet is the old stock template still parses. Header matching reuses the existing synonym approach.
+- Three separate phases: `parse` (pure; unreadable file / missing sheets / missing columns are structural errors), `validate` (every row checked against the sheet **and** what already exists in the database — items, variants, units, groups — producing every row-level error at once as `Sheet '<name>' baris <n>: <Indonesian reason>`), `apply` (units → conversions → items via the existing importer → variants → modifier groups and choices → recipe lines, all in the caller's transaction; any failure propagates so the caller rolls back). `import_catalog` raises before anything is written when validation finds a single error: **all or nothing**.
+- `POST /api/catalog-import` takes the .xlsx as the raw request body (≤ 5 MB; no multipart dependency added), returns counts on success, 422 naming every bad row otherwise; `GET /api/catalog-template` serves a starter workbook. Settings page: download template + upload with the result or the full error list shown. WhatsApp document upload keeps the items-only path.
+- Done-when proved by `test_five_bad_rows_import_nothing_and_are_all_named`: a 200-row workbook (120 items, 30 variants, 20 modifier rows, 5 units, 5 conversions, 20 recipe lines) with five deliberate errors — negative stock, unknown item on a variant, unknown selection kind, zero conversion factor, unknown recipe component — yields exactly 5 errors, each naming its sheet and row, and row counts across items/variants/groups/modifiers/units/conversions/recipes/ledger are unchanged afterwards. The clean version imports everything (120 items with opening ledger rows, 150 variants incl. defaults, 10 groups / 20 choices, 5 units, 5 conversions plus their reverses, 20 recipe lines) and re-importing updates in place without duplicates. Validation also accepts references to items that exist only in the database.
+**Deviation:** none
+**Next:** M5-T1 — M4 complete, tagged `checkpoint/M4`

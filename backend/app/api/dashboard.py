@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 
@@ -740,6 +740,87 @@ async def complete_onboarding(ctx: OwnerCtx):
     if business.onboarding_completed_at is None:
         business.onboarding_completed_at = datetime.now(timezone.utc)
     return BusinessOut.model_validate(business)
+
+
+CATALOG_IMPORT_MAX_BYTES = 5 * 1024 * 1024
+
+
+@router.post("/catalog-import")
+async def catalog_import(request: Request, ctx: OwnerCtx):
+    """Bulk catalogue import (M4-T6): one .xlsx with Barang / Varian / Pilihan /
+    Satuan / Konversi / Resep sheets, sent as the raw request body. Validated in
+    full first; any bad row means nothing is written and every bad row is named."""
+    from app.services.catalog_import import CatalogImportInvalid, import_catalog
+    from app.services.stock_import import StockTemplateError
+
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=422, detail="File belum dipilih — kirim berkas Excel katalog")
+    if len(data) > CATALOG_IMPORT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Berkas terlalu besar — maksimal 5 MB, coba pisahkan menjadi beberapa berkas")
+    business = await _business(ctx)
+    try:
+        result = await import_catalog(ctx.session, business, data)
+    except StockTemplateError as exc:
+        reason = str(exc).split(":", 1)[0]
+        messages = {
+            "unreadable_file": "Berkas tidak bisa dibaca — pastikan formatnya Excel (.xlsx)",
+            "missing_sheets": "Tidak ada sheet yang dikenali — pakai template katalog (Barang, Varian, Pilihan, Satuan, Konversi, Resep)",
+            "missing_columns": "Kolom wajib tidak ditemukan — pakai template katalog agar judul kolomnya cocok",
+            "no_rows": "Tidak ada baris barang yang bisa dibaca di berkas ini",
+        }
+        raise HTTPException(status_code=422, detail=messages.get(reason, "Berkas tidak bisa dibaca — pakai template katalog"))
+    except CatalogImportInvalid as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Impor dibatalkan — {len(exc.errors)} baris bermasalah, tidak ada yang disimpan. "
+                + " | ".join(exc.errors)
+            ),
+        )
+    return result
+
+
+@router.get("/catalog-template")
+async def catalog_template(ctx: OwnerCtx):
+    """Downloadable multi-sheet starter for the catalogue import (M4-T6)."""
+    import pandas as pd
+
+    sheets = {
+        "Barang": pd.DataFrame({
+            "Nama Barang": ["Es Kopi Susu", "Biji Arabica", "Susu UHT"],
+            "Jumlah": [0, 8, 24], "Satuan": ["cup", "kg", "liter"],
+            "Harga Modal": [8000, 145000, 17000], "Harga Jual": [22000, 0, 0], "Batas Minimum": [0, 3, 10],
+        }),
+        "Varian": pd.DataFrame({
+            "Barang": ["Es Kopi Susu"], "Varian": ["Large"], "Harga Jual": [27000], "Harga Modal": [10000],
+            "SKU": [""], "Utama": ["tidak"],
+        }),
+        "Pilihan": pd.DataFrame({
+            "Barang": ["Es Kopi Susu"] * 4, "Kelompok": ["Gula", "Gula", "Tambahan", "Tambahan"],
+            "Jenis": ["single", "single", "multi", "multi"], "Wajib": ["ya", "ya", "tidak", "tidak"],
+            "Pilihan": ["Normal", "Sedikit gula", "Extra shot", "Susu oat"],
+            "Tambahan Harga": [0, 0, 5000, 6000], "Default": ["ya", "", "", ""],
+        }),
+        "Satuan": pd.DataFrame({"Kode": ["karung"], "Nama": ["karung 25 kg"]}),
+        "Konversi": pd.DataFrame({"Dari": ["karung"], "Ke": ["kg"], "Faktor": [25]}),
+        "Resep": pd.DataFrame({
+            "Barang": ["Es Kopi Susu", "Es Kopi Susu", "Es Kopi Susu", "Es Kopi Susu"],
+            "Varian": ["Standar", "Standar", "Large", "Large"],
+            "Bahan": ["Biji Arabica", "Susu UHT", "Biji Arabica", "Susu UHT"],
+            "Jumlah": [18, 120, 24, 180], "Satuan": ["g", "ml", "g", "ml"],
+        }),
+    }
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as xw:
+        for name, df in sheets.items():
+            df.to_excel(xw, index=False, sheet_name=name)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="template-katalog.xlsx"'},
+    )
 
 
 @router.get("/stock-template")
