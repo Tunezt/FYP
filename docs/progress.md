@@ -768,3 +768,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Tests: chart well-formed and complete, seeding idempotent, custom accounts and every validation rule, endpoints, RLS.
 **Deviation:** none
 **Next:** M6-T2
+
+### [M6-T2] Journal with a balance constraint
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0015_journal.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/ledger.py (new), backend/tests/test_journal.py (new, 5 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py
+**Gates:** pytest 193 passed 0 skipped · migrations round-trip ok (0015 → 0014 → 0015) · frontend build ok · seed ok
+**Notes:**
+- Migration 0015: `journal_entries` (per-business `entry_no`, `posted_at`, memo, source, `event_type`, created_by) and `journal_lines` (`line_no`, account, `debit`/`credit numeric(12,2)`, row CHECKs: non-negative and exactly one side non-zero), RLS on both.
+- **Debits equal credits is enforced by the database, not application code:** Postgres has no multi-row CHECK, so the migration installs `journal_entry_must_balance()` as a `CONSTRAINT TRIGGER … DEFERRABLE INITIALLY DEFERRED` on both tables. Lines can be written one at a time inside a transaction; at COMMIT any entry whose debits ≠ credits, or that has no lines, is refused with a `check_violation`. The function is `SECURITY DEFINER` so the check sees every line whatever tenant context the caller has (a cascade delete of a business runs with none), and it skips entries that are themselves being removed.
+- `services/ledger.py`: `post_entry` (validates early with clear codes — empty, unbalanced, side, account, amount — then writes; the trigger remains the enforcement for every other path), `reverse_entry` (a new entry with every line flipped; the original stays, per §1.5), `account_balances` (normal-direction balances by account code, optional period), `trial_balance`.
+- Done-when proved by `test_unbalanced_entry_is_refused_by_the_database_at_commit`: raw rows, no service code, 50.000 debit against 40.000 credit flushes fine mid-transaction and the commit raises "unbalanced" from the database with nothing surviving. Also: an entry with no lines is refused at commit; a line with both sides or neither, or negative, is refused immediately by CHECK; a balanced sale entry posts, balances read correctly, the trial balance holds, and a reversal zeroes the balances while both entries remain; the service's early validation codes; RLS across both tables.
+- Float guard now also matches `debit|credit`.
+**Deviation:** none
+**Next:** M6-T3

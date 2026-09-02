@@ -629,6 +629,44 @@ class Account(Base):
     updated_at: Mapped[datetime] = _now()
 
 
+class JournalEntry(Base):
+    """One double-entry posting (migration 0015, roadmap M6-T2). Debits equal
+    credits by a deferred database constraint; never updated or deleted."""
+
+    __tablename__ = "journal_entries"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    entry_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    posted_at: Mapped[datetime] = _now()
+    memo: Mapped[str | None] = mapped_column(Text)
+    source_type: Mapped[str | None] = mapped_column(Text)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    event_type: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    created_at: Mapped[datetime] = _now()
+
+
+class JournalLine(Base):
+    """One side of a posting: a debit or a credit on one account."""
+
+    __tablename__ = "journal_lines"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=False)
+    line_no: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
+    debit: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    credit: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    memo: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
+
+
 class Payment(Base):
     """One payment against an order. Many per order — that is split payment."""
 

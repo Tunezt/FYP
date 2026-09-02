@@ -8,6 +8,8 @@ from app.models.models import (  # noqa: F401
     GoodsReceiptLine,
     Item,
     ItemVariant,
+    JournalEntry,
+    JournalLine,
     LoginOtp,
     MetricBaseline,
     Modifier,

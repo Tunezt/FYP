@@ -20,7 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.security import hash_pin
 from app.models import (
-    Account, Business, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier,
+    Account, Business, Item, ItemVariant, JournalEntry, JournalLine, Modifier, ModifierGroup, Order, OrderLine,
+    OrderLineModifier,
     GoodsReceipt, GoodsReceiptLine, Payment, PoLine, PurchaseOrder, RecipeLine, Sale, Staff, StockMovement, Supplier,
     Uom, UomConversion,
 )
@@ -418,6 +419,35 @@ async def test_rls_isolates_accounts(session_factory, two_tenants):
     async with session_factory() as session:
         await _set_tenant(session, a.id)
         session.add(Account(business_id=b.id, code="1100", name="Kas", type="asset"))
+        with pytest.raises(Exception):
+            await session.commit()
+
+
+async def test_rls_isolates_journal(session_factory, two_tenants):
+    """M6-T2 / roadmap §2."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        kas = Account(business_id=a.id, code="1100", name="Kas", type="asset")
+        sales = Account(business_id=a.id, code="4100", name="Penjualan", type="revenue")
+        session.add_all([kas, sales])
+        await session.flush()
+        entry = JournalEntry(business_id=a.id, entry_no=1)
+        session.add(entry)
+        await session.flush()
+        session.add_all([
+            JournalLine(business_id=a.id, entry_id=entry.id, account_id=kas.id, debit=Decimal(100)),
+            JournalLine(business_id=a.id, entry_id=entry.id, account_id=sales.id, credit=Decimal(100)),
+        ])
+        await session.commit()
+        ids = {"entry": entry.id, "kas": kas.id}
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert await session.get(JournalEntry, ids["entry"]) is None
+        assert (await session.execute(select(JournalLine).where(JournalLine.entry_id == ids["entry"]))).scalars().all() == []
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(JournalLine(business_id=b.id, entry_id=ids["entry"], account_id=ids["kas"], debit=Decimal(1)))
         with pytest.raises(Exception):
             await session.commit()
 
