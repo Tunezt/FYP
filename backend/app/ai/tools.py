@@ -212,12 +212,23 @@ async def compare_periods(session: AsyncSession, business: Business, args: dict)
 async def get_profit(session: AsyncSession, business: Business, args: dict) -> dict:
     period = args.get("period", "this_month")
     start, end, label = period_range(period, business.timezone)
-    revenue, cogs = (
+    # COGS comes from the cost snapshotted on each line at sale time (M4-T5),
+    # never from today's item cost — historical margin must not move when a
+    # purchase changes the moving average. Lines backfilled from the pre-order
+    # `sales` table have no snapshot (cost then is unknown) and fall back to the
+    # current cost, counted separately so the caller knows how much is estimated.
+    from app.models import OrderLine
+
+    revenue, cogs, unknown_lines = (
         await session.execute(
             select(
                 func.coalesce(func.sum(Sale.total_price), 0),
-                func.coalesce(func.sum(Sale.quantity * Item.cost_price), 0),
+                func.coalesce(
+                    func.sum(Sale.quantity * func.coalesce(OrderLine.unit_cost_at_sale, Item.cost_price)), 0
+                ),
+                func.count(Sale.id).filter(OrderLine.unit_cost_at_sale.is_(None)),
             )
+            .join(OrderLine, OrderLine.id == Sale.id)
             .join(Item, Item.id == Sale.item_id)
             .where(Sale.sold_at >= start, Sale.sold_at < end)
         )
@@ -236,6 +247,7 @@ async def get_profit(session: AsyncSession, business: Business, args: dict) -> d
         "period_label": label,
         "revenue": revenue_f,
         "cost_of_goods_estimate": _num(cogs),
+        "cost_of_goods_lines_without_snapshot": int(unknown_lines or 0),
         "recorded_expenses": expenses_f,
         "net_after_expenses": round(revenue_f - expenses_f, 2),
         "note": "net = revenue minus recorded expenses; COGS shown separately (expenses may already include ingredient purchases)",

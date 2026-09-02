@@ -25,11 +25,25 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Item, StockMovement
+
+MONEY = Decimal("0.01")
+
+
+def moving_average(on_hand: Decimal, old_cost: Decimal, qty_in: Decimal, unit_cost: Decimal) -> Decimal:
+    """Weighted average cost after receiving `qty_in` at `unit_cost` on top of
+    `on_hand` units carried at `old_cost`. Stock at or below zero (or an item
+    that never had a cost) simply takes the new price. Exact Decimal, rounded
+    half-up to rupiah cents."""
+    on_hand = max(Decimal(on_hand), Decimal(0))
+    if on_hand == 0 or old_cost <= 0:
+        return Decimal(unit_cost).quantize(MONEY, rounding=ROUND_HALF_UP)
+    total = on_hand * Decimal(old_cost) + Decimal(qty_in) * Decimal(unit_cost)
+    return (total / (on_hand + Decimal(qty_in))).quantize(MONEY, rounding=ROUND_HALF_UP)
 
 
 async def record_movement(
@@ -109,11 +123,27 @@ async def add_stock(
     staff_id: uuid.UUID | None = None,
     now: datetime | None = None,
 ) -> StockMovement:
-    """Goods in: increase the running figure and ledger the same positive delta."""
+    """Goods in: increase the running figure and ledger the same positive delta.
+
+    A purchase with a known unit cost also recomputes the item's moving-average
+    cost (roadmap M4-T5): the new average weights what was on hand at the old
+    average against what came in at the new price. `items.cost_price` is
+    therefore "today's cost"; every sale snapshots it onto its line, and
+    historical margin never reads it again."""
     qty = Decimal(qty)
-    item.current_stock = Decimal(item.current_stock) + qty
+    on_hand = Decimal(item.current_stock)
+    repriced = reason == "purchase" and unit_cost is not None and qty > 0
+    if repriced:
+        item.cost_price = moving_average(on_hand, Decimal(item.cost_price), qty, Decimal(unit_cost))
+    item.current_stock = on_hand + qty
     if now is not None:
         item.updated_at = now
+    if repriced:
+        # The default variant is what a sale prices its cost from (M4-T1);
+        # keep it in step here so every purchase path gets it for free.
+        from app.services.catalog import sync_default_from_item
+
+        await sync_default_from_item(session, item)
     return await record_movement(
         session,
         business_id=item.business_id,

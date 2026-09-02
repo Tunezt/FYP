@@ -205,7 +205,14 @@ async def create_order(
             if remaining is None:
                 raise InsufficientStock(item.name, item.current_stock)
         list_price = Decimal(variant.sell_price) if variant is not None else Decimal(item.sell_price)
-        cost = Decimal(variant.cost_price) if variant is not None else Decimal(item.cost_price)
+        if consumed:
+            # Made to order: cost of goods is what the recipe consumed at the
+            # components' current moving-average costs (M4-T5), per unit sold.
+            cost = (
+                sum((Decimal(comp.cost_price) * needed for comp, needed in consumed), Decimal(0)) / quantity
+            ).quantize(TWO_PLACES)
+        else:
+            cost = Decimal(variant.cost_price) if variant is not None else Decimal(item.cost_price)
         base = Decimal(spec.unit_price) if spec.unit_price is not None else list_price
         # The line's unit price is all-in: base (variant) plus every chosen modifier.
         price = (base + sum((Decimal(m.price_delta) for m in modifiers), Decimal(0))).quantize(TWO_PLACES)

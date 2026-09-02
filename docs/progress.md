@@ -660,3 +660,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Cost of a made-to-order line is still the variant's entered `cost_price`; deriving it from components is M4-T5/M9-T4 (`get_recipe_cost`).
 **Deviation:** none
 **Next:** M4-T5
+
+### [M4-T5] Moving-average COGS
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/services/stock.py, backend/app/services/receipts.py, backend/app/services/orders.py, backend/app/ai/tools.py, backend/tests/test_cogs.py (new, 4 tests)
+**Gates:** pytest 153 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `items.cost_price` is now the **moving-average cost**: `add_stock(reason="purchase", unit_cost=…)` recomputes it as (on-hand × old average + received × price) ÷ (on-hand + received), half-up to cents; stock at or below zero, or an item without a cost, simply takes the new price. Receipt-photo purchases go through it (the old "last price wins" assignment is gone); `add_stock` itself syncs the default variant (M4-T1), which the test caught: a sale prices its cost from the variant, so a purchase that only moved the item would have left the next sale snapshotting a stale cost.
+- Snapshot at sale: unchanged for plain items (`unit_cost_at_sale` = the variant's/item's cost at that moment). **Made-to-order lines now snapshot the recipe cost** — Σ component moving-average cost × quantity consumed, per unit sold — instead of the variant's hand-entered cost.
+- **Historical margin never joins today's cost.** The assistant's `get_profit` COGS now sums `order_lines.unit_cost_at_sale` (joined by the view's id) instead of `Sale.quantity × Item.cost_price`; lines backfilled from the legacy table have no snapshot and fall back to the current cost, reported separately as `cost_of_goods_lines_without_snapshot` so the estimate is never silently mixed. The dashboard P&L does not compute COGS (revenue − expenses), so nothing to change there; M9 puts both on the registry.
+- Done-when proved by `test_buy_at_two_prices_sell_and_old_margin_does_not_move`: 2 @ 20.000 + 2 @ 30.000 → average 25.000; the sale snapshots exactly 25.000 (line and movement) with margin 20.000; buying 3 @ 60.000 moves today's average to 42.500 but the old line, its margin and `get_profit` for the period stay at 25.000; the next sale snapshots 42.500. Recipe: beans 5 kg @100.000 + 5 kg @140.000 → 120.000/kg; a large latte's COGS is 24 g × 120.000 + 180 ml × 17.000 = 5.940,00 exactly and does not move when beans later cost 200.000. Receipt photo: 3 kg @38.000 on 4 kg @30.000 → 33.428,57 on the item and its default variant.
+**Deviation:** none
+**Next:** canary (5 tasks since last), then M4-T6

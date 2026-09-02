@@ -152,14 +152,15 @@ async def commit_parse(
                 {"item": match.name, "action": "set", "old": float(old), "stock": float(qty), "unit": match.unit}
             )
         else:
+            # add_stock recomputes the moving-average cost when a price was
+            # written (M4-T5); the default variant mirrors it (M4-T1).
             await add_stock(
                 session, match, qty, reason="purchase",
                 source_type="receipt", source_id=receipt.id, unit_cost=known_cost,
                 now=datetime.now(timezone.utc),
             )
-            if unit_price > 0:
-                match.cost_price = unit_price
-                await sync_default_from_item(session, match)  # M4-T1
+            if known_cost is not None:
+                await sync_default_from_item(session, match)
             stock_effects.append(
                 {"item": match.name, "action": "added", "added": float(qty), "stock": float(match.current_stock), "unit": match.unit}
             )
