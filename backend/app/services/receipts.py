@@ -17,6 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Business, Expense, Item, PendingConfirmation, Receipt
+from app.services.stock import add_stock, open_item_stock, set_absolute_stock
 
 logger = logging.getLogger("receipts")
 
@@ -119,6 +120,10 @@ async def commit_parse(
             )
         ).scalar_one_or_none()
 
+        # Every branch below writes its stock_movements row in this same
+        # transaction (M2-T2). A purchase price is the unit cost when written;
+        # a stock count carries no cost — NULL, never a guess.
+        known_cost = unit_price if unit_price > 0 else None
         if match is None:
             item = Item(
                 business_id=business.id,
@@ -128,17 +133,28 @@ async def commit_parse(
                 cost_price=unit_price,
             )
             session.add(item)
+            await session.flush()
+            await open_item_stock(
+                session, item,
+                reason="opname" if doc_type == "stock_ledger" else "purchase",
+                source_type="receipt", source_id=receipt.id, unit_cost=known_cost,
+            )
             stock_effects.append({"item": name, "action": "created", "stock": float(qty), "unit": unit})
         elif doc_type == "stock_ledger":
             old = match.current_stock
-            match.current_stock = qty
-            match.updated_at = datetime.now(timezone.utc)
+            await set_absolute_stock(
+                session, match, qty, reason="opname",
+                source_type="receipt", source_id=receipt.id, now=datetime.now(timezone.utc),
+            )
             stock_effects.append(
                 {"item": match.name, "action": "set", "old": float(old), "stock": float(qty), "unit": match.unit}
             )
         else:
-            match.current_stock = match.current_stock + qty
-            match.updated_at = datetime.now(timezone.utc)
+            await add_stock(
+                session, match, qty, reason="purchase",
+                source_type="receipt", source_id=receipt.id, unit_cost=known_cost,
+                now=datetime.now(timezone.utc),
+            )
             if unit_price > 0:
                 match.cost_price = unit_price
             stock_effects.append(

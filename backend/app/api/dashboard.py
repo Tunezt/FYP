@@ -220,6 +220,14 @@ async def create_item(payload: ItemCreateIn, ctx: OwnerCtx):
     item = Item(business_id=ctx.business_id, **payload.model_dump())
     ctx.session.add(item)
     await ctx.session.flush()
+    # Opening balance goes into the ledger in the same transaction (M2-T2).
+    from app.services.stock import open_item_stock
+
+    await open_item_stock(
+        ctx.session, item, reason="opname", source_type="dashboard",
+        unit_cost=item.cost_price if item.cost_price and item.cost_price > 0 else None,
+        staff_id=ctx.staff_id,
+    )
     return InventoryItem(
         id=item.id,
         name=item.name,
@@ -240,9 +248,18 @@ async def update_item(item_id: uuid.UUID, payload: ItemUpdateIn, ctx: OwnerCtx):
     if item is None:
         raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
     changes = payload.model_dump(exclude_none=True)
+    new_stock = changes.pop("current_stock", None)
     for field, value in changes.items():
         setattr(item, field, value)
-    if changes:
+    if new_stock is not None:
+        # An edited stock figure is a correction: ledgered in this transaction (M2-T2).
+        from app.services.stock import set_absolute_stock
+
+        await set_absolute_stock(
+            ctx.session, item, new_stock, reason="correction", source_type="dashboard",
+            staff_id=ctx.staff_id,
+        )
+    if changes or new_stock is not None:
         item.updated_at = datetime.now(timezone.utc)
     await ctx.session.flush()
     return InventoryItem(

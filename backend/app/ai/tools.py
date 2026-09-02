@@ -283,9 +283,14 @@ async def correct_stock(session: AsyncSession, business: Business, args: dict) -
         }
     item = matches[0]
     old = item.current_stock
-    item.current_stock = new_qty
-    item.updated_at = datetime.now(timezone.utc)
-    await session.flush()
+    # Owner-declared fix over WhatsApp: a 'correction' ledger row in the same
+    # transaction (M2-T2); no cost is known for a correction.
+    from app.services.stock import set_absolute_stock
+
+    await set_absolute_stock(
+        session, item, new_qty, reason="correction", source_type="whatsapp",
+        now=datetime.now(timezone.utc),
+    )
     return {
         "ok": True,
         "item": item.name,

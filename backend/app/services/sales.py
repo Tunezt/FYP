@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Item, Sale
+from app.services.stock import record_movement
 
 
 class InsufficientStock(Exception):
@@ -76,4 +77,19 @@ async def record_sale(
     )
     session.add(sale)
     await session.flush()
+    # Ledger row in the same transaction (M2-T2). The atomic UPDATE above stays
+    # the concurrency guard; this is the auditable history alongside it.
+    # unit_cost snapshots today's cost so historical margin never drifts.
+    await record_movement(
+        session,
+        business_id=business_id,
+        item_id=item_id,
+        qty_delta=-quantity,
+        reason="sale",
+        source_type="sale",
+        source_id=sale.id,
+        unit_cost=item.cost_price,
+        staff_id=staff_id,
+        created_at=sale.sold_at,
+    )
     return RecordedSale(sale=sale, item_name=item.name, remaining_stock=remaining)

@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Business, Item
+from app.services.stock import open_item_stock, set_absolute_stock
 
 logger = logging.getLogger("stock_import")
 
@@ -107,28 +108,36 @@ async def apply_stock_template(
                 select(Item).where(Item.name.ilike(row["name"])).limit(1)
             )
         ).scalar_one_or_none()
+        # An Excel template is a stock count: opname rows in the same
+        # transaction (M2-T2). Cost is the template's cost price when given.
+        known_cost = row["cost_price"] if row["cost_price"] > 0 else None
         if existing is None:
-            session.add(
-                Item(
-                    business_id=business.id,
-                    name=row["name"],
-                    unit=row["unit"],
-                    current_stock=row["quantity"],
-                    cost_price=row["cost_price"],
-                    sell_price=row["sell_price"],
-                    reorder_threshold=row["reorder_threshold"],
-                )
+            item = Item(
+                business_id=business.id,
+                name=row["name"],
+                unit=row["unit"],
+                current_stock=row["quantity"],
+                cost_price=row["cost_price"],
+                sell_price=row["sell_price"],
+                reorder_threshold=row["reorder_threshold"],
+            )
+            session.add(item)
+            await session.flush()
+            await open_item_stock(
+                session, item, reason="opname", source_type="stock_import", unit_cost=known_cost
             )
             created.append(row["name"])
         else:
-            existing.current_stock = row["quantity"]
+            await set_absolute_stock(
+                session, existing, row["quantity"], reason="opname",
+                source_type="stock_import", unit_cost=known_cost, now=datetime.now(timezone.utc),
+            )
             if row["cost_price"] > 0:
                 existing.cost_price = row["cost_price"]
             if row["sell_price"] > 0:
                 existing.sell_price = row["sell_price"]
             if row["reorder_threshold"] > 0:
                 existing.reorder_threshold = row["reorder_threshold"]
-            existing.updated_at = datetime.now(timezone.utc)
             updated.append(existing.name)
     await session.flush()
     return {

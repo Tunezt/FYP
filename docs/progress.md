@@ -507,3 +507,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Nothing writes to the table yet; that is M2-T2.
 **Deviation:** none
 **Next:** M2-T2
+
+### [M2-T2] Route every stock change through `stock_movements`
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/services/stock.py (new), backend/app/services/sales.py, backend/app/services/receipts.py, backend/app/services/stock_import.py, backend/app/ai/tools.py, backend/app/api/dashboard.py, backend/app/seed.py, backend/tests/test_stock_movements.py (new, 6 tests)
+**Gates:** pytest 96 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- Every write to `items.current_stock` found by grep now writes its ledger row in the same session/transaction via `services/stock.py` (`record_movement`, `set_absolute_stock`, `add_stock`, `open_item_stock`): POS/WhatsApp sale → `sale` (−qty, `unit_cost` = today's `cost_price` snapshot, `source_id` = sale id, staff); receipt photo → `purchase` (+qty, cost = written unit price or NULL) for adds and new items, `opname` (delta, NULL cost) for stock-book counts; Excel import → `opname` for creates and updates; WhatsApp `correct_stock` → `correction` (NULL cost); dashboard item create → `opname` opening balance, dashboard stock edit → `correction`, name/price-only edits write nothing; seed → one `opname` opening row per item (today's stock + everything sold in the 30-day history) and one `sale` row per historical sale, timestamped to match.
+- **The atomic conditional UPDATE and `check (current_stock >= 0)` are untouched.** `test_concurrent_sale_of_last_unit` passes unchanged; the movement row is written after the guard succeeds, in the same transaction, so a rejected sale writes no row.
+- `test_stock_movements.py` exercises each path against the real database and asserts the exact `qty_delta`, `reason`, `unit_cost` (NULL where unknown) and that `SUM(qty_delta) == current_stock` after every operation. The seed was verified reconciled for all 11 items (621 sale rows + 11 opening rows); M2-T3 makes that a standing invariant.
+- Zero-quantity item creation writes no opening row (nothing moved); the reconciliation still holds (0 == 0).
+**Deviation:** none
+**Next:** M2-T3
