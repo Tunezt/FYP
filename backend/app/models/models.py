@@ -6,13 +6,14 @@ construction and must not drift from it. A migration that adds a table adds its
 model here in the same commit (roadmap §1.7).
 """
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -55,6 +56,9 @@ payment_method = Enum(
     name="payment_method", create_type=False,
 )
 modifier_selection = Enum("single", "multi", name="modifier_selection", create_type=False)
+po_status = Enum(
+    "draft", "ordered", "partially_received", "received", "cancelled", name="po_status", create_type=False
+)
 
 
 class Business(Base):
@@ -516,6 +520,50 @@ class Supplier(Base):
     address: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class PurchaseOrder(Base):
+    """What was asked of a supplier (migration 0012, roadmap M5-T2). Never
+    touches stock; goods receipts (M5-T3) advance its lines."""
+
+    __tablename__ = "purchase_orders"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    supplier_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False)
+    status: Mapped[str] = mapped_column(po_status, nullable=False, server_default="draft")
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    expected_at: Mapped[date | None] = mapped_column(Date)
+    ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class PoLine(Base):
+    """One item on a purchase order: ordered quantity (in a unit), agreed unit
+    cost, and how much has arrived so far."""
+
+    __tablename__ = "po_lines"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    po_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("purchase_orders.id"), nullable=False)
+    item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    uom_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("uoms.id"))
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    received_quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, server_default="0")
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
 

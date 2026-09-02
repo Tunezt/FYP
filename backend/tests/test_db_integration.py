@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.security import hash_pin
 from app.models import (
     Business, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier,
-    Payment, RecipeLine, Sale, Staff, StockMovement, Supplier, Uom, UomConversion,
+    Payment, PoLine, PurchaseOrder, RecipeLine, Sale, Staff, StockMovement, Supplier, Uom, UomConversion,
 )
 from app.services.sales import InsufficientStock, record_sale
 
@@ -349,6 +349,32 @@ async def test_rls_isolates_suppliers(session_factory, two_tenants):
         await _set_tenant(session, a.id)
         assert (await session.execute(select(Supplier).where(Supplier.name == "Supplier A"))).scalar_one().phone == "0811"
         session.add(Supplier(business_id=b.id, name="Smuggled"))
+        with pytest.raises(Exception):
+            await session.commit()
+
+
+async def test_rls_isolates_purchase_orders(session_factory, two_tenants):
+    """M5-T2 / roadmap §2."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        supplier = Supplier(business_id=a.id, name="PO Supplier A")
+        item = Item(business_id=a.id, name="PO Item A", unit="kg")
+        session.add_all([supplier, item])
+        await session.flush()
+        po = PurchaseOrder(business_id=a.id, supplier_id=supplier.id, number=1)
+        session.add(po)
+        await session.flush()
+        session.add(PoLine(business_id=a.id, po_id=po.id, item_id=item.id, quantity=Decimal(3), unit_cost=Decimal(1000), line_total=Decimal(3000)))
+        await session.commit()
+        ids = {"po": po.id, "item": item.id}
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert await session.get(PurchaseOrder, ids["po"]) is None
+        assert (await session.execute(select(PoLine).where(PoLine.po_id == ids["po"]))).scalars().all() == []
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(PoLine(business_id=b.id, po_id=ids["po"], item_id=ids["item"], quantity=Decimal(1)))
         with pytest.raises(Exception):
             await session.commit()
 

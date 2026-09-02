@@ -153,6 +153,64 @@ class SupplierHistoryOut(BaseModel):
     receipts: list[SupplierReceiptOut]
 
 
+# ── Purchase orders (M5-T2) ─────────────────────────────────────────────────
+
+from datetime import date  # noqa: E402
+
+
+class PoLineIn(BaseModel):
+    item_id: uuid.UUID
+    quantity: Decimal = Field(gt=0, le=Decimal("999999"))
+    unit_cost: Decimal = Field(default=Decimal(0), ge=0)
+    uom_id: uuid.UUID | None = None
+
+
+class PoLineUpdateIn(BaseModel):
+    item_id: uuid.UUID | None = None
+    quantity: Decimal | None = Field(default=None, gt=0, le=Decimal("999999"))
+    unit_cost: Decimal | None = Field(default=None, ge=0)
+    uom_id: uuid.UUID | None = None
+
+
+class PurchaseOrderCreateIn(BaseModel):
+    supplier_id: uuid.UUID
+    lines: list[PoLineIn] = Field(default_factory=list, max_length=100)
+    notes: str | None = Field(default=None, max_length=500)
+    expected_at: date | None = None
+
+
+class PurchaseOrderUpdateIn(BaseModel):
+    notes: str | None = Field(default=None, max_length=500)
+    expected_at: date | None = None
+
+
+class PoLineOut(BaseModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    item_name: str
+    quantity: Decimal
+    uom_id: uuid.UUID | None
+    uom_code: str | None
+    unit_cost: Decimal
+    line_total: Decimal
+    received_quantity: Decimal
+
+
+class PurchaseOrderOut(BaseModel):
+    id: uuid.UUID
+    number: int
+    supplier_id: uuid.UUID
+    supplier_name: str
+    status: str
+    notes: str | None
+    expected_at: date | None
+    ordered_at: datetime | None
+    cancelled_at: datetime | None
+    subtotal: Decimal
+    created_at: datetime
+    lines: list[PoLineOut]
+
+
 # ── Recipes (M4-T4) ─────────────────────────────────────────────────────────
 
 

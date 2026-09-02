@@ -700,3 +700,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - M5-T2 (purchase orders) and M5-T3 (goods receipts) will extend the same history.
 **Deviation:** none
 **Next:** M5-T2
+
+### [M5-T2] Purchase orders
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0012_purchase_orders.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/purchasing.py (new), backend/app/api/dashboard.py, backend/app/schemas/dashboard.py, backend/tests/test_purchase_orders.py (new, 4 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py, docs/api-contract.md
+**Gates:** pytest 168 passed 0 skipped · migrations round-trip ok (0012 → 0011 → 0012) · frontend build ok · seed ok
+**Notes:**
+- Migration 0012: enum `po_status` (draft, ordered, partially_received, received, cancelled), `purchase_orders` (supplier, per-business running `number`, notes, expected date, ordered/cancelled timestamps, `subtotal numeric(12,2)`) and `po_lines` (item, `quantity numeric(12,3)` in an optional unit, `unit_cost`, `line_total`, `received_quantity`), RLS on both.
+- State machine in `services/purchasing.py`: lines are editable (add / change / remove) only while a PO is a draft — a draft is a worksheet, not history; `mark_ordered` refuses an empty PO and freezes lines; `cancel` is allowed from draft or ordered only and refused once anything has been received; `refresh_status_from_lines` derives partially_received / received from the lines and is what M5-T3's goods receipts will call. **A PO never touches stock or cost** — proved by the test (no ledger rows, stock unchanged).
+- Owner API: list (filter by status), create with lines, get, patch notes/expected date, add/edit/delete line (draft only), order, cancel. Indonesian errors for every rule.
+- Tests: draft lifecycle and running subtotal, numbering per business, ordering freezes lines, cancel rules including a simulated partial receipt, validation of supplier/item/unit/quantity, the endpoints end to end, RLS on both tables.
+**Deviation:** none
+**Next:** M5-T3

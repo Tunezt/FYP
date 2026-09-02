@@ -16,8 +16,8 @@ from sqlalchemy import func, select
 from app.ai.periods import period_range
 from app.core.deps import OwnerCtx
 from app.models import (
-    Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, Receipt, RecipeLine, Sale, Staff, Supplier,
-    Uom, UomConversion,
+    Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PurchaseOrder, Receipt, RecipeLine,
+    Sale, Staff, Supplier, Uom, UomConversion,
 )
 from app.schemas.dashboard import (
     AlertRow,
@@ -54,6 +54,12 @@ from app.schemas.dashboard import (
     SupplierOut,
     SupplierReceiptOut,
     SupplierUpdateIn,
+    PoLineIn,
+    PoLineOut,
+    PoLineUpdateIn,
+    PurchaseOrderCreateIn,
+    PurchaseOrderOut,
+    PurchaseOrderUpdateIn,
 )
 from app.schemas.auth import BusinessOut
 from app.services.velocity import VELOCITY_WINDOW_DAYS
@@ -466,6 +472,159 @@ async def supplier_history(supplier_id: uuid.UUID, ctx: OwnerCtx):
         total_spent=h["total_spent"], last_purchase_at=h["last_purchase_at"],
         receipts=[SupplierReceiptOut(**r) for r in h["receipts"]],
     )
+
+
+_PO_ERRORS = {
+    "supplier": (404, "Supplier tidak ditemukan"),
+    "supplier_inactive": (409, "Supplier ini sudah dinonaktifkan — aktifkan dulu atau pilih supplier lain"),
+    "item": (404, "Barang tidak ditemukan"),
+    "uom": (404, "Satuan tidak ditemukan"),
+    "quantity": (422, "Jumlah dan harga pesanan harus angka yang masuk akal (jumlah lebih dari nol)"),
+    "not_draft": (409, "Pesanan ini sudah dikirim ke supplier — barisnya tidak bisa diubah lagi"),
+    "empty": (422, "Pesanan belum punya barang — tambahkan dulu sebelum dikirim"),
+    "not_open": (409, "Pesanan ini sudah selesai atau sudah dibatalkan"),
+    "already_received": (409, "Sebagian barang sudah diterima — pesanan tidak bisa dibatalkan lagi"),
+    "line": (404, "Baris pesanan tidak ditemukan"),
+}
+
+
+async def _po_out(session, po: PurchaseOrder) -> PurchaseOrderOut:
+    from app.services.purchasing import lines_of
+
+    supplier = await session.get(Supplier, po.supplier_id)
+    out_lines = []
+    for l in await lines_of(session, po.id):
+        item = await session.get(Item, l.item_id)
+        uom = await session.get(Uom, l.uom_id) if l.uom_id else None
+        out_lines.append(PoLineOut(
+            id=l.id, item_id=l.item_id, item_name=item.name if item else "?", quantity=l.quantity,
+            uom_id=l.uom_id, uom_code=uom.code if uom else None, unit_cost=l.unit_cost,
+            line_total=l.line_total, received_quantity=l.received_quantity,
+        ))
+    return PurchaseOrderOut(
+        id=po.id, number=po.number, supplier_id=po.supplier_id, supplier_name=supplier.name if supplier else "?",
+        status=po.status, notes=po.notes, expected_at=po.expected_at, ordered_at=po.ordered_at,
+        cancelled_at=po.cancelled_at, subtotal=po.subtotal, created_at=po.created_at, lines=out_lines,
+    )
+
+
+async def _po(session, po_id: uuid.UUID) -> PurchaseOrder:
+    po = await session.get(PurchaseOrder, po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Pesanan pembelian tidak ditemukan")
+    return po
+
+
+def _po_error(exc) -> HTTPException:
+    status, detail = _PO_ERRORS[exc.code]
+    return HTTPException(status_code=status, detail=detail)
+
+
+@router.get("/purchase-orders", response_model=list[PurchaseOrderOut])
+async def list_purchase_orders(ctx: OwnerCtx, status: str | None = Query(default=None)):
+    stmt = select(PurchaseOrder).order_by(PurchaseOrder.number.desc())
+    if status:
+        stmt = stmt.where(PurchaseOrder.status == status)
+    return [await _po_out(ctx.session, po) for po in (await ctx.session.execute(stmt)).scalars()]
+
+
+@router.post("/purchase-orders", response_model=PurchaseOrderOut, status_code=201)
+async def create_po(payload: PurchaseOrderCreateIn, ctx: OwnerCtx):
+    from app.services.purchasing import PoLineSpec, PurchaseOrderInvalid, create_purchase_order
+
+    try:
+        po = await create_purchase_order(
+            ctx.session, ctx.business_id, supplier_id=payload.supplier_id,
+            lines=[PoLineSpec(item_id=l.item_id, quantity=l.quantity, unit_cost=l.unit_cost, uom_id=l.uom_id) for l in payload.lines],
+            notes=payload.notes, expected_at=payload.expected_at, created_by=ctx.staff_id,
+        )
+    except PurchaseOrderInvalid as exc:
+        raise _po_error(exc)
+    return await _po_out(ctx.session, po)
+
+
+@router.get("/purchase-orders/{po_id}", response_model=PurchaseOrderOut)
+async def get_po(po_id: uuid.UUID, ctx: OwnerCtx):
+    return await _po_out(ctx.session, await _po(ctx.session, po_id))
+
+
+@router.patch("/purchase-orders/{po_id}", response_model=PurchaseOrderOut)
+async def edit_po(po_id: uuid.UUID, payload: PurchaseOrderUpdateIn, ctx: OwnerCtx):
+    po = await _po(ctx.session, po_id)
+    changes = payload.model_dump(exclude_none=True)
+    for field, value in changes.items():
+        setattr(po, field, value)
+    if changes:
+        po.updated_at = datetime.now(timezone.utc)
+        await ctx.session.flush()
+    return await _po_out(ctx.session, po)
+
+
+@router.post("/purchase-orders/{po_id}/lines", response_model=PurchaseOrderOut, status_code=201)
+async def add_po_line(po_id: uuid.UUID, payload: PoLineIn, ctx: OwnerCtx):
+    from app.services.purchasing import PoLineSpec, PurchaseOrderInvalid, add_line
+
+    po = await _po(ctx.session, po_id)
+    try:
+        await add_line(ctx.session, po, PoLineSpec(item_id=payload.item_id, quantity=payload.quantity, unit_cost=payload.unit_cost, uom_id=payload.uom_id))
+    except PurchaseOrderInvalid as exc:
+        raise _po_error(exc)
+    return await _po_out(ctx.session, po)
+
+
+@router.patch("/purchase-orders/{po_id}/lines/{line_id}", response_model=PurchaseOrderOut)
+async def edit_po_line(po_id: uuid.UUID, line_id: uuid.UUID, payload: PoLineUpdateIn, ctx: OwnerCtx):
+    from app.services.purchasing import PurchaseOrderInvalid, update_line
+
+    po = await _po(ctx.session, po_id)
+    line = await ctx.session.get(PoLine, line_id)
+    if line is None:
+        raise HTTPException(status_code=404, detail="Baris pesanan tidak ditemukan")
+    try:
+        await update_line(ctx.session, po, line, **payload.model_dump(exclude_unset=True))
+    except PurchaseOrderInvalid as exc:
+        raise _po_error(exc)
+    return await _po_out(ctx.session, po)
+
+
+@router.delete("/purchase-orders/{po_id}/lines/{line_id}", response_model=PurchaseOrderOut)
+async def delete_po_line(po_id: uuid.UUID, line_id: uuid.UUID, ctx: OwnerCtx):
+    """Only while the PO is a draft (a worksheet, not history)."""
+    from app.services.purchasing import PurchaseOrderInvalid, remove_line
+
+    po = await _po(ctx.session, po_id)
+    line = await ctx.session.get(PoLine, line_id)
+    if line is None:
+        raise HTTPException(status_code=404, detail="Baris pesanan tidak ditemukan")
+    try:
+        await remove_line(ctx.session, po, line)
+    except PurchaseOrderInvalid as exc:
+        raise _po_error(exc)
+    return await _po_out(ctx.session, po)
+
+
+@router.post("/purchase-orders/{po_id}/order", response_model=PurchaseOrderOut)
+async def order_po(po_id: uuid.UUID, ctx: OwnerCtx):
+    from app.services.purchasing import PurchaseOrderInvalid, mark_ordered
+
+    po = await _po(ctx.session, po_id)
+    try:
+        await mark_ordered(ctx.session, po)
+    except PurchaseOrderInvalid as exc:
+        raise _po_error(exc)
+    return await _po_out(ctx.session, po)
+
+
+@router.post("/purchase-orders/{po_id}/cancel", response_model=PurchaseOrderOut)
+async def cancel_po(po_id: uuid.UUID, ctx: OwnerCtx):
+    from app.services.purchasing import PurchaseOrderInvalid, cancel
+
+    po = await _po(ctx.session, po_id)
+    try:
+        await cancel(ctx.session, po)
+    except PurchaseOrderInvalid as exc:
+        raise _po_error(exc)
+    return await _po_out(ctx.session, po)
 
 
 _RECIPE_ERRORS = {

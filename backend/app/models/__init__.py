@@ -14,6 +14,8 @@ from app.models.models import (  # noqa: F401
     OrderLineModifier,
     Payment,
     PendingConfirmation,
+    PoLine,
+    PurchaseOrder,
     Receipt,
     RecipeLine,
     RequestLog,
