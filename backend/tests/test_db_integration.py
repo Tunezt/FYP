@@ -19,7 +19,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.security import hash_pin
-from app.models import Business, Item, Sale, Staff
+from app.models import Business, Item, Sale, Staff, StockMovement
 from app.services.sales import InsufficientStock, record_sale
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
@@ -115,6 +115,45 @@ async def test_rls_no_context_means_no_rows(session_factory, two_tenants):
             # current_setting('app.current_business_id') errors when unset —
             # queries fail closed, they don't leak.
             (await session.execute(select(Item))).scalars().all()
+
+
+async def test_rls_isolates_stock_movements(session_factory, two_tenants):
+    """M2-T1 / roadmap §2: business A cannot read B's stock_movements rows, and
+    cannot write a row claiming to be B's."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        item = Item(business_id=a.id, name="Ledger Item A", unit="kg", current_stock=Decimal(3))
+        session.add(item)
+        await session.flush()
+        session.add(
+            StockMovement(
+                business_id=a.id, item_id=item.id, qty_delta=Decimal(3),
+                reason="purchase", source_type="test", unit_cost=Decimal("12500.00"),
+            )
+        )
+        await session.commit()
+        item_id = item.id
+
+    async with session_factory() as session:  # B sees nothing of A's ledger
+        await _set_tenant(session, b.id)
+        rows = (await session.execute(select(StockMovement).where(StockMovement.item_id == item_id))).scalars().all()
+        assert rows == []
+
+    async with session_factory() as session:  # A sees its own row, with exact numbers
+        await _set_tenant(session, a.id)
+        row = (await session.execute(select(StockMovement).where(StockMovement.item_id == item_id))).scalar_one()
+        assert row.qty_delta == Decimal("3.000")
+        assert row.unit_cost == Decimal("12500.00")
+        assert row.reason == "purchase"
+
+    async with session_factory() as session:  # A cannot smuggle a row into B's ledger
+        await _set_tenant(session, a.id)
+        session.add(
+            StockMovement(business_id=b.id, item_id=item_id, qty_delta=Decimal(1), reason="correction")
+        )
+        with pytest.raises(Exception):
+            await session.commit()
 
 
 async def test_concurrent_sale_of_last_unit(session_factory, two_tenants):

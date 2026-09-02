@@ -20,7 +20,7 @@ DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 # Column names that carry rupiah or quantities. Anything matching must be exact
 # `numeric`, never `real` / `double precision` (roadmap §1.3).
-MONEY_OR_QUANTITY = re.compile(r"amount|price|total|cost|stock|quantity|threshold")
+MONEY_OR_QUANTITY = re.compile(r"amount|price|total|cost|stock|quantity|qty|threshold")
 
 # Every column that should be caught today. Guards against the pattern silently
 # matching nothing (e.g. after a rename) and the test passing vacuously.
@@ -34,6 +34,8 @@ KNOWN_MONEY_COLUMNS = {
     ("sales", "total_price"),
     ("receipts", "total_amount"),
     ("expenses", "amount"),
+    ("stock_movements", "qty_delta"),
+    ("stock_movements", "unit_cost"),
 }
 
 # pg_catalog rather than information_schema: the latter only lists columns the
@@ -134,6 +136,7 @@ RLS_ALLOWLIST = {"businesses", "login_otps"}
 KNOWN_SCOPED_TABLES = {
     "staff", "items", "sales", "expenses", "receipts", "alerts",
     "metric_baselines", "request_logs", "pending_confirmations",
+    "stock_movements",
 }
 
 # Plain tables and partitions only: policies do not attach to views. M3-T2, which

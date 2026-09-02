@@ -1,8 +1,9 @@
-"""SQLAlchemy models — a 1:1 mirror of the DDL in alembic/versions/0001_initial_schema.py.
+"""SQLAlchemy models — a 1:1 mirror of the DDL in alembic/versions/ (0001 onward).
 
-The schema itself (7 core entities + support tables, RLS policies, indexes) is
-defined in raw SQL in the migration; these models exist for query construction
-and must not drift from it.
+The schema itself (core entities, support tables, roadmap tables, RLS policies,
+indexes) is defined in raw SQL in the migrations; these models exist for query
+construction and must not drift from it. A migration that adds a table adds its
+model here in the same commit (roadmap §1.7).
 """
 import uuid
 from datetime import datetime
@@ -42,6 +43,11 @@ staff_role = Enum("owner", "staff", name="staff_role", create_type=False)
 expense_source = Enum("manual", "receipt", name="expense_source", create_type=False)
 alert_type = Enum("anomaly", "low_stock", name="alert_type", create_type=False)
 alert_severity = Enum("low", "medium", "high", name="alert_severity", create_type=False)
+stock_movement_reason = Enum(
+    "sale", "sale_void", "refund", "purchase", "waste",
+    "production_in", "production_out", "opname", "correction",
+    name="stock_movement_reason", create_type=False,
+)
 
 
 class Business(Base):
@@ -231,4 +237,30 @@ class LoginOtp(Base):
     code_hash: Mapped[str] = mapped_column(Text, nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _now()
+
+
+# ── Roadmap v2 tables (docs/BUILD-ROADMAP.md §5) ──────────────────────────────
+
+
+class StockMovement(Base):
+    """Append-only stock ledger (migration 0003, roadmap M2). One signed row per
+    stock change; `items.current_stock` is the cached SUM(qty_delta) per item.
+    Never updated or deleted — reversals are new rows with the opposite sign."""
+
+    __tablename__ = "stock_movements"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id"), nullable=False
+    )
+    qty_delta: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    reason: Mapped[str] = mapped_column(stock_movement_reason, nullable=False)
+    source_type: Mapped[str | None] = mapped_column(Text)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
     created_at: Mapped[datetime] = _now()

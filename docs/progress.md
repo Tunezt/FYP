@@ -494,3 +494,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **What I did instead:** moved to M2-T1 (blocked only by M0-T6, which is done).
 **Deviation:** M1-T3 split into part 1 (this) and part 2 (live re-measure), recorded per roadmap §0.1.
 **Next:** M2-T1
+
+### [M2-T1] Create `stock_movements`
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0003_stock_movements.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/tests/test_db_integration.py, backend/tests/test_invariants.py
+**Gates:** pytest 90 passed 0 skipped · migrations round-trip ok (0003 → 0002 → 0003) · frontend build ok · seed ok
+**Notes:**
+- Migration 0003 creates enum `stock_movement_reason` (sale, sale_void, refund, purchase, waste, production_in, production_out, opname, correction) and table `stock_movements` exactly as specified: `qty_delta numeric(12,3)` signed, `unit_cost numeric(12,2)` nullable (NULL when unknown, never a guess), `source_type`/`source_id` without an FK so history survives the M3 order model, index on `(business_id, item_id, created_at desc)`. RLS template applied in the same migration; helpers copied from 0001 per §1.7. Downgrade drops table then type.
+- `StockMovement` model added in the same commit, enum declared `create_type=False`.
+- Tests: `test_rls_isolates_stock_movements` proves business B cannot read A's rows, A reads its own with exact `numeric` values, and A cannot insert a row claiming B (WITH CHECK). `test_invariants.py` now also matches `qty` in the float guard and expects `stock_movements.qty_delta`/`unit_cost` numeric and the table in the RLS coverage set — M0-T4 and M0-T5 pass with the new table.
+- Nothing writes to the table yet; that is M2-T2.
+**Deviation:** none
+**Next:** M2-T2
