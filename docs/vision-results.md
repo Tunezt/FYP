@@ -549,3 +549,992 @@ Candidate levers for M1-T3 (recorded now so the tuning is planned, **not applied
 - Prompt: require `unit` to be empty when not written, and forbid computing `unit_price`.
 - Prompt: ask for a per-item `read_confidence` so a single doubtful line downgrades the whole
   document — the current schema only has one document-level signal.
+
+### M1-T2 expanded set, untuned prompt — 2026-09-02 18:27 UTC
+
+- vision model: `gemini-2.5-flash` (setting `GEMINI_PRO_MODEL`)
+- prompt/schema: `backend/app/ai/vision.py` at commit `86707d7`
+- gate rule: `app.services.receipts.needs_confirmation` — confidence != high, or any ambiguity, or no items
+- images: 18 (scored against manifest.json)
+
+**Per-category summary** (sample counts stated; scoring rules in the script docstring):
+
+| category | n | lines matched | totals exact | gate triggered | silent errors |
+|---|---|---|---|---|---|
+| handwritten_photo | 3 | 27/27 (100%) | 2/3 | 1/3 | **2** |
+| thermal_printed | 4 | 30/30 (100%) | 4/4 | 0/4 | **1** |
+| handwritten_font | 4 | 26/26 (100%) | 4/4 | 1/4 | **2** |
+| blurred | 3 | 28/28 (100%) | 2/3 | 0/3 | **2** |
+| angled | 3 | 23/23 (100%) | 2/3 | 1/3 | **0** |
+| unreadable_control | 1 | n/a (no fabricated items) | n/a | 1/1 | **0** |
+| **all** | 18 | 134/134 (100%) | 14/17 | 4/18 | **7** |
+
+#### `test-receipt-1-neat.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size 2304 KB · image/png · latency 15048 ms · tokens in/out 479/527
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 1 · **SILENT ERROR**
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "stock_ledger", "supplier": "", "date": "2025-05-25", "items": [{"name": "Minyak goreng 2L", "quantity": 3, "unit": "botol", "unit_price": 38000, "line_total": 114000}, {"name": "Gula pasir 1kg", "quantity": 5, "unit": "kg", "unit_price": 15000, "line_total": 75000}, {"name": "Kopi Sachet", "quantity": 2, "unit": "dus", "unit_price": 88000, "line_total": 176000}, {"name": "Telur", "quantity": 1, "unit": "kg", "unit_price": 27000, "line_total": 27000}, {"name": "Tepung terigu 1kg", "quantity": 2, "unit": "kg", "unit_price": 12500, "line_total": 25000}, {"name": "Susu kental manis", "quantity": 3, "unit": "kaleng", "unit_price": 11000, "line_total": 33000}, {"name": "Mie instan", "quantity": 10, "unit": "bungkus", "unit_price": 3000, "line_total": 30000}, {"name": "Kecap manis", "quantity": 2, "unit": "botol", "unit_price": 10000, "line_total": 20000}, {"name": "Sabun cuci piring", "quantity": 3, "unit": "pouch", "unit_price": 6500, "line_total": 19500}, {"name": "Rokok Surya 16", "quantity": 4, "unit": "bungkus", "unit_price": 29000, "line_total": 116000}], "total_amount": 645500, "confidence": "high", "ambiguities": []}
+```
+
+#### `test-receipt-2-messy.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size 2261 KB · image/png · latency 39964 ms · tokens in/out 479/571
+- document_type `receipt` · confidence **medium** · 7 items · total_amount 87500 · ambiguities 3
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 · invented units 7 · field errors 7
+
+Raw model output (verbatim):
+
+```json
+{
+  "document_type": "receipt",
+  "supplier": "",
+  "date": "",
+  "items": [
+    {
+      "name": "beras",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 0,
+      "line_total": 28000
+    },
+    {
+      "name": "gula psr",
+      "quantity": 0.25,
+      "unit": "kg",
+      "unit_price": 0,
+      "line_total": 4500
+    },
+    {
+      "name": "teh celup",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 11000
+    },
+    {
+      "name": "indomie",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 6500
+    },
+    {
+      "name": "minyak goring",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 14000
+    },
+    {
+      "name": "kecap BH.",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 17000
+    },
+    {
+      "name": "Saus tiran",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 6500
+    }
+  ],
+  "total_amount": 87500,
+  "confidence": "medium",
+  "ambiguities": [
+    "The year for the date '23/5' is not specified.",
+    "The unit 'RB' for 'beras' is interpreted as 'kg' (kilogram), but could potentially mean 'renceng' (a bundle/sachet) or another unit.",
+    "Units for 'gula psr', 'teh celup', 'indomie', 'minyak goring', 'kecap BH', and 'Saus tiran' are implied (kg for sugar, pcs for others) as they are not explicitly written."
+  ]
+}
+```
+
+#### `test-receipt-3-medium.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size 2171 KB · image/png · latency 45710 ms · tokens in/out 479/683
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 10 · invented units 9 · field errors 19 · **SILENT ERROR**
+
+Raw model output (verbatim):
+
+```json
+{
+  "document_type": "receipt",
+  "supplier": "",
+  "date": "2025-05-26",
+  "items": [
+    {
+      "name": "Beras medium 10kg",
+      "quantity": 1,
+      "unit": "pack",
+      "unit_price": 140000,
+      "line_total": 140000
+    },
+    {
+      "name": "Minyak goreng 2L",
+      "quantity": 2,
+      "unit": "bottle",
+      "unit_price": 31000,
+      "line_total": 62000
+    },
+    {
+      "name": "Gula pasir 1kg",
+      "quantity": 2,
+      "unit": "pack",
+      "unit_price": 14000,
+      "line_total": 28000
+    },
+    {
+      "name": "Tepung terigu",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 12000,
+      "line_total": 12000
+    },
+    {
+      "name": "Telur ayam",
+      "quantity": 1,
+      "unit": "tray",
+      "unit_price": 27000,
+      "line_total": 27000
+    },
+    {
+      "name": "Mie instan",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+    },
+    {
+      "name": "Kopi sachet",
+      "quantity": 20,
+      "unit": "sachet",
+      "unit_price": 900,
+      "line_total": 18000
+    },
+    {
+      "name": "Teh celup",
+      "quantity": 1,
+      "unit": "box",
+      "unit_price": 6000,
+      "line_total": 6000
+    },
+    {
+      "name": "Susu kental manis",
+      "quantity": 2,
+      "unit": "can",
+      "unit_price": 6500,
+      "line_total": 13000
+    },
+    {
+      "name": "Gas 3kg",
+      "quantity": 1,
+      "unit": "cylinder",
+      "unit_price": 22000,
+      "line_total": 22000
+    }
+  ],
+  "total_amount": 343000,
+  "confidence": "high",
+  "ambiguities": []
+}
+```
+
+#### `thermal-1-clean.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), clean
+- size 100 KB · image/jpeg · latency 16478 ms · tokens in/out 479/435
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 · invented units 0 · field errors 0
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "receipt", "supplier": "TOKO SUMBER REJEKI", "date": "2026-08-14", "items": [{"name": "Indomie Goreng", "quantity": 5, "unit": "pcs", "unit_price": 3500, "line_total": 17500}, {"name": "Aqua 600ml", "quantity": 12, "unit": "pcs", "unit_price": 3000, "line_total": 36000}, {"name": "Kopi Kapal Api", "quantity": 10, "unit": "pcs", "unit_price": 1500, "line_total": 15000}, {"name": "Gula Pasir 1kg", "quantity": 2, "unit": "pcs", "unit_price": 17000, "line_total": 34000}, {"name": "Minyak Goreng 2L", "quantity": 1, "unit": "pcs", "unit_price": 36000, "line_total": 36000}, {"name": "Telur 1kg", "quantity": 2, "unit": "pcs", "unit_price": 28000, "line_total": 56000}, {"name": "Sabun Lifebuoy", "quantity": 3, "unit": "pcs", "unit_price": 4500, "line_total": 13500}, {"name": "Rokok Sampoerna", "quantity": 2, "unit": "pcs", "unit_price": 32000, "line_total": 64000}], "total_amount": 272000, "confidence": "high", "ambiguities": []}
+```
+
+#### `thermal-2-faded.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), faded ink
+- size 72 KB · image/jpeg · latency 26557 ms · tokens in/out 479/435
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 · invented units 3 · field errors 3 · **SILENT ERROR**
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "receipt", "supplier": "TOKO SUMBER REJEKI", "date": "2026-08-14", "items": [{"name": "Indomie Goreng", "quantity": 5, "unit": "pcs", "unit_price": 3500, "line_total": 17500}, {"name": "Aqua 600ml", "quantity": 12, "unit": "pcs", "unit_price": 3000, "line_total": 36000}, {"name": "Kopi Kapal Api", "quantity": 10, "unit": "pcs", "unit_price": 1500, "line_total": 15000}, {"name": "Gula Pasir 1kg", "quantity": 2, "unit": "kg", "unit_price": 17000, "line_total": 34000}, {"name": "Minyak Goreng 2L", "quantity": 1, "unit": "liter", "unit_price": 36000, "line_total": 36000}, {"name": "Telur 1kg", "quantity": 2, "unit": "kg", "unit_price": 28000, "line_total": 56000}, {"name": "Sabun Lifebuoy", "quantity": 3, "unit": "pcs", "unit_price": 4500, "line_total": 13500}, {"name": "Rokok Sampoerna", "quantity": 2, "unit": "pcs", "unit_price": 32000, "line_total": 64000}], "total_amount": 272000, "confidence": "high", "ambiguities": []}
+```
+
+#### `thermal-3-noisy-rotated.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), sensor noise + 2.5° rotation
+- size 185 KB · image/jpeg · latency 21951 ms · tokens in/out 479/343
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 · invented units 0 · field errors 0
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "receipt", "supplier": "GROSIR BAROKAH", "date": "2026-08-20", "items": [{"name": "Beras 5kg", "quantity": 1, "unit": "pcs", "unit_price": 72000, "line_total": 72000}, {"name": "Susu UHT 1L", "quantity": 4, "unit": "pcs", "unit_price": 18000, "line_total": 72000}, {"name": "Teh Celup Sariwangi", "quantity": 2, "unit": "pcs", "unit_price": 7500, "line_total": 15000}, {"name": "Kecap Bango 600ml", "quantity": 1, "unit": "pcs", "unit_price": 24000, "line_total": 24000}, {"name": "Mie Sedaap", "quantity": 10, "unit": "pcs", "unit_price": 3200, "line_total": 32000}, {"name": "Gas 3kg", "quantity": 1, "unit": "pcs", "unit_price": 22000, "line_total": 22000}], "total_amount": 237000, "confidence": "high", "ambiguities": []}
+```
+
+#### `thermal-4-lowres.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), low resolution (45%)
+- size 80 KB · image/jpeg · latency 20267 ms · tokens in/out 479/575
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 · invented units 0 · field errors 0
+
+Raw model output (verbatim):
+
+```json
+{
+  "document_type": "receipt",
+  "supplier": "TOKO SUMBER REJEKI",
+  "date": "2026-08-14",
+  "items": [
+    {
+      "name": "Indomie Goreng",
+      "quantity": 5,
+      "unit": "pcs",
+      "unit_price": 3500,
+      "line_total": 17500
+    },
+    {
+      "name": "Aqua 600ml",
+      "quantity": 12,
+      "unit": "pcs",
+      "unit_price": 3000,
+      "line_total": 36000
+    },
+    {
+      "name": "Kopi Kapal Api",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+    },
+    {
+      "name": "Gula Pasir 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 17000,
+      "line_total": 34000
+    },
+    {
+      "name": "Minyak Goreng 2L",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 36000,
+      "line_total": 36000
+    },
+    {
+      "name": "Telur 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 28000,
+      "line_total": 56000
+    },
+    {
+      "name": "Sabun Lifebuoy",
+      "quantity": 3,
+      "unit": "pcs",
+      "unit_price": 4500,
+      "line_total": 13500
+    },
+    {
+      "name": "Rokok Sampoerna",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 32000,
+      "line_total": 64000
+    }
+  ],
+  "total_amount": 272000,
+  "confidence": "high",
+  "ambiguities": []
+}
+```
+
+#### `hand-1-segoe-print.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Print
+- size 183 KB · image/jpeg · latency 12164 ms · tokens in/out 479/413
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 · invented units 0 · field errors 0
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "receipt", "supplier": "", "date": "", "items": [{"name": "Beras", "quantity": 10, "unit": "kg", "unit_price": 14000, "line_total": 140000}, {"name": "Minyak goreng", "quantity": 3, "unit": "liter", "unit_price": 19000, "line_total": 57000}, {"name": "Gula", "quantity": 2, "unit": "kg", "unit_price": 16000, "line_total": 32000}, {"name": "Telur", "quantity": 1, "unit": "kg", "unit_price": 28000, "line_total": 28000}, {"name": "Bawang merah", "quantity": 1, "unit": "kg", "unit_price": 35000, "line_total": 35000}, {"name": "Cabai rawit", "quantity": 0.5, "unit": "kg", "unit_price": 60000, "line_total": 30000}, {"name": "Tahu", "quantity": 10, "unit": "pcs", "unit_price": 1000, "line_total": 10000}], "total_amount": 332000, "confidence": "high", "ambiguities": ["The date 'tgl 12/8/26' is ambiguous regarding the order of day/month and the century of the year (e.g., 2026-08-12 or 2012-08-26)."]}
+```
+
+#### `hand-2-ink-free.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Ink Free
+- size 177 KB · image/jpeg · latency 12290 ms · tokens in/out 479/491
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 · invented units 0 · field errors 0
+
+Raw model output (verbatim):
+
+```json
+{
+  "document_type": "receipt",
+  "supplier": "",
+  "date": "2026-08-12",
+  "items": [
+    {
+      "name": "Beras",
+      "quantity": 10,
+      "unit": "kg",
+      "unit_price": 14000,
+      "line_total": 140000
+    },
+    {
+      "name": "Minyak goreng",
+      "quantity": 3,
+      "unit": "liter",
+      "unit_price": 19000,
+      "line_total": 57000
+    },
+    {
+      "name": "Gula",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 16000,
+      "line_total": 32000
+    },
+    {
+      "name": "Telur",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 28000,
+      "line_total": 28000
+    },
+    {
+      "name": "Bawang merah",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 35000,
+      "line_total": 35000
+    },
+    {
+      "name": "Cabai rawit",
+      "quantity": 0.5,
+      "unit": "kg",
+      "unit_price": 60000,
+      "line_total": 30000
+    },
+    {
+      "name": "Tahu",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1000,
+      "line_total": 10000
+    }
+  ],
+  "total_amount": 332000,
+  "confidence": "high",
+  "ambiguities": []
+}
+```
+
+#### `hand-3-segoe-script.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Script
+- size 128 KB · image/jpeg · latency 19511 ms · tokens in/out 479/323
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 6 · invented units 6 · field errors 12 · **SILENT ERROR**
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "receipt", "supplier": "warung bu Sri", "date": "2026-09-03", "items": [{"name": "Kopi sachet", "quantity": 2, "unit": "pcs", "unit_price": 10000, "line_total": 20000}, {"name": "Teh celup", "quantity": 1, "unit": "pcs", "unit_price": 6500, "line_total": 6500}, {"name": "Mie instan", "quantity": 3, "unit": "pcs", "unit_price": 3000, "line_total": 9000}, {"name": "Minyak goreng", "quantity": 1, "unit": "pcs", "unit_price": 18000, "line_total": 18000}, {"name": "Sabun cuci", "quantity": 2, "unit": "pcs", "unit_price": 4500, "line_total": 9000}, {"name": "Gas 3kg", "quantity": 1, "unit": "pcs", "unit_price": 22000, "line_total": 22000}], "total_amount": 84500, "confidence": "high", "ambiguities": []}
+```
+
+#### `hand-4-bradley.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Bradley Hand
+- size 117 KB · image/jpeg · latency 11859 ms · tokens in/out 479/323
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 6 · invented units 6 · field errors 12 · **SILENT ERROR**
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "receipt", "supplier": "warung bu Sri", "date": "2026-09-03", "items": [{"name": "Kopi sachet", "quantity": 2, "unit": "pcs", "unit_price": 10000, "line_total": 20000}, {"name": "Teh celup", "quantity": 1, "unit": "pcs", "unit_price": 6500, "line_total": 6500}, {"name": "Mie instan", "quantity": 3, "unit": "pcs", "unit_price": 3000, "line_total": 9000}, {"name": "Minyak goreng", "quantity": 1, "unit": "pcs", "unit_price": 18000, "line_total": 18000}, {"name": "Sabun cuci", "quantity": 2, "unit": "pcs", "unit_price": 4500, "line_total": 9000}, {"name": "Gas 3kg", "quantity": 1, "unit": "pcs", "unit_price": 22000, "line_total": 22000}], "total_amount": 84500, "confidence": "high", "ambiguities": []}
+```
+
+#### `blur-1-neat-r3.5.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-1-neat.png (r=3.5)
+- size 98 KB · image/jpeg · latency 13802 ms · tokens in/out 479/527
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 1 · **SILENT ERROR**
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "stock_ledger", "supplier": "", "date": "2018-05-28", "items": [{"name": "Minyak goreng 2L", "quantity": 3, "unit": "botol", "unit_price": 38000, "line_total": 114000}, {"name": "Gula pasir 1kg", "quantity": 5, "unit": "kg", "unit_price": 15000, "line_total": 75000}, {"name": "Kopi Sachet", "quantity": 2, "unit": "dus", "unit_price": 88000, "line_total": 176000}, {"name": "Telur", "quantity": 1, "unit": "kg", "unit_price": 27000, "line_total": 27000}, {"name": "Tepung terigu 1kg", "quantity": 2, "unit": "kg", "unit_price": 12500, "line_total": 25000}, {"name": "Susu kental manis", "quantity": 3, "unit": "kaleng", "unit_price": 11000, "line_total": 33000}, {"name": "Mie instan", "quantity": 10, "unit": "bungkus", "unit_price": 3000, "line_total": 30000}, {"name": "Kecap manis", "quantity": 2, "unit": "botol", "unit_price": 10000, "line_total": 20000}, {"name": "Sabun cuci piring", "quantity": 3, "unit": "pouch", "unit_price": 6500, "line_total": 19500}, {"name": "Rokok Surya 16", "quantity": 4, "unit": "bungkus", "unit_price": 29000, "line_total": 116000}], "total_amount": 645500, "confidence": "high", "ambiguities": []}
+```
+
+#### `blur-2-medium-r3.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-3-medium.png (r=3.0)
+- size 102 KB · image/jpeg · latency 20264 ms · tokens in/out 479/683
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 10 · invented units 9 · field errors 19 · **SILENT ERROR**
+
+Raw model output (verbatim):
+
+```json
+{
+  "document_type": "receipt",
+  "supplier": "",
+  "date": "2023-05-26",
+  "items": [
+    {
+      "name": "Beras medium 10kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 140000,
+      "line_total": 140000
+    },
+    {
+      "name": "Minyak goreng 2L",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 31000,
+      "line_total": 62000
+    },
+    {
+      "name": "Gula pasir 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 14000,
+      "line_total": 28000
+    },
+    {
+      "name": "Tepung terigu",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 12000,
+      "line_total": 12000
+    },
+    {
+      "name": "Telur ayam",
+      "quantity": 1,
+      "unit": "tray",
+      "unit_price": 27000,
+      "line_total": 27000
+    },
+    {
+      "name": "Mie instan",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+    },
+    {
+      "name": "Kopi sachet",
+      "quantity": 20,
+      "unit": "sachet",
+      "unit_price": 900,
+      "line_total": 18000
+    },
+    {
+      "name": "Teh celup",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 6000,
+      "line_total": 6000
+    },
+    {
+      "name": "Susu kental manis",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 6500,
+      "line_total": 13000
+    },
+    {
+      "name": "Gas 3kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 22000,
+      "line_total": 22000
+    }
+  ],
+  "total_amount": 343000,
+  "confidence": "high",
+  "ambiguities": []
+}
+```
+
+#### `blur-3-thermal-r2.2.jpg` — blurred
+
+- provenance: generated: Gaussian blur of thermal-1-clean (r=2.2)
+- size 37 KB · image/jpeg · latency 25233 ms · tokens in/out 479/575
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 · invented units 0 · field errors 0
+
+Raw model output (verbatim):
+
+```json
+{
+  "document_type": "receipt",
+  "supplier": "TOKO SUMBER REJEKI",
+  "date": "2026-08-14",
+  "items": [
+    {
+      "name": "Indomie Goreng",
+      "quantity": 5,
+      "unit": "pcs",
+      "unit_price": 3500,
+      "line_total": 17500
+    },
+    {
+      "name": "Aqua 600ml",
+      "quantity": 12,
+      "unit": "pcs",
+      "unit_price": 3000,
+      "line_total": 36000
+    },
+    {
+      "name": "Kopi Kapal Api",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+    },
+    {
+      "name": "Gula Pasir 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 17000,
+      "line_total": 34000
+    },
+    {
+      "name": "Minyak Goreng 2L",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 36000,
+      "line_total": 36000
+    },
+    {
+      "name": "Telur 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 28000,
+      "line_total": 56000
+    },
+    {
+      "name": "Sabun Lifebuoy",
+      "quantity": 3,
+      "unit": "pcs",
+      "unit_price": 4500,
+      "line_total": 13500
+    },
+    {
+      "name": "Rokok Sampoerna",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 32000,
+      "line_total": 64000
+    }
+  ],
+  "total_amount": 272000,
+  "confidence": "high",
+  "ambiguities": []
+}
+```
+
+#### `angle-1-neat.jpg` — angled
+
+- provenance: generated: perspective warp of test-receipt-1-neat.png
+- size 245 KB · image/jpeg · latency 21550 ms · tokens in/out 479/555
+- document_type `stock_ledger` · confidence **medium** · 10 items · total_amount 645500 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 10/10 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 1
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "stock_ledger", "supplier": "", "date": "2025-05-25", "items": [{"name": "Minyak goreng 2L", "quantity": 3, "unit": "botol", "unit_price": 38000, "line_total": 114000}, {"name": "Gula pasir 1kg", "quantity": 5, "unit": "kg", "unit_price": 15000, "line_total": 75000}, {"name": "Kopi Sachet", "quantity": 2, "unit": "dus", "unit_price": 88000, "line_total": 176000}, {"name": "Telur", "quantity": 1, "unit": "kg", "unit_price": 27000, "line_total": 27000}, {"name": "Tepung terigu 1kg", "quantity": 2, "unit": "kg", "unit_price": 12500, "line_total": 25000}, {"name": "Susu kental manis", "quantity": 3, "unit": "kaleng", "unit_price": 11000, "line_total": 33000}, {"name": "Mie instan", "quantity": 10, "unit": "bungkus", "unit_price": 3000, "line_total": 30000}, {"name": "Kecap manis", "quantity": 2, "unit": "botol", "unit_price": 10000, "line_total": 20000}, {"name": "Sabun cuci piring", "quantity": 3, "unit": "pouch", "unit_price": 6500, "line_total": 19500}, {"name": "Rokok Surya 16", "quantity": 4, "unit": "bungkus", "unit_price": 29000, "line_total": 116000}], "total_amount": 645500, "confidence": "medium", "ambiguities": ["Total amount (645,500) does not match the sum of line items (635,500)."]}
+```
+
+#### `angle-2-thermal.jpg` — angled
+
+- provenance: generated: perspective warp of a clean render of thermal B
+- size 77 KB · image/jpeg · latency 12770 ms · tokens in/out 479/343
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 · invented units 0 · field errors 0
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "receipt", "supplier": "GROSIR BAROKAH", "date": "2026-08-20", "items": [{"name": "Beras 5kg", "quantity": 1, "unit": "pcs", "unit_price": 72000, "line_total": 72000}, {"name": "Susu UHT 1L", "quantity": 4, "unit": "pcs", "unit_price": 18000, "line_total": 72000}, {"name": "Teh Celup Sariwangi", "quantity": 2, "unit": "pcs", "unit_price": 7500, "line_total": 15000}, {"name": "Kecap Bango 600ml", "quantity": 1, "unit": "pcs", "unit_price": 24000, "line_total": 24000}, {"name": "Mie Sedaap", "quantity": 10, "unit": "pcs", "unit_price": 3200, "line_total": 32000}, {"name": "Gas 3kg", "quantity": 1, "unit": "pcs", "unit_price": 22000, "line_total": 22000}], "total_amount": 237000, "confidence": "high", "ambiguities": []}
+```
+
+#### `angle-3-hand-segoe.jpg` — angled
+
+- provenance: generated: perspective warp of hand-1-segoe-print
+- size 161 KB · image/jpeg · latency 43114 ms · tokens in/out 479/366
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 · invented units 0 · field errors 0
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "receipt", "supplier": "", "date": "2026-08-12", "items": [{"name": "Beras", "quantity": 10, "unit": "kg", "unit_price": 14000, "line_total": 140000}, {"name": "Minyak goreng", "quantity": 3, "unit": "liter", "unit_price": 19000, "line_total": 57000}, {"name": "Gula", "quantity": 2, "unit": "kg", "unit_price": 16000, "line_total": 32000}, {"name": "Telur", "quantity": 1, "unit": "kg", "unit_price": 28000, "line_total": 28000}, {"name": "Bawang merah", "quantity": 1, "unit": "kg", "unit_price": 35000, "line_total": 35000}, {"name": "Cabai rawit", "quantity": 0.5, "unit": "kg", "unit_price": 60000, "line_total": 30000}, {"name": "Tahu", "quantity": 10, "unit": "pcs", "unit_price": 1000, "line_total": 10000}], "total_amount": 332000, "confidence": "high", "ambiguities": []}
+```
+
+#### `control-unreadable.jpg` — unreadable_control
+
+- provenance: generated: thermal B blurred (r=11) and noised past legibility — deliberately unreadable
+- size 213 KB · image/jpeg · latency 8188 ms · tokens in/out 479/54
+- document_type `other` · confidence **low** · 0 items · total_amount 0 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: 0 fabricated items · control OK
+
+Raw model output (verbatim):
+
+```json
+{"document_type": "other", "supplier": "", "date": "", "items": [], "total_amount": 0, "confidence": "low", "ambiguities": ["The entire document is unreadable due to extreme blurriness."]}
+```
+
+### M1-T2 expanded set, untuned prompt, run 2 — 2026-09-02 18:35 UTC
+
+- vision model: `gemini-2.5-flash` (setting `GEMINI_PRO_MODEL`)
+- prompt/schema: `backend/app/ai/vision.py` at commit `86707d7`
+- gate rule: `app.services.receipts.needs_confirmation` — confidence != high, or any ambiguity, or no items
+- images: 18 (scored against manifest.json)
+
+**Per-category summary** (sample counts stated; scoring rules in the script docstring):
+
+| category | n | lines matched | totals exact | gate triggered | silent errors |
+|---|---|---|---|---|---|
+| handwritten_photo | 3 | 0/27 (0%) | 0/3 | 3/3 | **0** |
+| thermal_printed | 4 | 0/30 (0%) | 0/4 | 4/4 | **0** |
+| handwritten_font | 4 | 0/26 (0%) | 0/4 | 4/4 | **0** |
+| blurred | 3 | 0/28 (0%) | 0/3 | 3/3 | **0** |
+| angled | 3 | 0/23 (0%) | 0/3 | 3/3 | **0** |
+| unreadable_control | 1 | n/a (no fabricated items) | n/a | 1/1 | **0** |
+| **all** | 18 | 0/134 (0%) | 0/17 | 18/18 | **0** |
+
+#### `test-receipt-1-neat.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size 2304 KB · image/png · latency 1423 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 57.899050393s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '57s'}]}}`
+- score: lines 0/10 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 11
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `test-receipt-2-messy.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size 2261 KB · image/png · latency 9556 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 48.528474716s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '48s'}]}}`
+- score: lines 0/7 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 8
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `test-receipt-3-medium.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size 2171 KB · image/png · latency 2281 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 45.890507192s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '45s'}]}}`
+- score: lines 0/10 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 11
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `thermal-1-clean.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), clean
+- size 100 KB · image/jpeg · latency 293 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 45.597984271s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '45s'}]}}`
+- score: lines 0/8 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 9
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `thermal-2-faded.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), faded ink
+- size 72 KB · image/jpeg · latency 294 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 45.319105635s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.5-flash', 'location': 'global'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '45s'}]}}`
+- score: lines 0/8 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 9
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `thermal-3-noisy-rotated.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), sensor noise + 2.5° rotation
+- size 185 KB · image/jpeg · latency 844 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 44.461133851s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '44s'}]}}`
+- score: lines 0/6 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 7
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `thermal-4-lowres.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), low resolution (45%)
+- size 80 KB · image/jpeg · latency 283 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 44.192330243s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '44s'}]}}`
+- score: lines 0/8 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 9
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `hand-1-segoe-print.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Print
+- size 183 KB · image/jpeg · latency 385 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 43.75415776s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '43s'}]}}`
+- score: lines 0/7 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 8
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `hand-2-ink-free.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Ink Free
+- size 177 KB · image/jpeg · latency 212 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 43.542149179s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.5-flash', 'location': 'global'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '43s'}]}}`
+- score: lines 0/7 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 8
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `hand-3-segoe-script.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Script
+- size 128 KB · image/jpeg · latency 212 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 43.334047689s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '43s'}]}}`
+- score: lines 0/6 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 7
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `hand-4-bradley.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Bradley Hand
+- size 117 KB · image/jpeg · latency 245 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 43.116874902s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '43s'}]}}`
+- score: lines 0/6 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 7
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `blur-1-neat-r3.5.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-1-neat.png (r=3.5)
+- size 98 KB · image/jpeg · latency 832 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 42.379073925s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.5-flash', 'location': 'global'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '42s'}]}}`
+- score: lines 0/10 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 11
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `blur-2-medium-r3.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-3-medium.png (r=3.0)
+- size 102 KB · image/jpeg · latency 586 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 41.665510428s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.5-flash', 'location': 'global'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '41s'}]}}`
+- score: lines 0/10 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 11
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `blur-3-thermal-r2.2.jpg` — blurred
+
+- provenance: generated: Gaussian blur of thermal-1-clean (r=2.2)
+- size 37 KB · image/jpeg · latency 222 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 41.443256767s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '41s'}]}}`
+- score: lines 0/8 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 9
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `angle-1-neat.jpg` — angled
+
+- provenance: generated: perspective warp of test-receipt-1-neat.png
+- size 245 KB · image/jpeg · latency 333 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 41.145126496s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '41s'}]}}`
+- score: lines 0/10 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 11
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `angle-2-thermal.jpg` — angled
+
+- provenance: generated: perspective warp of a clean render of thermal B
+- size 77 KB · image/jpeg · latency 253 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 40.869769105s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '40s'}]}}`
+- score: lines 0/6 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 7
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `angle-3-hand-segoe.jpg` — angled
+
+- provenance: generated: perspective warp of hand-1-segoe-print
+- size 161 KB · image/jpeg · latency 422 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 40.481812025s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '40s'}]}}`
+- score: lines 0/7 · extra 0 · total WRONG · fabricated unit prices 0 · invented units 0 · field errors 8
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+#### `control-unreadable.jpg` — unreadable_control
+
+- provenance: generated: thermal B blurred (r=11) and noised past legibility — deliberately unreadable
+- size 213 KB · image/jpeg · latency 504 ms
+- **ERROR:** `ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\nPlease retry in 39.999518389s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.5-flash', 'location': 'global'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '39s'}]}}`
+- score: 0 fabricated items · control OK
+
+Raw model output (verbatim):
+
+```json
+<no text returned>
+```
+
+### Assessment of the M1-T2 expanded set (written by hand after run 1, 2026-09-03)
+
+**Sample set: 18 images, 15 generated + 3 AI-generated photo-realistic stand-ins from Phase 14.
+No real photographs of real documents exist in the set yet.** Per-category counts are stated
+in every table. `handwritten_font` images are rendered with Windows handwriting fonts and are
+much easier than human handwriting; treat them as a lower bound on difficulty, not a
+measurement of the real thing. The three Phase-14 photos are the only handwriting-like input.
+
+**Run 2 in the section above is void**: every call returned `429 RESOURCE_EXHAUSTED`. The
+Google free tier allows **20 `generate_content` requests per day per model** on this project
+(`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, `gemini-2.5-flash`), and M1-T1 + run 1
+used 21. This caps every future measurement at about one 18-image pass per day until billing
+is enabled on the Google Cloud project. The 200–800 ms latencies in run 2 are the rejections.
+
+**Correction to run 1's automatic scoring.** The manifest computed the neat page's total from
+its lines (635.500), but the generated page *writes* 645.500 — the AI-generated document has
+an arithmetic slip. The model transcribed the written figure, which is correct behaviour.
+`manifest.json` now carries `written_total` for that page (and `lines_sum` for every page),
+so `test-receipt-1-neat.png` and `blur-1-neat-r3.5.jpg` are **not** errors. Corrected table:
+
+| category | n | lines matched | totals exact | gate triggered | silent errors (corrected) |
+|---|---|---|---|---|---|
+| handwritten_photo | 3 | 27/27 (100%) | 3/3 | 1/3 | **1** — glare page: 10 fabricated unit prices, 9 invented units |
+| thermal_printed | 4 | 30/30 (100%) | 4/4 | 0/4 | **1** — faded: units `kg`/`liter`/`kg` read off product names on 3 lines |
+| handwritten_font | 4 | 26/26 (100%) | 4/4 | 1/4 | **2** — both line-total-only notes: 6 fabricated unit prices + 6 `pcs` each |
+| blurred | 3 | 28/28 (100%) | 3/3 | 0/3 | **1** — blurred glare page: same as its original (10 + 9) |
+| angled | 3 | 23/23 (100%) | 3/3 | 1/3 | **0** |
+| unreadable_control | 1 | n/a — 0 fabricated items, `document_type=other`, `low` | n/a | 1/1 | **0** |
+| **all** | 18 | 134/134 (100%) | 17/17 | 4/18 | **5 / 18 (28%)** |
+
+What the expanded set says:
+
+1. **Transcription is not the problem on this set.** 134/134 lines and 17/17 totals, through
+   blur r=3.5, 45% downscale, 2.5° rotation + noise, faded ink and perspective warp. The
+   control was refused correctly. The scoring was strict (name similarity + exact quantity +
+   exact line total), so this is not a lenient pass.
+2. **Every silent error is a field the document does not show.** All five are the model
+   filling `unit_price` (line total ÷ quantity) and `unit` (`pcs`, or a unit read from the
+   product name) on documents that write neither, then claiming `high` with no ambiguity —
+   the M1-T1 finding, now reproduced on 4 more images across 3 categories. Zero silent errors
+   came from misreading. The failure is a schema/prompt design problem, not a vision problem.
+3. **The model notices arithmetic when asked nothing about it.** On `angle-1-neat.jpg` it
+   listed "Total amount (645,500) does not match the sum of line items (635,500)" as an
+   ambiguity and dropped to `medium` — but on the same page un-warped it stayed `high`. A
+   server-side sum check would make that deterministic.
+4. **Gate trigger rate is 4/18.** Three were right to trigger (messy nota, control, the
+   angled sum mismatch); one (`hand-1-segoe-print`) triggered on a date-format doubt, which
+   is a harmless ask. The gate never triggered wrongly on a clean page.
+
+Implications carried into M1-T3 (planned, not applied here):
+- Ask the model *whether each field was written* (`unit_written`, `unit_price_written`
+  per item) instead of instructing "0 if not shown", which it ignores; then zero the field
+  server-side when not written. A guess that is never stored cannot be a silent error.
+- Add `sum(line_total) == total_amount` as a server-side ambiguity when both are present.
+- Keep the gate rule as is on top of those; re-measure the whole set, once, when quota
+  allows, and compare against this table.

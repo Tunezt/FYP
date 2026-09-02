@@ -1,0 +1,1236 @@
+{
+  "images": [
+    {
+      "file": "test-receipt-1-neat.png",
+      "category": "handwritten_photo",
+      "provenance": "AI-generated photo-realistic stand-in (Phase 14, July 2026)",
+      "doc_type": "stock_ledger",
+      "shows_unit_price": true,
+      "shows_unit": true,
+      "expect_gate": false,
+      "total": 645500,
+      "lines_sum": 635500,
+      "items": [
+        {
+          "name": "Minyak goreng 2L",
+          "qty": 3,
+          "unit": "botol",
+          "unit_price": 38000,
+          "line_total": 114000
+        },
+        {
+          "name": "Gula pasir 1kg",
+          "qty": 5,
+          "unit": "kg",
+          "unit_price": 15000,
+          "line_total": 75000
+        },
+        {
+          "name": "Kopi Sachet",
+          "qty": 2,
+          "unit": "dus",
+          "unit_price": 88000,
+          "line_total": 176000
+        },
+        {
+          "name": "Telur",
+          "qty": 1,
+          "unit": "kg",
+          "unit_price": 27000,
+          "line_total": 27000
+        },
+        {
+          "name": "Tepung terigu 1kg",
+          "qty": 2,
+          "unit": "kg",
+          "unit_price": 12500,
+          "line_total": 25000
+        },
+        {
+          "name": "Susu kental manis",
+          "qty": 3,
+          "unit": "kaleng",
+          "unit_price": 11000,
+          "line_total": 33000
+        },
+        {
+          "name": "Mie instan",
+          "qty": 10,
+          "unit": "bungkus",
+          "unit_price": 3000,
+          "line_total": 30000
+        },
+        {
+          "name": "Kecap manis",
+          "qty": 2,
+          "unit": "botol",
+          "unit_price": 10000,
+          "line_total": 20000
+        },
+        {
+          "name": "Sabun cuci piring",
+          "qty": 3,
+          "unit": "pouch",
+          "unit_price": 6500,
+          "line_total": 19500
+        },
+        {
+          "name": "Rokok Surya 16",
+          "qty": 4,
+          "unit": "bungkus",
+          "unit_price": 29000,
+          "line_total": 116000
+        }
+      ],
+      "note": "the generated page writes TOTAL 645.500 but its lines sum to 635.500"
+    },
+    {
+      "file": "test-receipt-2-messy.png",
+      "category": "handwritten_photo",
+      "provenance": "AI-generated photo-realistic stand-in (Phase 14, July 2026)",
+      "doc_type": "receipt",
+      "shows_unit_price": false,
+      "shows_unit": false,
+      "expect_gate": true,
+      "total": 87500,
+      "lines_sum": 87500,
+      "items": [
+        {
+          "name": "RB beras",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 28000
+        },
+        {
+          "name": "gula psr",
+          "qty": 0.25,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 4500
+        },
+        {
+          "name": "teh celup",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 11000
+        },
+        {
+          "name": "indomie",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 6500
+        },
+        {
+          "name": "minyak goring",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 14000
+        },
+        {
+          "name": "kecap BH",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 17000
+        },
+        {
+          "name": "saos tiram",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 6500
+        }
+      ],
+      "note": "RB / ¼ / BH. readings are genuinely ambiguous"
+    },
+    {
+      "file": "test-receipt-3-medium.png",
+      "category": "handwritten_photo",
+      "provenance": "AI-generated photo-realistic stand-in (Phase 14, July 2026)",
+      "doc_type": "receipt",
+      "shows_unit_price": false,
+      "shows_unit": false,
+      "expect_gate": null,
+      "total": 343000,
+      "lines_sum": 343000,
+      "items": [
+        {
+          "name": "Beras medium 10kg",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 140000
+        },
+        {
+          "name": "Minyak goreng 2L",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 62000
+        },
+        {
+          "name": "Gula pasir 1kg",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 28000
+        },
+        {
+          "name": "Tepung terigu",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 12000
+        },
+        {
+          "name": "Telur ayam",
+          "qty": 1,
+          "unit": "tray",
+          "unit_price": 0,
+          "line_total": 27000
+        },
+        {
+          "name": "Mie instan",
+          "qty": 10,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 15000
+        },
+        {
+          "name": "Kopi sachet",
+          "qty": 20,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 18000
+        },
+        {
+          "name": "Teh celup",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 6000
+        },
+        {
+          "name": "Susu kental manis",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 13000
+        },
+        {
+          "name": "Gas 3kg",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 22000
+        }
+      ],
+      "note": "one unit written ('tray'); glare band"
+    },
+    {
+      "file": "generated/thermal-1-clean.jpg",
+      "category": "thermal_printed",
+      "provenance": "generated: rendered receipt (Consolas), clean",
+      "doc_type": "receipt",
+      "shows_unit_price": true,
+      "shows_unit": false,
+      "expect_gate": false,
+      "total": 272000,
+      "lines_sum": 272000,
+      "items": [
+        {
+          "name": "Indomie Goreng",
+          "qty": 5,
+          "unit": "pcs",
+          "unit_price": 3500,
+          "line_total": 17500
+        },
+        {
+          "name": "Aqua 600ml",
+          "qty": 12,
+          "unit": "pcs",
+          "unit_price": 3000,
+          "line_total": 36000
+        },
+        {
+          "name": "Kopi Kapal Api",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 1500,
+          "line_total": 15000
+        },
+        {
+          "name": "Gula Pasir 1kg",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 17000,
+          "line_total": 34000
+        },
+        {
+          "name": "Minyak Goreng 2L",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 36000,
+          "line_total": 36000
+        },
+        {
+          "name": "Telur 1kg",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 28000,
+          "line_total": 56000
+        },
+        {
+          "name": "Sabun Lifebuoy",
+          "qty": 3,
+          "unit": "pcs",
+          "unit_price": 4500,
+          "line_total": 13500
+        },
+        {
+          "name": "Rokok Sampoerna",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 32000,
+          "line_total": 64000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/thermal-2-faded.jpg",
+      "category": "thermal_printed",
+      "provenance": "generated: rendered receipt (Consolas), faded ink",
+      "doc_type": "receipt",
+      "shows_unit_price": true,
+      "shows_unit": false,
+      "expect_gate": null,
+      "total": 272000,
+      "lines_sum": 272000,
+      "items": [
+        {
+          "name": "Indomie Goreng",
+          "qty": 5,
+          "unit": "pcs",
+          "unit_price": 3500,
+          "line_total": 17500
+        },
+        {
+          "name": "Aqua 600ml",
+          "qty": 12,
+          "unit": "pcs",
+          "unit_price": 3000,
+          "line_total": 36000
+        },
+        {
+          "name": "Kopi Kapal Api",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 1500,
+          "line_total": 15000
+        },
+        {
+          "name": "Gula Pasir 1kg",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 17000,
+          "line_total": 34000
+        },
+        {
+          "name": "Minyak Goreng 2L",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 36000,
+          "line_total": 36000
+        },
+        {
+          "name": "Telur 1kg",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 28000,
+          "line_total": 56000
+        },
+        {
+          "name": "Sabun Lifebuoy",
+          "qty": 3,
+          "unit": "pcs",
+          "unit_price": 4500,
+          "line_total": 13500
+        },
+        {
+          "name": "Rokok Sampoerna",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 32000,
+          "line_total": 64000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/thermal-3-noisy-rotated.jpg",
+      "category": "thermal_printed",
+      "provenance": "generated: rendered receipt (Consolas), sensor noise + 2.5° rotation",
+      "doc_type": "receipt",
+      "shows_unit_price": true,
+      "shows_unit": false,
+      "expect_gate": null,
+      "total": 237000,
+      "lines_sum": 237000,
+      "items": [
+        {
+          "name": "Beras 5kg",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 72000,
+          "line_total": 72000
+        },
+        {
+          "name": "Susu UHT 1L",
+          "qty": 4,
+          "unit": "pcs",
+          "unit_price": 18000,
+          "line_total": 72000
+        },
+        {
+          "name": "Teh Celup Sariwangi",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 7500,
+          "line_total": 15000
+        },
+        {
+          "name": "Kecap Bango 600ml",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 24000,
+          "line_total": 24000
+        },
+        {
+          "name": "Mie Sedaap",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 3200,
+          "line_total": 32000
+        },
+        {
+          "name": "Gas 3kg",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 22000,
+          "line_total": 22000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/thermal-4-lowres.jpg",
+      "category": "thermal_printed",
+      "provenance": "generated: rendered receipt (Consolas), low resolution (45%)",
+      "doc_type": "receipt",
+      "shows_unit_price": true,
+      "shows_unit": false,
+      "expect_gate": null,
+      "total": 272000,
+      "lines_sum": 272000,
+      "items": [
+        {
+          "name": "Indomie Goreng",
+          "qty": 5,
+          "unit": "pcs",
+          "unit_price": 3500,
+          "line_total": 17500
+        },
+        {
+          "name": "Aqua 600ml",
+          "qty": 12,
+          "unit": "pcs",
+          "unit_price": 3000,
+          "line_total": 36000
+        },
+        {
+          "name": "Kopi Kapal Api",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 1500,
+          "line_total": 15000
+        },
+        {
+          "name": "Gula Pasir 1kg",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 17000,
+          "line_total": 34000
+        },
+        {
+          "name": "Minyak Goreng 2L",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 36000,
+          "line_total": 36000
+        },
+        {
+          "name": "Telur 1kg",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 28000,
+          "line_total": 56000
+        },
+        {
+          "name": "Sabun Lifebuoy",
+          "qty": 3,
+          "unit": "pcs",
+          "unit_price": 4500,
+          "line_total": 13500
+        },
+        {
+          "name": "Rokok Sampoerna",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 32000,
+          "line_total": 64000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/hand-1-segoe-print.jpg",
+      "category": "handwritten_font",
+      "provenance": "generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Print",
+      "doc_type": "stock_ledger",
+      "shows_unit_price": true,
+      "shows_unit": true,
+      "expect_gate": false,
+      "total": 332000,
+      "lines_sum": 332000,
+      "items": [
+        {
+          "name": "Beras",
+          "qty": 10,
+          "unit": "kg",
+          "unit_price": 14000,
+          "line_total": 140000
+        },
+        {
+          "name": "Minyak goreng",
+          "qty": 3,
+          "unit": "liter",
+          "unit_price": 19000,
+          "line_total": 57000
+        },
+        {
+          "name": "Gula",
+          "qty": 2,
+          "unit": "kg",
+          "unit_price": 16000,
+          "line_total": 32000
+        },
+        {
+          "name": "Telur",
+          "qty": 1,
+          "unit": "kg",
+          "unit_price": 28000,
+          "line_total": 28000
+        },
+        {
+          "name": "Bawang merah",
+          "qty": 1,
+          "unit": "kg",
+          "unit_price": 35000,
+          "line_total": 35000
+        },
+        {
+          "name": "Cabai rawit",
+          "qty": 0.5,
+          "unit": "kg",
+          "unit_price": 60000,
+          "line_total": 30000
+        },
+        {
+          "name": "Tahu",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 1000,
+          "line_total": 10000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/hand-2-ink-free.jpg",
+      "category": "handwritten_font",
+      "provenance": "generated: rendered with a handwriting-style font, NOT human handwriting — Ink Free",
+      "doc_type": "stock_ledger",
+      "shows_unit_price": true,
+      "shows_unit": true,
+      "expect_gate": null,
+      "total": 332000,
+      "lines_sum": 332000,
+      "items": [
+        {
+          "name": "Beras",
+          "qty": 10,
+          "unit": "kg",
+          "unit_price": 14000,
+          "line_total": 140000
+        },
+        {
+          "name": "Minyak goreng",
+          "qty": 3,
+          "unit": "liter",
+          "unit_price": 19000,
+          "line_total": 57000
+        },
+        {
+          "name": "Gula",
+          "qty": 2,
+          "unit": "kg",
+          "unit_price": 16000,
+          "line_total": 32000
+        },
+        {
+          "name": "Telur",
+          "qty": 1,
+          "unit": "kg",
+          "unit_price": 28000,
+          "line_total": 28000
+        },
+        {
+          "name": "Bawang merah",
+          "qty": 1,
+          "unit": "kg",
+          "unit_price": 35000,
+          "line_total": 35000
+        },
+        {
+          "name": "Cabai rawit",
+          "qty": 0.5,
+          "unit": "kg",
+          "unit_price": 60000,
+          "line_total": 30000
+        },
+        {
+          "name": "Tahu",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 1000,
+          "line_total": 10000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/hand-3-segoe-script.jpg",
+      "category": "handwritten_font",
+      "provenance": "generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Script",
+      "doc_type": "receipt",
+      "shows_unit_price": false,
+      "shows_unit": false,
+      "expect_gate": null,
+      "total": 84500,
+      "lines_sum": 84500,
+      "items": [
+        {
+          "name": "Kopi sachet",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 20000
+        },
+        {
+          "name": "Teh celup",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 6500
+        },
+        {
+          "name": "Mie instan",
+          "qty": 3,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 9000
+        },
+        {
+          "name": "Minyak goreng",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 18000
+        },
+        {
+          "name": "Sabun cuci",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 9000
+        },
+        {
+          "name": "Gas 3kg",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 22000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/hand-4-bradley.jpg",
+      "category": "handwritten_font",
+      "provenance": "generated: rendered with a handwriting-style font, NOT human handwriting — Bradley Hand",
+      "doc_type": "receipt",
+      "shows_unit_price": false,
+      "shows_unit": false,
+      "expect_gate": null,
+      "total": 84500,
+      "lines_sum": 84500,
+      "items": [
+        {
+          "name": "Kopi sachet",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 20000
+        },
+        {
+          "name": "Teh celup",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 6500
+        },
+        {
+          "name": "Mie instan",
+          "qty": 3,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 9000
+        },
+        {
+          "name": "Minyak goreng",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 18000
+        },
+        {
+          "name": "Sabun cuci",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 9000
+        },
+        {
+          "name": "Gas 3kg",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 22000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/blur-1-neat-r3.5.jpg",
+      "category": "blurred",
+      "provenance": "generated: Gaussian blur of test-receipt-1-neat.png (r=3.5)",
+      "doc_type": "stock_ledger",
+      "shows_unit_price": true,
+      "shows_unit": true,
+      "expect_gate": null,
+      "total": 635500,
+      "lines_sum": 635500,
+      "items": [
+        {
+          "name": "Minyak goreng 2L",
+          "qty": 3,
+          "unit": "botol",
+          "unit_price": 38000,
+          "line_total": 114000
+        },
+        {
+          "name": "Gula pasir 1kg",
+          "qty": 5,
+          "unit": "kg",
+          "unit_price": 15000,
+          "line_total": 75000
+        },
+        {
+          "name": "Kopi Sachet",
+          "qty": 2,
+          "unit": "dus",
+          "unit_price": 88000,
+          "line_total": 176000
+        },
+        {
+          "name": "Telur",
+          "qty": 1,
+          "unit": "kg",
+          "unit_price": 27000,
+          "line_total": 27000
+        },
+        {
+          "name": "Tepung terigu 1kg",
+          "qty": 2,
+          "unit": "kg",
+          "unit_price": 12500,
+          "line_total": 25000
+        },
+        {
+          "name": "Susu kental manis",
+          "qty": 3,
+          "unit": "kaleng",
+          "unit_price": 11000,
+          "line_total": 33000
+        },
+        {
+          "name": "Mie instan",
+          "qty": 10,
+          "unit": "bungkus",
+          "unit_price": 3000,
+          "line_total": 30000
+        },
+        {
+          "name": "Kecap manis",
+          "qty": 2,
+          "unit": "botol",
+          "unit_price": 10000,
+          "line_total": 20000
+        },
+        {
+          "name": "Sabun cuci piring",
+          "qty": 3,
+          "unit": "pouch",
+          "unit_price": 6500,
+          "line_total": 19500
+        },
+        {
+          "name": "Rokok Surya 16",
+          "qty": 4,
+          "unit": "bungkus",
+          "unit_price": 29000,
+          "line_total": 116000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/blur-2-medium-r3.jpg",
+      "category": "blurred",
+      "provenance": "generated: Gaussian blur of test-receipt-3-medium.png (r=3.0)",
+      "doc_type": "receipt",
+      "shows_unit_price": false,
+      "shows_unit": false,
+      "expect_gate": null,
+      "total": 343000,
+      "lines_sum": 343000,
+      "items": [
+        {
+          "name": "Beras medium 10kg",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 140000
+        },
+        {
+          "name": "Minyak goreng 2L",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 62000
+        },
+        {
+          "name": "Gula pasir 1kg",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 28000
+        },
+        {
+          "name": "Tepung terigu",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 12000
+        },
+        {
+          "name": "Telur ayam",
+          "qty": 1,
+          "unit": "tray",
+          "unit_price": 0,
+          "line_total": 27000
+        },
+        {
+          "name": "Mie instan",
+          "qty": 10,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 15000
+        },
+        {
+          "name": "Kopi sachet",
+          "qty": 20,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 18000
+        },
+        {
+          "name": "Teh celup",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 6000
+        },
+        {
+          "name": "Susu kental manis",
+          "qty": 2,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 13000
+        },
+        {
+          "name": "Gas 3kg",
+          "qty": 1,
+          "unit": "",
+          "unit_price": 0,
+          "line_total": 22000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/blur-3-thermal-r2.2.jpg",
+      "category": "blurred",
+      "provenance": "generated: Gaussian blur of thermal-1-clean (r=2.2)",
+      "doc_type": "receipt",
+      "shows_unit_price": true,
+      "shows_unit": false,
+      "expect_gate": null,
+      "total": 272000,
+      "lines_sum": 272000,
+      "items": [
+        {
+          "name": "Indomie Goreng",
+          "qty": 5,
+          "unit": "pcs",
+          "unit_price": 3500,
+          "line_total": 17500
+        },
+        {
+          "name": "Aqua 600ml",
+          "qty": 12,
+          "unit": "pcs",
+          "unit_price": 3000,
+          "line_total": 36000
+        },
+        {
+          "name": "Kopi Kapal Api",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 1500,
+          "line_total": 15000
+        },
+        {
+          "name": "Gula Pasir 1kg",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 17000,
+          "line_total": 34000
+        },
+        {
+          "name": "Minyak Goreng 2L",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 36000,
+          "line_total": 36000
+        },
+        {
+          "name": "Telur 1kg",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 28000,
+          "line_total": 56000
+        },
+        {
+          "name": "Sabun Lifebuoy",
+          "qty": 3,
+          "unit": "pcs",
+          "unit_price": 4500,
+          "line_total": 13500
+        },
+        {
+          "name": "Rokok Sampoerna",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 32000,
+          "line_total": 64000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/angle-1-neat.jpg",
+      "category": "angled",
+      "provenance": "generated: perspective warp of test-receipt-1-neat.png",
+      "doc_type": "stock_ledger",
+      "shows_unit_price": true,
+      "shows_unit": true,
+      "expect_gate": null,
+      "total": 635500,
+      "lines_sum": 635500,
+      "items": [
+        {
+          "name": "Minyak goreng 2L",
+          "qty": 3,
+          "unit": "botol",
+          "unit_price": 38000,
+          "line_total": 114000
+        },
+        {
+          "name": "Gula pasir 1kg",
+          "qty": 5,
+          "unit": "kg",
+          "unit_price": 15000,
+          "line_total": 75000
+        },
+        {
+          "name": "Kopi Sachet",
+          "qty": 2,
+          "unit": "dus",
+          "unit_price": 88000,
+          "line_total": 176000
+        },
+        {
+          "name": "Telur",
+          "qty": 1,
+          "unit": "kg",
+          "unit_price": 27000,
+          "line_total": 27000
+        },
+        {
+          "name": "Tepung terigu 1kg",
+          "qty": 2,
+          "unit": "kg",
+          "unit_price": 12500,
+          "line_total": 25000
+        },
+        {
+          "name": "Susu kental manis",
+          "qty": 3,
+          "unit": "kaleng",
+          "unit_price": 11000,
+          "line_total": 33000
+        },
+        {
+          "name": "Mie instan",
+          "qty": 10,
+          "unit": "bungkus",
+          "unit_price": 3000,
+          "line_total": 30000
+        },
+        {
+          "name": "Kecap manis",
+          "qty": 2,
+          "unit": "botol",
+          "unit_price": 10000,
+          "line_total": 20000
+        },
+        {
+          "name": "Sabun cuci piring",
+          "qty": 3,
+          "unit": "pouch",
+          "unit_price": 6500,
+          "line_total": 19500
+        },
+        {
+          "name": "Rokok Surya 16",
+          "qty": 4,
+          "unit": "bungkus",
+          "unit_price": 29000,
+          "line_total": 116000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/angle-2-thermal.jpg",
+      "category": "angled",
+      "provenance": "generated: perspective warp of a clean render of thermal B",
+      "doc_type": "receipt",
+      "shows_unit_price": true,
+      "shows_unit": false,
+      "expect_gate": null,
+      "total": 237000,
+      "lines_sum": 237000,
+      "items": [
+        {
+          "name": "Beras 5kg",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 72000,
+          "line_total": 72000
+        },
+        {
+          "name": "Susu UHT 1L",
+          "qty": 4,
+          "unit": "pcs",
+          "unit_price": 18000,
+          "line_total": 72000
+        },
+        {
+          "name": "Teh Celup Sariwangi",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 7500,
+          "line_total": 15000
+        },
+        {
+          "name": "Kecap Bango 600ml",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 24000,
+          "line_total": 24000
+        },
+        {
+          "name": "Mie Sedaap",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 3200,
+          "line_total": 32000
+        },
+        {
+          "name": "Gas 3kg",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 22000,
+          "line_total": 22000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/angle-3-hand-segoe.jpg",
+      "category": "angled",
+      "provenance": "generated: perspective warp of hand-1-segoe-print",
+      "doc_type": "stock_ledger",
+      "shows_unit_price": true,
+      "shows_unit": true,
+      "expect_gate": null,
+      "total": 332000,
+      "lines_sum": 332000,
+      "items": [
+        {
+          "name": "Beras",
+          "qty": 10,
+          "unit": "kg",
+          "unit_price": 14000,
+          "line_total": 140000
+        },
+        {
+          "name": "Minyak goreng",
+          "qty": 3,
+          "unit": "liter",
+          "unit_price": 19000,
+          "line_total": 57000
+        },
+        {
+          "name": "Gula",
+          "qty": 2,
+          "unit": "kg",
+          "unit_price": 16000,
+          "line_total": 32000
+        },
+        {
+          "name": "Telur",
+          "qty": 1,
+          "unit": "kg",
+          "unit_price": 28000,
+          "line_total": 28000
+        },
+        {
+          "name": "Bawang merah",
+          "qty": 1,
+          "unit": "kg",
+          "unit_price": 35000,
+          "line_total": 35000
+        },
+        {
+          "name": "Cabai rawit",
+          "qty": 0.5,
+          "unit": "kg",
+          "unit_price": 60000,
+          "line_total": 30000
+        },
+        {
+          "name": "Tahu",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 1000,
+          "line_total": 10000
+        }
+      ],
+      "note": ""
+    },
+    {
+      "file": "generated/control-unreadable.jpg",
+      "category": "unreadable_control",
+      "provenance": "generated: thermal B blurred (r=11) and noised past legibility — deliberately unreadable",
+      "doc_type": "receipt",
+      "shows_unit_price": true,
+      "shows_unit": false,
+      "expect_gate": true,
+      "total": 237000,
+      "lines_sum": 237000,
+      "items": [
+        {
+          "name": "Beras 5kg",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 72000,
+          "line_total": 72000
+        },
+        {
+          "name": "Susu UHT 1L",
+          "qty": 4,
+          "unit": "pcs",
+          "unit_price": 18000,
+          "line_total": 72000
+        },
+        {
+          "name": "Teh Celup Sariwangi",
+          "qty": 2,
+          "unit": "pcs",
+          "unit_price": 7500,
+          "line_total": 15000
+        },
+        {
+          "name": "Kecap Bango 600ml",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 24000,
+          "line_total": 24000
+        },
+        {
+          "name": "Mie Sedaap",
+          "qty": 10,
+          "unit": "pcs",
+          "unit_price": 3200,
+          "line_total": 32000
+        },
+        {
+          "name": "Gas 3kg",
+          "qty": 1,
+          "unit": "pcs",
+          "unit_price": 22000,
+          "line_total": 22000
+        }
+      ],
+      "note": "any confident item list here is a fabrication; the only right answers are no items or the gate"
+    }
+  ]
+}
