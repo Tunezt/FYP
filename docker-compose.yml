@@ -1,0 +1,33 @@
+# Local development database — Postgres 16 with pgvector, matching the Supabase
+# deploy target (which is also Postgres + pgvector + RLS). See docs/BUILD-ROADMAP.md M0-T1.
+#
+#   docker compose up -d          # start (first run also executes scripts/db-bootstrap.sql)
+#   docker compose down           # stop, keep data
+#   docker compose down -v        # stop AND wipe the named volume (fresh cluster next time)
+#
+# No Docker on the machine? scripts/local-pg.py runs the same Postgres 16 + pgvector from
+# the pip-downloadable `pgserver` binaries and applies the same bootstrap script.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: warung-pintar-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres          # elevated role — MIGRATION_DATABASE_URL (alembic only)
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: warung_pintar
+    ports:
+      - "5432:5432"
+    volumes:
+      - warung_pintar_pgdata:/var/lib/postgresql/data
+      # Runs once, on first cluster creation only: creates the restricted `app_role`
+      # that DATABASE_URL must use (no BYPASSRLS — otherwise RLS enforces nothing).
+      - ./scripts/db-bootstrap.sql:/docker-entrypoint-initdb.d/10-bootstrap.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d warung_pintar"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  warung_pintar_pgdata:

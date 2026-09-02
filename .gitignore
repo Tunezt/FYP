@@ -30,3 +30,6 @@ Thumbs.db
 *.log
 .coverage
 htmlcov/
+
+# Docker-less local Postgres (scripts/local-pg.py): binaries + cluster data
+.pg16/

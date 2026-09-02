@@ -15,7 +15,9 @@ depends_on = None
 
 SCHEMA_SQL = """
 create extension if not exists vector;
-create extension if not exists pgcrypto;
+-- No pgcrypto: gen_random_uuid() is core since Postgres 13 and nothing else here
+-- uses it (PIN/OTP hashing is Python-side). The local Postgres build used on
+-- Docker-less machines (scripts/local-pg.py) ships no contrib extensions.
 
 create type staff_role as enum ('owner', 'staff');
 create type expense_source as enum ('manual', 'receipt');

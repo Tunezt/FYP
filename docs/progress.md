@@ -269,3 +269,22 @@ Everything in Phases 0–10 was written and unit-tested but had never run agains
 | Railway + Vercel deploy | ✖ **blocked: neither CLI installed/authenticated** — `railway login`/`vercel login` are interactive; ready to drive them once the owner logs in |
 
 Nothing above is marked verified without having actually run live.
+
+---
+
+## Roadmap v2 build log (docs/BUILD-ROADMAP.md)
+
+Entries below follow roadmap §6. One task per commit, `[<task-id>] <description>`.
+
+### [M0-T1] Local Postgres with pgvector
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** docker-compose.yml, scripts/db-bootstrap.sql, scripts/local-pg.py, backend/.env.example, backend/tests/conftest.py, backend/alembic/versions/0001_initial_schema.py, .gitignore
+**Gates:** pytest 71 passed 0 skipped · migrations round-trip ok (0002 → 0001 → 0002) · frontend build ok · seed ok
+**Notes:**
+- `docker-compose.yml` runs `pgvector/pgvector:pg16` on a named volume with `scripts/db-bootstrap.sql` mounted into `docker-entrypoint-initdb.d`. The bootstrap creates `app_role` (LOGIN, NOBYPASSRLS) with grants plus default privileges, idempotently, mirroring the Supabase restore sequence in `PROJECT-STATUS.md` §5. Superuser `postgres`/`postgres`, database `warung_pintar`, port 5432.
+- **This machine has no Docker, no WSL, no local Postgres and no admin rights**, so `docker compose up -d` could not be exercised here. `scripts/local-pg.py` is the fallback: it downloads the `pgserver==0.1.4` wheel from PyPI (a stock Postgres 16.2 + pgvector build for win_amd64), unpacks the binaries into `<repo>/.pg16/` (git-ignored), runs `initdb`, starts on 5432 and applies the same bootstrap SQL. `start` / `stop` / `status` / `psql` / `reset`. The cluster is deliberately not under `%LOCALAPPDATA%`: the venv is built on the Microsoft Store Python, which redirects AppData writes into a per-app sandbox and the Postgres loader then fails with STATUS_DLL_NOT_FOUND.
+- `backend/tests/conftest.py` defaults `INTEGRATION_DATABASE_URL` to `DATABASE_URL` **only when the host is localhost**, so the 4 RLS/race tests run against the local DB and can never accidentally target a hosted database. No test was changed.
+- `backend/.env` (untracked) now points both URLs at the local cluster; the dead Supabase strings are kept commented for M12-T1.
+**Deviation:** removed `create extension if not exists pgcrypto` from migration 0001. `gen_random_uuid()` is core since Postgres 13 and nothing else uses pgcrypto (PIN/OTP hashing is Python `hashlib`). The pgserver build ships only `plpgsql` and `vector`, so the line made 0001 unrunnable there. Not a schema change; Supabase has pgcrypto preinstalled either way.
+**Next:** M0-T2
