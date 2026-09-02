@@ -339,7 +339,7 @@ def main() -> None:
     blur_note = "generated: Gaussian blur of "
     manifest += [
         entry(save(blurred(neat, 3.5), "blur-1-neat-r3.5.jpg"), "blurred", blur_note + "test-receipt-1-neat.png (r=3.5)",
-              ORIG_NEAT, doc_type="stock_ledger", shows_unit_price=True, shows_unit=True, expect_gate=None),
+              ORIG_NEAT, doc_type="stock_ledger", shows_unit_price=True, shows_unit=True, expect_gate=None, written_total=645500),
         entry(save(blurred(medium, 3.0), "blur-2-medium-r3.jpg"), "blurred", blur_note + "test-receipt-3-medium.png (r=3.0)",
               ORIG_MEDIUM, doc_type="receipt", shows_unit_price=False, shows_unit=False, expect_gate=None),
         entry(save(blurred(photo_like(thermal_a), 2.2), "blur-3-thermal-r2.2.jpg"), "blurred", blur_note + "thermal-1-clean (r=2.2)",
@@ -349,7 +349,7 @@ def main() -> None:
     ang = "generated: perspective warp of "
     manifest += [
         entry(save(angled(neat), "angle-1-neat.jpg"), "angled", ang + "test-receipt-1-neat.png",
-              ORIG_NEAT, doc_type="stock_ledger", shows_unit_price=True, shows_unit=True, expect_gate=None),
+              ORIG_NEAT, doc_type="stock_ledger", shows_unit_price=True, shows_unit=True, expect_gate=None, written_total=645500),
         entry(save(angled(photo_like(thermal_b)), "angle-2-thermal.jpg"), "angled", ang + "a clean render of thermal B",
               THERMAL_B["items"], doc_type="receipt", shows_unit_price=True, shows_unit=False, expect_gate=None),
         entry(save(angled(photo_like(c_segoe), 0.22), "angle-3-hand-segoe.jpg"), "angled", ang + "hand-1-segoe-print",

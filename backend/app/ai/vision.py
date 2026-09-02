@@ -24,11 +24,25 @@ RECEIPT_SCHEMA = {
                 "properties": {
                     "name": {"type": "string"},
                     "quantity": {"type": "number"},
-                    "unit": {"type": "string", "description": "kg, pcs, liter, dus, …"},
-                    "unit_price": {"type": "number", "description": "0 if not shown"},
+                    "unit": {
+                        "type": "string",
+                        "description": "ONLY the unit written next to the quantity (kg, pcs, liter, dus, bungkus, …). Empty string if none is written.",
+                    },
+                    "unit_written": {
+                        "type": "boolean",
+                        "description": "true only if a unit is physically written on this line",
+                    },
+                    "unit_price": {
+                        "type": "number",
+                        "description": "Price per unit. Copy it if shown; if only a line total is shown you may divide line_total by quantity, but then unit_price_written must be false. 0 if neither is shown.",
+                    },
+                    "unit_price_written": {
+                        "type": "boolean",
+                        "description": "true only if a per-unit price is physically written on this line (e.g. '@12.500' or '2 x 12.500')",
+                    },
                     "line_total": {"type": "number", "description": "0 if not shown"},
                 },
-                "required": ["name", "quantity", "unit"],
+                "required": ["name", "quantity", "unit", "unit_written", "unit_price", "unit_price_written"],
             },
         },
         "total_amount": {"type": "number", "description": "Grand total in rupiah; 0 if not shown"},
@@ -56,10 +70,79 @@ Rules:
   'rb'/'ribu' = ×1000, 'jt'/'juta' = ×1000000.
 - Handwriting is often messy. If a quantity, unit, or name could plausibly read
   two ways, list it in ambiguities and set confidence to medium or low.
+- Units: copy ONLY a unit that is written next to the quantity, and set
+  unit_written=true. If no unit is written, leave unit empty and set
+  unit_written=false. NEVER infer a unit from the product name: "Minyak goreng
+  2L" with quantity 1 is 1 item, not 2 liters and not 1 liter.
+- Unit prices: if a per-unit price is written (e.g. "@12.500" or "2 x 12.500"),
+  copy it and set unit_price_written=true. If only a line total is written, you
+  may set unit_price = line_total ÷ quantity but MUST set
+  unit_price_written=false. Never invent a price that cannot be derived.
 - confidence=high is a promise that nothing needs the owner's double-checking.
   When in ANY doubt, do not claim high.
 - If the photo is not a business document at all, use document_type=other with
   an empty items list."""
+
+# Server-side guards (M1-T3). The model's self-reported confidence missed every
+# fabricated field in the M1-T2 baseline, so what is stored is decided here:
+#   * a unit the model did not see written is dropped (commit falls back to "pcs")
+#   * a unit price with no written basis and no line total to derive it from is zeroed
+#   * arithmetic the document contradicts becomes an explicit ambiguity, which the
+#     confirmation gate (app/services/receipts.py) turns into a question to the owner
+_TOLERANCE = 1  # rupiah; handwritten totals are whole numbers
+
+
+def _num(value) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def normalize_parse(parsed: dict) -> dict:
+    """Apply the guards above in place and return the parse. Idempotent, and
+    tolerant of parses produced before the *_written flags existed (a pending
+    confirmation payload, a revision): a missing flag means 'written'."""
+    parsed.setdefault("items", [])
+    parsed.setdefault("ambiguities", [])
+    parsed.setdefault("confidence", "low")
+    parsed.setdefault("document_type", "other")
+    ambiguities: list[str] = list(parsed["ambiguities"])
+
+    lines_sum = 0.0
+    any_line_total = False
+    for item in parsed["items"]:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip() or "?"
+        qty = _num(item.get("quantity"))
+        line_total = _num(item.get("line_total"))
+        unit_price = _num(item.get("unit_price"))
+
+        if item.get("unit_written") is False:
+            item["unit"] = ""
+        if item.get("unit_price_written") is False and unit_price > 0 and line_total <= 0:
+            # Nothing on the page to derive it from — a guess. Do not store it.
+            item["unit_price"] = 0
+            unit_price = 0.0
+        if unit_price > 0 and line_total > 0 and qty > 0 and abs(unit_price * qty - line_total) > _TOLERANCE:
+            ambiguities.append(
+                f"Baris '{name}': {qty:g} × {unit_price:,.0f} tidak sama dengan total baris {line_total:,.0f}"
+            )
+        if line_total > 0:
+            any_line_total = True
+            lines_sum += line_total
+
+    total = _num(parsed.get("total_amount"))
+    if total > 0 and any_line_total and abs(lines_sum - total) > _TOLERANCE:
+        ambiguities.append(
+            f"Jumlah semua baris ({lines_sum:,.0f}) tidak sama dengan total yang tertulis ({total:,.0f})"
+        )
+
+    # Dedupe while keeping order (idempotence on re-normalisation).
+    seen: set[str] = set()
+    parsed["ambiguities"] = [a for a in ambiguities if not (a in seen or seen.add(a))]
+    return parsed
 
 
 async def parse_business_document(image_bytes: bytes, mime_type: str) -> dict:
@@ -70,11 +153,7 @@ async def parse_business_document(image_bytes: bytes, mime_type: str) -> dict:
         mime_type=mime_type,
         response_schema=RECEIPT_SCHEMA,
     )
-    parsed.setdefault("items", [])
-    parsed.setdefault("ambiguities", [])
-    parsed.setdefault("confidence", "low")
-    parsed.setdefault("document_type", "other")
-    return parsed
+    return normalize_parse(parsed)
 
 
 _REVISE_SYSTEM = """A parsed extraction from a photographed business document was
@@ -106,9 +185,12 @@ async def revise_parse(parsed: dict, owner_message: str) -> dict:
     text = reply.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         data = json.loads(text)
+        revised = data.get("parsed", parsed)
+        if isinstance(revised, dict):
+            revised = normalize_parse(revised)
         return {
             "unrelated": bool(data.get("unrelated", False)),
-            "parsed": data.get("parsed", parsed),
+            "parsed": revised,
         }
     except json.JSONDecodeError:
         return {"unrelated": True, "parsed": parsed}

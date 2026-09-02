@@ -1,0 +1,1350 @@
+{
+ "label": "M1-T2 expanded set, untuned prompt (run 1, reconstructed from vision-results.md)",
+ "model": "gemini-2.5-flash",
+ "commit": "eb506c1",
+ "results": [
+  {
+   "file": "test-receipt-1-neat.png",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 15048,
+   "raw_text": "{\"document_type\": \"stock_ledger\", \"supplier\": \"\", \"date\": \"2025-05-25\", \"items\": [{\"name\": \"Minyak goreng 2L\", \"quantity\": 3, \"unit\": \"botol\", \"unit_price\": 38000, \"line_total\": 114000}, {\"name\": \"Gula pasir 1kg\", \"quantity\": 5, \"unit\": \"kg\", \"unit_price\": 15000, \"line_total\": 75000}, {\"name\": \"Kopi Sachet\", \"quantity\": 2, \"unit\": \"dus\", \"unit_price\": 88000, \"line_total\": 176000}, {\"name\": \"Telur\", \"quantity\": 1, \"unit\": \"kg\", \"unit_price\": 27000, \"line_total\": 27000}, {\"name\": \"Tepung terigu 1kg\", \"quantity\": 2, \"unit\": \"kg\", \"unit_price\": 12500, \"line_total\": 25000}, {\"name\": \"Susu kental manis\", \"quantity\": 3, \"unit\": \"kaleng\", \"unit_price\": 11000, \"line_total\": 33000}, {\"name\": \"Mie instan\", \"quantity\": 10, \"unit\": \"bungkus\", \"unit_price\": 3000, \"line_total\": 30000}, {\"name\": \"Kecap manis\", \"quantity\": 2, \"unit\": \"botol\", \"unit_price\": 10000, \"line_total\": 20000}, {\"name\": \"Sabun cuci piring\", \"quantity\": 3, \"unit\": \"pouch\", \"unit_price\": 6500, \"line_total\": 19500}, {\"name\": \"Rokok Surya 16\", \"quantity\": 4, \"unit\": \"bungkus\", \"unit_price\": 29000, \"line_total\": 116000}], \"total_amount\": 645500, \"confidence\": \"high\", \"ambiguities\": []}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "stock_ledger",
+    "supplier": "",
+    "date": "2025-05-25",
+    "items": [
+     {
+      "name": "Minyak goreng 2L",
+      "quantity": 3,
+      "unit": "botol",
+      "unit_price": 38000,
+      "line_total": 114000
+     },
+     {
+      "name": "Gula pasir 1kg",
+      "quantity": 5,
+      "unit": "kg",
+      "unit_price": 15000,
+      "line_total": 75000
+     },
+     {
+      "name": "Kopi Sachet",
+      "quantity": 2,
+      "unit": "dus",
+      "unit_price": 88000,
+      "line_total": 176000
+     },
+     {
+      "name": "Telur",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 27000,
+      "line_total": 27000
+     },
+     {
+      "name": "Tepung terigu 1kg",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 12500,
+      "line_total": 25000
+     },
+     {
+      "name": "Susu kental manis",
+      "quantity": 3,
+      "unit": "kaleng",
+      "unit_price": 11000,
+      "line_total": 33000
+     },
+     {
+      "name": "Mie instan",
+      "quantity": 10,
+      "unit": "bungkus",
+      "unit_price": 3000,
+      "line_total": 30000
+     },
+     {
+      "name": "Kecap manis",
+      "quantity": 2,
+      "unit": "botol",
+      "unit_price": 10000,
+      "line_total": 20000
+     },
+     {
+      "name": "Sabun cuci piring",
+      "quantity": 3,
+      "unit": "pouch",
+      "unit_price": 6500,
+      "line_total": 19500
+     },
+     {
+      "name": "Rokok Surya 16",
+      "quantity": 4,
+      "unit": "bungkus",
+      "unit_price": 29000,
+      "line_total": 116000
+     }
+    ],
+    "total_amount": 645500,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "test-receipt-2-messy.png",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 39964,
+   "raw_text": "{\n  \"document_type\": \"receipt\",\n  \"supplier\": \"\",\n  \"date\": \"\",\n  \"items\": [\n    {\n      \"name\": \"beras\",\n      \"quantity\": 2,\n      \"unit\": \"kg\",\n      \"unit_price\": 0,\n      \"line_total\": 28000\n    },\n    {\n      \"name\": \"gula psr\",\n      \"quantity\": 0.25,\n      \"unit\": \"kg\",\n      \"unit_price\": 0,\n      \"line_total\": 4500\n    },\n    {\n      \"name\": \"teh celup\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 0,\n      \"line_total\": 11000\n    },\n    {\n      \"name\": \"indomie\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 0,\n      \"line_total\": 6500\n    },\n    {\n      \"name\": \"minyak goring\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 0,\n      \"line_total\": 14000\n    },\n    {\n      \"name\": \"kecap BH.\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 0,\n      \"line_total\": 17000\n    },\n    {\n      \"name\": \"Saus tiran\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 0,\n      \"line_total\": 6500\n    }\n  ],\n  \"total_amount\": 87500,\n  \"confidence\": \"medium\",\n  \"ambiguities\": [\n    \"The year for the date '23/5' is not specified.\",\n    \"The unit 'RB' for 'beras' is interpreted as 'kg' (kilogram), but could potentially mean 'renceng' (a bundle/sachet) or another unit.\",\n    \"Units for 'gula psr', 'teh celup', 'indomie', 'minyak goring', 'kecap BH', and 'Saus tiran' are implied (kg for sugar, pcs for others) as they are not explicitly written.\"\n  ]\n}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "",
+    "date": "",
+    "items": [
+     {
+      "name": "beras",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 0,
+      "line_total": 28000
+     },
+     {
+      "name": "gula psr",
+      "quantity": 0.25,
+      "unit": "kg",
+      "unit_price": 0,
+      "line_total": 4500
+     },
+     {
+      "name": "teh celup",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 11000
+     },
+     {
+      "name": "indomie",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 6500
+     },
+     {
+      "name": "minyak goring",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 14000
+     },
+     {
+      "name": "kecap BH.",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 17000
+     },
+     {
+      "name": "Saus tiran",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 0,
+      "line_total": 6500
+     }
+    ],
+    "total_amount": 87500,
+    "confidence": "medium",
+    "ambiguities": [
+     "The year for the date '23/5' is not specified.",
+     "The unit 'RB' for 'beras' is interpreted as 'kg' (kilogram), but could potentially mean 'renceng' (a bundle/sachet) or another unit.",
+     "Units for 'gula psr', 'teh celup', 'indomie', 'minyak goring', 'kecap BH', and 'Saus tiran' are implied (kg for sugar, pcs for others) as they are not explicitly written."
+    ]
+   },
+   "error": null,
+   "gate_triggered": true,
+   "score": null
+  },
+  {
+   "file": "test-receipt-3-medium.png",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 45710,
+   "raw_text": "{\n  \"document_type\": \"receipt\",\n  \"supplier\": \"\",\n  \"date\": \"2025-05-26\",\n  \"items\": [\n    {\n      \"name\": \"Beras medium 10kg\",\n      \"quantity\": 1,\n      \"unit\": \"pack\",\n      \"unit_price\": 140000,\n      \"line_total\": 140000\n    },\n    {\n      \"name\": \"Minyak goreng 2L\",\n      \"quantity\": 2,\n      \"unit\": \"bottle\",\n      \"unit_price\": 31000,\n      \"line_total\": 62000\n    },\n    {\n      \"name\": \"Gula pasir 1kg\",\n      \"quantity\": 2,\n      \"unit\": \"pack\",\n      \"unit_price\": 14000,\n      \"line_total\": 28000\n    },\n    {\n      \"name\": \"Tepung terigu\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 12000,\n      \"line_total\": 12000\n    },\n    {\n      \"name\": \"Telur ayam\",\n      \"quantity\": 1,\n      \"unit\": \"tray\",\n      \"unit_price\": 27000,\n      \"line_total\": 27000\n    },\n    {\n      \"name\": \"Mie instan\",\n      \"quantity\": 10,\n      \"unit\": \"pcs\",\n      \"unit_price\": 1500,\n      \"line_total\": 15000\n    },\n    {\n      \"name\": \"Kopi sachet\",\n      \"quantity\": 20,\n      \"unit\": \"sachet\",\n      \"unit_price\": 900,\n      \"line_total\": 18000\n    },\n    {\n      \"name\": \"Teh celup\",\n      \"quantity\": 1,\n      \"unit\": \"box\",\n      \"unit_price\": 6000,\n      \"line_total\": 6000\n    },\n    {\n      \"name\": \"Susu kental manis\",\n      \"quantity\": 2,\n      \"unit\": \"can\",\n      \"unit_price\": 6500,\n      \"line_total\": 13000\n    },\n    {\n      \"name\": \"Gas 3kg\",\n      \"quantity\": 1,\n      \"unit\": \"cylinder\",\n      \"unit_price\": 22000,\n      \"line_total\": 22000\n    }\n  ],\n  \"total_amount\": 343000,\n  \"confidence\": \"high\",\n  \"ambiguities\": []\n}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "",
+    "date": "2025-05-26",
+    "items": [
+     {
+      "name": "Beras medium 10kg",
+      "quantity": 1,
+      "unit": "pack",
+      "unit_price": 140000,
+      "line_total": 140000
+     },
+     {
+      "name": "Minyak goreng 2L",
+      "quantity": 2,
+      "unit": "bottle",
+      "unit_price": 31000,
+      "line_total": 62000
+     },
+     {
+      "name": "Gula pasir 1kg",
+      "quantity": 2,
+      "unit": "pack",
+      "unit_price": 14000,
+      "line_total": 28000
+     },
+     {
+      "name": "Tepung terigu",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 12000,
+      "line_total": 12000
+     },
+     {
+      "name": "Telur ayam",
+      "quantity": 1,
+      "unit": "tray",
+      "unit_price": 27000,
+      "line_total": 27000
+     },
+     {
+      "name": "Mie instan",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+     },
+     {
+      "name": "Kopi sachet",
+      "quantity": 20,
+      "unit": "sachet",
+      "unit_price": 900,
+      "line_total": 18000
+     },
+     {
+      "name": "Teh celup",
+      "quantity": 1,
+      "unit": "box",
+      "unit_price": 6000,
+      "line_total": 6000
+     },
+     {
+      "name": "Susu kental manis",
+      "quantity": 2,
+      "unit": "can",
+      "unit_price": 6500,
+      "line_total": 13000
+     },
+     {
+      "name": "Gas 3kg",
+      "quantity": 1,
+      "unit": "cylinder",
+      "unit_price": 22000,
+      "line_total": 22000
+     }
+    ],
+    "total_amount": 343000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "thermal-1-clean.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 16478,
+   "raw_text": "{\"document_type\": \"receipt\", \"supplier\": \"TOKO SUMBER REJEKI\", \"date\": \"2026-08-14\", \"items\": [{\"name\": \"Indomie Goreng\", \"quantity\": 5, \"unit\": \"pcs\", \"unit_price\": 3500, \"line_total\": 17500}, {\"name\": \"Aqua 600ml\", \"quantity\": 12, \"unit\": \"pcs\", \"unit_price\": 3000, \"line_total\": 36000}, {\"name\": \"Kopi Kapal Api\", \"quantity\": 10, \"unit\": \"pcs\", \"unit_price\": 1500, \"line_total\": 15000}, {\"name\": \"Gula Pasir 1kg\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 17000, \"line_total\": 34000}, {\"name\": \"Minyak Goreng 2L\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 36000, \"line_total\": 36000}, {\"name\": \"Telur 1kg\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 28000, \"line_total\": 56000}, {\"name\": \"Sabun Lifebuoy\", \"quantity\": 3, \"unit\": \"pcs\", \"unit_price\": 4500, \"line_total\": 13500}, {\"name\": \"Rokok Sampoerna\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 32000, \"line_total\": 64000}], \"total_amount\": 272000, \"confidence\": \"high\", \"ambiguities\": []}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "TOKO SUMBER REJEKI",
+    "date": "2026-08-14",
+    "items": [
+     {
+      "name": "Indomie Goreng",
+      "quantity": 5,
+      "unit": "pcs",
+      "unit_price": 3500,
+      "line_total": 17500
+     },
+     {
+      "name": "Aqua 600ml",
+      "quantity": 12,
+      "unit": "pcs",
+      "unit_price": 3000,
+      "line_total": 36000
+     },
+     {
+      "name": "Kopi Kapal Api",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+     },
+     {
+      "name": "Gula Pasir 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 17000,
+      "line_total": 34000
+     },
+     {
+      "name": "Minyak Goreng 2L",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 36000,
+      "line_total": 36000
+     },
+     {
+      "name": "Telur 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 28000,
+      "line_total": 56000
+     },
+     {
+      "name": "Sabun Lifebuoy",
+      "quantity": 3,
+      "unit": "pcs",
+      "unit_price": 4500,
+      "line_total": 13500
+     },
+     {
+      "name": "Rokok Sampoerna",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 32000,
+      "line_total": 64000
+     }
+    ],
+    "total_amount": 272000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "thermal-2-faded.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 26557,
+   "raw_text": "{\"document_type\": \"receipt\", \"supplier\": \"TOKO SUMBER REJEKI\", \"date\": \"2026-08-14\", \"items\": [{\"name\": \"Indomie Goreng\", \"quantity\": 5, \"unit\": \"pcs\", \"unit_price\": 3500, \"line_total\": 17500}, {\"name\": \"Aqua 600ml\", \"quantity\": 12, \"unit\": \"pcs\", \"unit_price\": 3000, \"line_total\": 36000}, {\"name\": \"Kopi Kapal Api\", \"quantity\": 10, \"unit\": \"pcs\", \"unit_price\": 1500, \"line_total\": 15000}, {\"name\": \"Gula Pasir 1kg\", \"quantity\": 2, \"unit\": \"kg\", \"unit_price\": 17000, \"line_total\": 34000}, {\"name\": \"Minyak Goreng 2L\", \"quantity\": 1, \"unit\": \"liter\", \"unit_price\": 36000, \"line_total\": 36000}, {\"name\": \"Telur 1kg\", \"quantity\": 2, \"unit\": \"kg\", \"unit_price\": 28000, \"line_total\": 56000}, {\"name\": \"Sabun Lifebuoy\", \"quantity\": 3, \"unit\": \"pcs\", \"unit_price\": 4500, \"line_total\": 13500}, {\"name\": \"Rokok Sampoerna\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 32000, \"line_total\": 64000}], \"total_amount\": 272000, \"confidence\": \"high\", \"ambiguities\": []}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "TOKO SUMBER REJEKI",
+    "date": "2026-08-14",
+    "items": [
+     {
+      "name": "Indomie Goreng",
+      "quantity": 5,
+      "unit": "pcs",
+      "unit_price": 3500,
+      "line_total": 17500
+     },
+     {
+      "name": "Aqua 600ml",
+      "quantity": 12,
+      "unit": "pcs",
+      "unit_price": 3000,
+      "line_total": 36000
+     },
+     {
+      "name": "Kopi Kapal Api",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+     },
+     {
+      "name": "Gula Pasir 1kg",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 17000,
+      "line_total": 34000
+     },
+     {
+      "name": "Minyak Goreng 2L",
+      "quantity": 1,
+      "unit": "liter",
+      "unit_price": 36000,
+      "line_total": 36000
+     },
+     {
+      "name": "Telur 1kg",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 28000,
+      "line_total": 56000
+     },
+     {
+      "name": "Sabun Lifebuoy",
+      "quantity": 3,
+      "unit": "pcs",
+      "unit_price": 4500,
+      "line_total": 13500
+     },
+     {
+      "name": "Rokok Sampoerna",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 32000,
+      "line_total": 64000
+     }
+    ],
+    "total_amount": 272000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "thermal-3-noisy-rotated.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 21951,
+   "raw_text": "{\"document_type\": \"receipt\", \"supplier\": \"GROSIR BAROKAH\", \"date\": \"2026-08-20\", \"items\": [{\"name\": \"Beras 5kg\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 72000, \"line_total\": 72000}, {\"name\": \"Susu UHT 1L\", \"quantity\": 4, \"unit\": \"pcs\", \"unit_price\": 18000, \"line_total\": 72000}, {\"name\": \"Teh Celup Sariwangi\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 7500, \"line_total\": 15000}, {\"name\": \"Kecap Bango 600ml\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 24000, \"line_total\": 24000}, {\"name\": \"Mie Sedaap\", \"quantity\": 10, \"unit\": \"pcs\", \"unit_price\": 3200, \"line_total\": 32000}, {\"name\": \"Gas 3kg\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 22000, \"line_total\": 22000}], \"total_amount\": 237000, \"confidence\": \"high\", \"ambiguities\": []}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "GROSIR BAROKAH",
+    "date": "2026-08-20",
+    "items": [
+     {
+      "name": "Beras 5kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 72000,
+      "line_total": 72000
+     },
+     {
+      "name": "Susu UHT 1L",
+      "quantity": 4,
+      "unit": "pcs",
+      "unit_price": 18000,
+      "line_total": 72000
+     },
+     {
+      "name": "Teh Celup Sariwangi",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 7500,
+      "line_total": 15000
+     },
+     {
+      "name": "Kecap Bango 600ml",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 24000,
+      "line_total": 24000
+     },
+     {
+      "name": "Mie Sedaap",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 3200,
+      "line_total": 32000
+     },
+     {
+      "name": "Gas 3kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 22000,
+      "line_total": 22000
+     }
+    ],
+    "total_amount": 237000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "thermal-4-lowres.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 20267,
+   "raw_text": "{\n  \"document_type\": \"receipt\",\n  \"supplier\": \"TOKO SUMBER REJEKI\",\n  \"date\": \"2026-08-14\",\n  \"items\": [\n    {\n      \"name\": \"Indomie Goreng\",\n      \"quantity\": 5,\n      \"unit\": \"pcs\",\n      \"unit_price\": 3500,\n      \"line_total\": 17500\n    },\n    {\n      \"name\": \"Aqua 600ml\",\n      \"quantity\": 12,\n      \"unit\": \"pcs\",\n      \"unit_price\": 3000,\n      \"line_total\": 36000\n    },\n    {\n      \"name\": \"Kopi Kapal Api\",\n      \"quantity\": 10,\n      \"unit\": \"pcs\",\n      \"unit_price\": 1500,\n      \"line_total\": 15000\n    },\n    {\n      \"name\": \"Gula Pasir 1kg\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 17000,\n      \"line_total\": 34000\n    },\n    {\n      \"name\": \"Minyak Goreng 2L\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 36000,\n      \"line_total\": 36000\n    },\n    {\n      \"name\": \"Telur 1kg\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 28000,\n      \"line_total\": 56000\n    },\n    {\n      \"name\": \"Sabun Lifebuoy\",\n      \"quantity\": 3,\n      \"unit\": \"pcs\",\n      \"unit_price\": 4500,\n      \"line_total\": 13500\n    },\n    {\n      \"name\": \"Rokok Sampoerna\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 32000,\n      \"line_total\": 64000\n    }\n  ],\n  \"total_amount\": 272000,\n  \"confidence\": \"high\",\n  \"ambiguities\": []\n}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "TOKO SUMBER REJEKI",
+    "date": "2026-08-14",
+    "items": [
+     {
+      "name": "Indomie Goreng",
+      "quantity": 5,
+      "unit": "pcs",
+      "unit_price": 3500,
+      "line_total": 17500
+     },
+     {
+      "name": "Aqua 600ml",
+      "quantity": 12,
+      "unit": "pcs",
+      "unit_price": 3000,
+      "line_total": 36000
+     },
+     {
+      "name": "Kopi Kapal Api",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+     },
+     {
+      "name": "Gula Pasir 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 17000,
+      "line_total": 34000
+     },
+     {
+      "name": "Minyak Goreng 2L",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 36000,
+      "line_total": 36000
+     },
+     {
+      "name": "Telur 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 28000,
+      "line_total": 56000
+     },
+     {
+      "name": "Sabun Lifebuoy",
+      "quantity": 3,
+      "unit": "pcs",
+      "unit_price": 4500,
+      "line_total": 13500
+     },
+     {
+      "name": "Rokok Sampoerna",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 32000,
+      "line_total": 64000
+     }
+    ],
+    "total_amount": 272000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "hand-1-segoe-print.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 12164,
+   "raw_text": "{\"document_type\": \"receipt\", \"supplier\": \"\", \"date\": \"\", \"items\": [{\"name\": \"Beras\", \"quantity\": 10, \"unit\": \"kg\", \"unit_price\": 14000, \"line_total\": 140000}, {\"name\": \"Minyak goreng\", \"quantity\": 3, \"unit\": \"liter\", \"unit_price\": 19000, \"line_total\": 57000}, {\"name\": \"Gula\", \"quantity\": 2, \"unit\": \"kg\", \"unit_price\": 16000, \"line_total\": 32000}, {\"name\": \"Telur\", \"quantity\": 1, \"unit\": \"kg\", \"unit_price\": 28000, \"line_total\": 28000}, {\"name\": \"Bawang merah\", \"quantity\": 1, \"unit\": \"kg\", \"unit_price\": 35000, \"line_total\": 35000}, {\"name\": \"Cabai rawit\", \"quantity\": 0.5, \"unit\": \"kg\", \"unit_price\": 60000, \"line_total\": 30000}, {\"name\": \"Tahu\", \"quantity\": 10, \"unit\": \"pcs\", \"unit_price\": 1000, \"line_total\": 10000}], \"total_amount\": 332000, \"confidence\": \"high\", \"ambiguities\": [\"The date 'tgl 12/8/26' is ambiguous regarding the order of day/month and the century of the year (e.g., 2026-08-12 or 2012-08-26).\"]}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "",
+    "date": "",
+    "items": [
+     {
+      "name": "Beras",
+      "quantity": 10,
+      "unit": "kg",
+      "unit_price": 14000,
+      "line_total": 140000
+     },
+     {
+      "name": "Minyak goreng",
+      "quantity": 3,
+      "unit": "liter",
+      "unit_price": 19000,
+      "line_total": 57000
+     },
+     {
+      "name": "Gula",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 16000,
+      "line_total": 32000
+     },
+     {
+      "name": "Telur",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 28000,
+      "line_total": 28000
+     },
+     {
+      "name": "Bawang merah",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 35000,
+      "line_total": 35000
+     },
+     {
+      "name": "Cabai rawit",
+      "quantity": 0.5,
+      "unit": "kg",
+      "unit_price": 60000,
+      "line_total": 30000
+     },
+     {
+      "name": "Tahu",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1000,
+      "line_total": 10000
+     }
+    ],
+    "total_amount": 332000,
+    "confidence": "high",
+    "ambiguities": [
+     "The date 'tgl 12/8/26' is ambiguous regarding the order of day/month and the century of the year (e.g., 2026-08-12 or 2012-08-26)."
+    ]
+   },
+   "error": null,
+   "gate_triggered": true,
+   "score": null
+  },
+  {
+   "file": "hand-2-ink-free.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 12290,
+   "raw_text": "{\n  \"document_type\": \"receipt\",\n  \"supplier\": \"\",\n  \"date\": \"2026-08-12\",\n  \"items\": [\n    {\n      \"name\": \"Beras\",\n      \"quantity\": 10,\n      \"unit\": \"kg\",\n      \"unit_price\": 14000,\n      \"line_total\": 140000\n    },\n    {\n      \"name\": \"Minyak goreng\",\n      \"quantity\": 3,\n      \"unit\": \"liter\",\n      \"unit_price\": 19000,\n      \"line_total\": 57000\n    },\n    {\n      \"name\": \"Gula\",\n      \"quantity\": 2,\n      \"unit\": \"kg\",\n      \"unit_price\": 16000,\n      \"line_total\": 32000\n    },\n    {\n      \"name\": \"Telur\",\n      \"quantity\": 1,\n      \"unit\": \"kg\",\n      \"unit_price\": 28000,\n      \"line_total\": 28000\n    },\n    {\n      \"name\": \"Bawang merah\",\n      \"quantity\": 1,\n      \"unit\": \"kg\",\n      \"unit_price\": 35000,\n      \"line_total\": 35000\n    },\n    {\n      \"name\": \"Cabai rawit\",\n      \"quantity\": 0.5,\n      \"unit\": \"kg\",\n      \"unit_price\": 60000,\n      \"line_total\": 30000\n    },\n    {\n      \"name\": \"Tahu\",\n      \"quantity\": 10,\n      \"unit\": \"pcs\",\n      \"unit_price\": 1000,\n      \"line_total\": 10000\n    }\n  ],\n  \"total_amount\": 332000,\n  \"confidence\": \"high\",\n  \"ambiguities\": []\n}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "",
+    "date": "2026-08-12",
+    "items": [
+     {
+      "name": "Beras",
+      "quantity": 10,
+      "unit": "kg",
+      "unit_price": 14000,
+      "line_total": 140000
+     },
+     {
+      "name": "Minyak goreng",
+      "quantity": 3,
+      "unit": "liter",
+      "unit_price": 19000,
+      "line_total": 57000
+     },
+     {
+      "name": "Gula",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 16000,
+      "line_total": 32000
+     },
+     {
+      "name": "Telur",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 28000,
+      "line_total": 28000
+     },
+     {
+      "name": "Bawang merah",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 35000,
+      "line_total": 35000
+     },
+     {
+      "name": "Cabai rawit",
+      "quantity": 0.5,
+      "unit": "kg",
+      "unit_price": 60000,
+      "line_total": 30000
+     },
+     {
+      "name": "Tahu",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1000,
+      "line_total": 10000
+     }
+    ],
+    "total_amount": 332000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "hand-3-segoe-script.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 19511,
+   "raw_text": "{\"document_type\": \"receipt\", \"supplier\": \"warung bu Sri\", \"date\": \"2026-09-03\", \"items\": [{\"name\": \"Kopi sachet\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 10000, \"line_total\": 20000}, {\"name\": \"Teh celup\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 6500, \"line_total\": 6500}, {\"name\": \"Mie instan\", \"quantity\": 3, \"unit\": \"pcs\", \"unit_price\": 3000, \"line_total\": 9000}, {\"name\": \"Minyak goreng\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 18000, \"line_total\": 18000}, {\"name\": \"Sabun cuci\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 4500, \"line_total\": 9000}, {\"name\": \"Gas 3kg\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 22000, \"line_total\": 22000}], \"total_amount\": 84500, \"confidence\": \"high\", \"ambiguities\": []}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "warung bu Sri",
+    "date": "2026-09-03",
+    "items": [
+     {
+      "name": "Kopi sachet",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 10000,
+      "line_total": 20000
+     },
+     {
+      "name": "Teh celup",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 6500,
+      "line_total": 6500
+     },
+     {
+      "name": "Mie instan",
+      "quantity": 3,
+      "unit": "pcs",
+      "unit_price": 3000,
+      "line_total": 9000
+     },
+     {
+      "name": "Minyak goreng",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 18000,
+      "line_total": 18000
+     },
+     {
+      "name": "Sabun cuci",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 4500,
+      "line_total": 9000
+     },
+     {
+      "name": "Gas 3kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 22000,
+      "line_total": 22000
+     }
+    ],
+    "total_amount": 84500,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "hand-4-bradley.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 11859,
+   "raw_text": "{\"document_type\": \"receipt\", \"supplier\": \"warung bu Sri\", \"date\": \"2026-09-03\", \"items\": [{\"name\": \"Kopi sachet\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 10000, \"line_total\": 20000}, {\"name\": \"Teh celup\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 6500, \"line_total\": 6500}, {\"name\": \"Mie instan\", \"quantity\": 3, \"unit\": \"pcs\", \"unit_price\": 3000, \"line_total\": 9000}, {\"name\": \"Minyak goreng\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 18000, \"line_total\": 18000}, {\"name\": \"Sabun cuci\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 4500, \"line_total\": 9000}, {\"name\": \"Gas 3kg\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 22000, \"line_total\": 22000}], \"total_amount\": 84500, \"confidence\": \"high\", \"ambiguities\": []}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "warung bu Sri",
+    "date": "2026-09-03",
+    "items": [
+     {
+      "name": "Kopi sachet",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 10000,
+      "line_total": 20000
+     },
+     {
+      "name": "Teh celup",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 6500,
+      "line_total": 6500
+     },
+     {
+      "name": "Mie instan",
+      "quantity": 3,
+      "unit": "pcs",
+      "unit_price": 3000,
+      "line_total": 9000
+     },
+     {
+      "name": "Minyak goreng",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 18000,
+      "line_total": 18000
+     },
+     {
+      "name": "Sabun cuci",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 4500,
+      "line_total": 9000
+     },
+     {
+      "name": "Gas 3kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 22000,
+      "line_total": 22000
+     }
+    ],
+    "total_amount": 84500,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "blur-1-neat-r3.5.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 13802,
+   "raw_text": "{\"document_type\": \"stock_ledger\", \"supplier\": \"\", \"date\": \"2018-05-28\", \"items\": [{\"name\": \"Minyak goreng 2L\", \"quantity\": 3, \"unit\": \"botol\", \"unit_price\": 38000, \"line_total\": 114000}, {\"name\": \"Gula pasir 1kg\", \"quantity\": 5, \"unit\": \"kg\", \"unit_price\": 15000, \"line_total\": 75000}, {\"name\": \"Kopi Sachet\", \"quantity\": 2, \"unit\": \"dus\", \"unit_price\": 88000, \"line_total\": 176000}, {\"name\": \"Telur\", \"quantity\": 1, \"unit\": \"kg\", \"unit_price\": 27000, \"line_total\": 27000}, {\"name\": \"Tepung terigu 1kg\", \"quantity\": 2, \"unit\": \"kg\", \"unit_price\": 12500, \"line_total\": 25000}, {\"name\": \"Susu kental manis\", \"quantity\": 3, \"unit\": \"kaleng\", \"unit_price\": 11000, \"line_total\": 33000}, {\"name\": \"Mie instan\", \"quantity\": 10, \"unit\": \"bungkus\", \"unit_price\": 3000, \"line_total\": 30000}, {\"name\": \"Kecap manis\", \"quantity\": 2, \"unit\": \"botol\", \"unit_price\": 10000, \"line_total\": 20000}, {\"name\": \"Sabun cuci piring\", \"quantity\": 3, \"unit\": \"pouch\", \"unit_price\": 6500, \"line_total\": 19500}, {\"name\": \"Rokok Surya 16\", \"quantity\": 4, \"unit\": \"bungkus\", \"unit_price\": 29000, \"line_total\": 116000}], \"total_amount\": 645500, \"confidence\": \"high\", \"ambiguities\": []}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "stock_ledger",
+    "supplier": "",
+    "date": "2018-05-28",
+    "items": [
+     {
+      "name": "Minyak goreng 2L",
+      "quantity": 3,
+      "unit": "botol",
+      "unit_price": 38000,
+      "line_total": 114000
+     },
+     {
+      "name": "Gula pasir 1kg",
+      "quantity": 5,
+      "unit": "kg",
+      "unit_price": 15000,
+      "line_total": 75000
+     },
+     {
+      "name": "Kopi Sachet",
+      "quantity": 2,
+      "unit": "dus",
+      "unit_price": 88000,
+      "line_total": 176000
+     },
+     {
+      "name": "Telur",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 27000,
+      "line_total": 27000
+     },
+     {
+      "name": "Tepung terigu 1kg",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 12500,
+      "line_total": 25000
+     },
+     {
+      "name": "Susu kental manis",
+      "quantity": 3,
+      "unit": "kaleng",
+      "unit_price": 11000,
+      "line_total": 33000
+     },
+     {
+      "name": "Mie instan",
+      "quantity": 10,
+      "unit": "bungkus",
+      "unit_price": 3000,
+      "line_total": 30000
+     },
+     {
+      "name": "Kecap manis",
+      "quantity": 2,
+      "unit": "botol",
+      "unit_price": 10000,
+      "line_total": 20000
+     },
+     {
+      "name": "Sabun cuci piring",
+      "quantity": 3,
+      "unit": "pouch",
+      "unit_price": 6500,
+      "line_total": 19500
+     },
+     {
+      "name": "Rokok Surya 16",
+      "quantity": 4,
+      "unit": "bungkus",
+      "unit_price": 29000,
+      "line_total": 116000
+     }
+    ],
+    "total_amount": 645500,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "blur-2-medium-r3.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 20264,
+   "raw_text": "{\n  \"document_type\": \"receipt\",\n  \"supplier\": \"\",\n  \"date\": \"2023-05-26\",\n  \"items\": [\n    {\n      \"name\": \"Beras medium 10kg\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 140000,\n      \"line_total\": 140000\n    },\n    {\n      \"name\": \"Minyak goreng 2L\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 31000,\n      \"line_total\": 62000\n    },\n    {\n      \"name\": \"Gula pasir 1kg\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 14000,\n      \"line_total\": 28000\n    },\n    {\n      \"name\": \"Tepung terigu\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 12000,\n      \"line_total\": 12000\n    },\n    {\n      \"name\": \"Telur ayam\",\n      \"quantity\": 1,\n      \"unit\": \"tray\",\n      \"unit_price\": 27000,\n      \"line_total\": 27000\n    },\n    {\n      \"name\": \"Mie instan\",\n      \"quantity\": 10,\n      \"unit\": \"pcs\",\n      \"unit_price\": 1500,\n      \"line_total\": 15000\n    },\n    {\n      \"name\": \"Kopi sachet\",\n      \"quantity\": 20,\n      \"unit\": \"sachet\",\n      \"unit_price\": 900,\n      \"line_total\": 18000\n    },\n    {\n      \"name\": \"Teh celup\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 6000,\n      \"line_total\": 6000\n    },\n    {\n      \"name\": \"Susu kental manis\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 6500,\n      \"line_total\": 13000\n    },\n    {\n      \"name\": \"Gas 3kg\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 22000,\n      \"line_total\": 22000\n    }\n  ],\n  \"total_amount\": 343000,\n  \"confidence\": \"high\",\n  \"ambiguities\": []\n}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "",
+    "date": "2023-05-26",
+    "items": [
+     {
+      "name": "Beras medium 10kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 140000,
+      "line_total": 140000
+     },
+     {
+      "name": "Minyak goreng 2L",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 31000,
+      "line_total": 62000
+     },
+     {
+      "name": "Gula pasir 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 14000,
+      "line_total": 28000
+     },
+     {
+      "name": "Tepung terigu",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 12000,
+      "line_total": 12000
+     },
+     {
+      "name": "Telur ayam",
+      "quantity": 1,
+      "unit": "tray",
+      "unit_price": 27000,
+      "line_total": 27000
+     },
+     {
+      "name": "Mie instan",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+     },
+     {
+      "name": "Kopi sachet",
+      "quantity": 20,
+      "unit": "sachet",
+      "unit_price": 900,
+      "line_total": 18000
+     },
+     {
+      "name": "Teh celup",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 6000,
+      "line_total": 6000
+     },
+     {
+      "name": "Susu kental manis",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 6500,
+      "line_total": 13000
+     },
+     {
+      "name": "Gas 3kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 22000,
+      "line_total": 22000
+     }
+    ],
+    "total_amount": 343000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "blur-3-thermal-r2.2.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 25233,
+   "raw_text": "{\n  \"document_type\": \"receipt\",\n  \"supplier\": \"TOKO SUMBER REJEKI\",\n  \"date\": \"2026-08-14\",\n  \"items\": [\n    {\n      \"name\": \"Indomie Goreng\",\n      \"quantity\": 5,\n      \"unit\": \"pcs\",\n      \"unit_price\": 3500,\n      \"line_total\": 17500\n    },\n    {\n      \"name\": \"Aqua 600ml\",\n      \"quantity\": 12,\n      \"unit\": \"pcs\",\n      \"unit_price\": 3000,\n      \"line_total\": 36000\n    },\n    {\n      \"name\": \"Kopi Kapal Api\",\n      \"quantity\": 10,\n      \"unit\": \"pcs\",\n      \"unit_price\": 1500,\n      \"line_total\": 15000\n    },\n    {\n      \"name\": \"Gula Pasir 1kg\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 17000,\n      \"line_total\": 34000\n    },\n    {\n      \"name\": \"Minyak Goreng 2L\",\n      \"quantity\": 1,\n      \"unit\": \"pcs\",\n      \"unit_price\": 36000,\n      \"line_total\": 36000\n    },\n    {\n      \"name\": \"Telur 1kg\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 28000,\n      \"line_total\": 56000\n    },\n    {\n      \"name\": \"Sabun Lifebuoy\",\n      \"quantity\": 3,\n      \"unit\": \"pcs\",\n      \"unit_price\": 4500,\n      \"line_total\": 13500\n    },\n    {\n      \"name\": \"Rokok Sampoerna\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 32000,\n      \"line_total\": 64000\n    }\n  ],\n  \"total_amount\": 272000,\n  \"confidence\": \"high\",\n  \"ambiguities\": []\n}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "TOKO SUMBER REJEKI",
+    "date": "2026-08-14",
+    "items": [
+     {
+      "name": "Indomie Goreng",
+      "quantity": 5,
+      "unit": "pcs",
+      "unit_price": 3500,
+      "line_total": 17500
+     },
+     {
+      "name": "Aqua 600ml",
+      "quantity": 12,
+      "unit": "pcs",
+      "unit_price": 3000,
+      "line_total": 36000
+     },
+     {
+      "name": "Kopi Kapal Api",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1500,
+      "line_total": 15000
+     },
+     {
+      "name": "Gula Pasir 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 17000,
+      "line_total": 34000
+     },
+     {
+      "name": "Minyak Goreng 2L",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 36000,
+      "line_total": 36000
+     },
+     {
+      "name": "Telur 1kg",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 28000,
+      "line_total": 56000
+     },
+     {
+      "name": "Sabun Lifebuoy",
+      "quantity": 3,
+      "unit": "pcs",
+      "unit_price": 4500,
+      "line_total": 13500
+     },
+     {
+      "name": "Rokok Sampoerna",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 32000,
+      "line_total": 64000
+     }
+    ],
+    "total_amount": 272000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "angle-1-neat.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 21550,
+   "raw_text": "{\"document_type\": \"stock_ledger\", \"supplier\": \"\", \"date\": \"2025-05-25\", \"items\": [{\"name\": \"Minyak goreng 2L\", \"quantity\": 3, \"unit\": \"botol\", \"unit_price\": 38000, \"line_total\": 114000}, {\"name\": \"Gula pasir 1kg\", \"quantity\": 5, \"unit\": \"kg\", \"unit_price\": 15000, \"line_total\": 75000}, {\"name\": \"Kopi Sachet\", \"quantity\": 2, \"unit\": \"dus\", \"unit_price\": 88000, \"line_total\": 176000}, {\"name\": \"Telur\", \"quantity\": 1, \"unit\": \"kg\", \"unit_price\": 27000, \"line_total\": 27000}, {\"name\": \"Tepung terigu 1kg\", \"quantity\": 2, \"unit\": \"kg\", \"unit_price\": 12500, \"line_total\": 25000}, {\"name\": \"Susu kental manis\", \"quantity\": 3, \"unit\": \"kaleng\", \"unit_price\": 11000, \"line_total\": 33000}, {\"name\": \"Mie instan\", \"quantity\": 10, \"unit\": \"bungkus\", \"unit_price\": 3000, \"line_total\": 30000}, {\"name\": \"Kecap manis\", \"quantity\": 2, \"unit\": \"botol\", \"unit_price\": 10000, \"line_total\": 20000}, {\"name\": \"Sabun cuci piring\", \"quantity\": 3, \"unit\": \"pouch\", \"unit_price\": 6500, \"line_total\": 19500}, {\"name\": \"Rokok Surya 16\", \"quantity\": 4, \"unit\": \"bungkus\", \"unit_price\": 29000, \"line_total\": 116000}], \"total_amount\": 645500, \"confidence\": \"medium\", \"ambiguities\": [\"Total amount (645,500) does not match the sum of line items (635,500).\"]}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "stock_ledger",
+    "supplier": "",
+    "date": "2025-05-25",
+    "items": [
+     {
+      "name": "Minyak goreng 2L",
+      "quantity": 3,
+      "unit": "botol",
+      "unit_price": 38000,
+      "line_total": 114000
+     },
+     {
+      "name": "Gula pasir 1kg",
+      "quantity": 5,
+      "unit": "kg",
+      "unit_price": 15000,
+      "line_total": 75000
+     },
+     {
+      "name": "Kopi Sachet",
+      "quantity": 2,
+      "unit": "dus",
+      "unit_price": 88000,
+      "line_total": 176000
+     },
+     {
+      "name": "Telur",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 27000,
+      "line_total": 27000
+     },
+     {
+      "name": "Tepung terigu 1kg",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 12500,
+      "line_total": 25000
+     },
+     {
+      "name": "Susu kental manis",
+      "quantity": 3,
+      "unit": "kaleng",
+      "unit_price": 11000,
+      "line_total": 33000
+     },
+     {
+      "name": "Mie instan",
+      "quantity": 10,
+      "unit": "bungkus",
+      "unit_price": 3000,
+      "line_total": 30000
+     },
+     {
+      "name": "Kecap manis",
+      "quantity": 2,
+      "unit": "botol",
+      "unit_price": 10000,
+      "line_total": 20000
+     },
+     {
+      "name": "Sabun cuci piring",
+      "quantity": 3,
+      "unit": "pouch",
+      "unit_price": 6500,
+      "line_total": 19500
+     },
+     {
+      "name": "Rokok Surya 16",
+      "quantity": 4,
+      "unit": "bungkus",
+      "unit_price": 29000,
+      "line_total": 116000
+     }
+    ],
+    "total_amount": 645500,
+    "confidence": "medium",
+    "ambiguities": [
+     "Total amount (645,500) does not match the sum of line items (635,500)."
+    ]
+   },
+   "error": null,
+   "gate_triggered": true,
+   "score": null
+  },
+  {
+   "file": "angle-2-thermal.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 12770,
+   "raw_text": "{\"document_type\": \"receipt\", \"supplier\": \"GROSIR BAROKAH\", \"date\": \"2026-08-20\", \"items\": [{\"name\": \"Beras 5kg\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 72000, \"line_total\": 72000}, {\"name\": \"Susu UHT 1L\", \"quantity\": 4, \"unit\": \"pcs\", \"unit_price\": 18000, \"line_total\": 72000}, {\"name\": \"Teh Celup Sariwangi\", \"quantity\": 2, \"unit\": \"pcs\", \"unit_price\": 7500, \"line_total\": 15000}, {\"name\": \"Kecap Bango 600ml\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 24000, \"line_total\": 24000}, {\"name\": \"Mie Sedaap\", \"quantity\": 10, \"unit\": \"pcs\", \"unit_price\": 3200, \"line_total\": 32000}, {\"name\": \"Gas 3kg\", \"quantity\": 1, \"unit\": \"pcs\", \"unit_price\": 22000, \"line_total\": 22000}], \"total_amount\": 237000, \"confidence\": \"high\", \"ambiguities\": []}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "GROSIR BAROKAH",
+    "date": "2026-08-20",
+    "items": [
+     {
+      "name": "Beras 5kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 72000,
+      "line_total": 72000
+     },
+     {
+      "name": "Susu UHT 1L",
+      "quantity": 4,
+      "unit": "pcs",
+      "unit_price": 18000,
+      "line_total": 72000
+     },
+     {
+      "name": "Teh Celup Sariwangi",
+      "quantity": 2,
+      "unit": "pcs",
+      "unit_price": 7500,
+      "line_total": 15000
+     },
+     {
+      "name": "Kecap Bango 600ml",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 24000,
+      "line_total": 24000
+     },
+     {
+      "name": "Mie Sedaap",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 3200,
+      "line_total": 32000
+     },
+     {
+      "name": "Gas 3kg",
+      "quantity": 1,
+      "unit": "pcs",
+      "unit_price": 22000,
+      "line_total": 22000
+     }
+    ],
+    "total_amount": 237000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "angle-3-hand-segoe.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 43114,
+   "raw_text": "{\"document_type\": \"receipt\", \"supplier\": \"\", \"date\": \"2026-08-12\", \"items\": [{\"name\": \"Beras\", \"quantity\": 10, \"unit\": \"kg\", \"unit_price\": 14000, \"line_total\": 140000}, {\"name\": \"Minyak goreng\", \"quantity\": 3, \"unit\": \"liter\", \"unit_price\": 19000, \"line_total\": 57000}, {\"name\": \"Gula\", \"quantity\": 2, \"unit\": \"kg\", \"unit_price\": 16000, \"line_total\": 32000}, {\"name\": \"Telur\", \"quantity\": 1, \"unit\": \"kg\", \"unit_price\": 28000, \"line_total\": 28000}, {\"name\": \"Bawang merah\", \"quantity\": 1, \"unit\": \"kg\", \"unit_price\": 35000, \"line_total\": 35000}, {\"name\": \"Cabai rawit\", \"quantity\": 0.5, \"unit\": \"kg\", \"unit_price\": 60000, \"line_total\": 30000}, {\"name\": \"Tahu\", \"quantity\": 10, \"unit\": \"pcs\", \"unit_price\": 1000, \"line_total\": 10000}], \"total_amount\": 332000, \"confidence\": \"high\", \"ambiguities\": []}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "receipt",
+    "supplier": "",
+    "date": "2026-08-12",
+    "items": [
+     {
+      "name": "Beras",
+      "quantity": 10,
+      "unit": "kg",
+      "unit_price": 14000,
+      "line_total": 140000
+     },
+     {
+      "name": "Minyak goreng",
+      "quantity": 3,
+      "unit": "liter",
+      "unit_price": 19000,
+      "line_total": 57000
+     },
+     {
+      "name": "Gula",
+      "quantity": 2,
+      "unit": "kg",
+      "unit_price": 16000,
+      "line_total": 32000
+     },
+     {
+      "name": "Telur",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 28000,
+      "line_total": 28000
+     },
+     {
+      "name": "Bawang merah",
+      "quantity": 1,
+      "unit": "kg",
+      "unit_price": 35000,
+      "line_total": 35000
+     },
+     {
+      "name": "Cabai rawit",
+      "quantity": 0.5,
+      "unit": "kg",
+      "unit_price": 60000,
+      "line_total": 30000
+     },
+     {
+      "name": "Tahu",
+      "quantity": 10,
+      "unit": "pcs",
+      "unit_price": 1000,
+      "line_total": 10000
+     }
+    ],
+    "total_amount": 332000,
+    "confidence": "high",
+    "ambiguities": []
+   },
+   "error": null,
+   "gate_triggered": false,
+   "score": null
+  },
+  {
+   "file": "control-unreadable.jpg",
+   "bytes": null,
+   "mime_type": null,
+   "latency_ms": 8188,
+   "raw_text": "{\"document_type\": \"other\", \"supplier\": \"\", \"date\": \"\", \"items\": [], \"total_amount\": 0, \"confidence\": \"low\", \"ambiguities\": [\"The entire document is unreadable due to extreme blurriness.\"]}",
+   "prompt_tokens": null,
+   "output_tokens": null,
+   "parsed": {
+    "document_type": "other",
+    "supplier": "",
+    "date": "",
+    "items": [],
+    "total_amount": 0,
+    "confidence": "low",
+    "ambiguities": [
+     "The entire document is unreadable due to extreme blurriness."
+    ]
+   },
+   "error": null,
+   "gate_triggered": true,
+   "score": null
+  }
+ ]
+}

@@ -15,8 +15,11 @@ Scoring (per image, against docs/vision-test-samples/manifest.json):
                    similar (difflib ≥ 0.6 after lower-casing) AND the quantity is
                    equal AND (when the document shows it) the line total is equal
   * total ok     — parsed total_amount equals the document total
-  * fabricated   — parsed unit_price > 0 on a document that shows no unit prices
-  * invented     — parsed unit non-empty where the document writes no unit
+  * fabricated   — parsed unit_price > 0 on a document that shows no unit prices AND
+                   not equal to line_total ÷ quantity (that case is "derived": reported,
+                   not an error — it is arithmetic, not a guess)
+  * invented     — parsed unit where the document writes none, other than '' or the
+                   generic 'pcs'
   * field errors — unmatched true lines + extra parsed lines + fabricated +
                    invented + (0 if total ok else 1)
   * SILENT ERROR — gate NOT triggered while field errors > 0: a wrong number that
@@ -147,15 +150,27 @@ def score(result: dict, truth: dict) -> dict:
             used.add(best_i)
     extra = max(0, len(items) - len(used))
     total_ok = abs(_num(parsed.get("total_amount")) - truth["total"]) < 0.5
-    fabricated = 0 if truth["shows_unit_price"] else sum(1 for p in items if _num(p.get("unit_price")) > 0)
+    # Unit prices on a document that shows none: line_total ÷ quantity is
+    # arithmetic (derived, informational); anything else is fabricated (error).
+    fabricated = derived = 0
+    if not truth["shows_unit_price"]:
+        for p in items:
+            up, lt, q = _num(p.get("unit_price")), _num(p.get("line_total")), _num(p.get("quantity"))
+            if up > 0:
+                if lt > 0 and q > 0 and abs(up * q - lt) <= 1:
+                    derived += 1
+                else:
+                    fabricated += 1
+    # Units on a document that writes none: '' and the generic 'pcs' are
+    # acceptable; anything else ('kg', 'liter', 'bottle') is invented (error).
     invented = 0
     if not truth["shows_unit"]:
-        written = {_norm(t["unit"]) for t in true_items if t["unit"]}
-        invented = sum(1 for p in items if _norm(p.get("unit")) and _norm(p.get("unit")) not in written)
+        written = {_norm(t["unit"]) for t in true_items if t["unit"]} | {"", "pcs"}
+        invented = sum(1 for p in items if _norm(p.get("unit")) not in written)
     field_errors = (len(true_items) - matched) + extra + fabricated + invented + (0 if total_ok else 1)
     return {
         "matched": matched, "true": len(true_items), "extra": extra, "total_ok": total_ok,
-        "fabricated_prices": fabricated, "invented_units": invented,
+        "fabricated_prices": fabricated, "derived_prices": derived, "invented_units": invented,
         "field_errors": field_errors, "gate": gate, "silent_error": (not gate) and field_errors > 0,
         "control_ok": None,
     }
@@ -163,13 +178,13 @@ def score(result: dict, truth: dict) -> dict:
 
 # ── rendering ───────────────────────────────────────────────────────────────
 
-def render(result: dict, truth: dict | None, sc: dict | None) -> str:
+def render(result: dict, truth: dict | None, sc: dict | None, include_raw: bool = True) -> str:
     parsed = result["parsed"]
     lines = [f"#### `{result['file']}`" + (f" — {truth['category']}" if truth else ""), ""]
     if truth:
         lines.append(f"- provenance: {truth['provenance']}")
     lines.append(
-        f"- size {result['bytes'] // 1024} KB · {result['mime_type']} · latency {result['latency_ms']} ms"
+        f"- size {result['bytes'] // 1024 if result.get('bytes') else '?'} KB · {result.get('mime_type') or '?'} · latency {result['latency_ms']} ms"
         + (f" · tokens in/out {result['prompt_tokens']}/{result['output_tokens']}"
            if result["prompt_tokens"] is not None else "")
     )
@@ -193,12 +208,14 @@ def render(result: dict, truth: dict | None, sc: dict | None) -> str:
         else:
             lines.append(
                 f"- score: lines {sc['matched']}/{sc['true']} · extra {sc['extra']} · total {'ok' if sc['total_ok'] else 'WRONG'}"
-                f" · fabricated unit prices {sc['fabricated_prices']} · invented units {sc['invented_units']}"
-                f" · field errors {sc['field_errors']}"
+                f" · fabricated unit prices {sc['fabricated_prices']} (derived {sc.get('derived_prices', 0)})"
+                f" · invented units {sc['invented_units']} · field errors {sc['field_errors']}"
                 + (" · **SILENT ERROR**" if sc["silent_error"] else "")
             )
-    lines += ["", "Raw model output (verbatim):", "", "```json",
-              (result["raw_text"] or "<no text returned>").strip(), "```", ""]
+    if include_raw:
+        lines += ["", "Raw model output (verbatim):", "", "```json",
+                  (result["raw_text"] or "<no text returned>").strip(), "```"]
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -238,10 +255,45 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", default="run")
     ap.add_argument("--only", default=None, help="substring filter on file name")
+    ap.add_argument("--rescore", default=None, metavar="RUN_JSON",
+                    help="re-apply the current scoring rules to a saved docs/vision-runs/*.json "
+                         "(no model calls); appends a summary + per-image scores only")
+    ap.add_argument("--normalize", action="store_true",
+                    help="with --rescore: pass each saved parse through app.ai.vision.normalize_parse "
+                         "first, to estimate the server-side guards' effect on old outputs")
     args = ap.parse_args()
 
     settings = get_settings()
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))["images"] if MANIFEST.exists() else None
+
+    if args.rescore:
+        run = json.loads(Path(args.rescore).read_text(encoding="utf-8"))
+        by_name = {m["file"].split("/")[-1]: m for m in (manifest or [])}
+        scored = []
+        sections = []
+        for result in run["results"]:
+            truth = by_name.get(result["file"])
+            if not truth:
+                continue
+            if args.normalize and result.get("parsed") is not None:
+                from app.ai.vision import normalize_parse
+                result = {**result, "parsed": normalize_parse(json.loads(json.dumps(result["parsed"])))}
+                result["gate_triggered"] = needs_confirmation(result["parsed"])
+            sc = score(result, truth)
+            scored.append((sc, truth))
+            sections.append(render(result, truth, sc, include_raw=False))
+        body = "\n".join([
+            "", f"### Re-score of “{run['label']}”{' + normalize_parse' if args.normalize else ''} — "
+                f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}", "",
+            f"- source run: `{Path(args.rescore).name}` (model `{run.get('model')}`, prompt at `{run.get('commit')}`)",
+            "- no model calls: the saved verbatim outputs re-scored with the scoring rules in this script's docstring"
+            + (" after passing through the server-side guards (`normalize_parse`)" if args.normalize else ""),
+            "", "**Per-category summary:**", "", summary_table(scored), "",
+        ]) + "\n".join(sections)
+        with RESULTS.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(body)
+        print(f"re-scored {len(scored)} results into {RESULTS}")
+        return
     if manifest:
         targets = [(SAMPLES / m["file"], m) for m in manifest]
     else:

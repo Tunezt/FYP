@@ -1538,3 +1538,686 @@ Implications carried into M1-T3 (planned, not applied here):
 - Add `sum(line_total) == total_amount` as a server-side ambiguity when both are present.
 - Keep the gate rule as is on top of those; re-measure the whole set, once, when quota
   allows, and compare against this table.
+
+### Re-score of “M1-T2 expanded set, untuned prompt (run 1, reconstructed from vision-results.md)” — 2026-09-02 18:44 UTC
+
+- source run: `20260902T180000Z-m1-t2-expanded-set-untuned-run-1-reconstructed.json` (model `gemini-2.5-flash`, prompt at `eb506c1`)
+- no model calls: the saved verbatim outputs re-scored with the scoring rules in this script's docstring
+
+**Per-category summary:**
+
+| category | n | lines matched | totals exact | gate triggered | silent errors |
+|---|---|---|---|---|---|
+| handwritten_photo | 3 | 27/27 (100%) | 3/3 | 1/3 | **1** |
+| thermal_printed | 4 | 30/30 (100%) | 4/4 | 0/4 | **1** |
+| handwritten_font | 4 | 26/26 (100%) | 4/4 | 1/4 | **0** |
+| blurred | 3 | 28/28 (100%) | 2/3 | 0/3 | **2** |
+| angled | 3 | 23/23 (100%) | 2/3 | 1/3 | **0** |
+| unreadable_control | 1 | n/a (no fabricated items) | n/a | 1/1 | **0** |
+| **all** | 18 | 134/134 (100%) | 15/17 | 4/18 | **4** |
+#### `test-receipt-1-neat.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 15048 ms
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `test-receipt-2-messy.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 39964 ms
+- document_type `receipt` · confidence **medium** · 7 items · total_amount 87500 · ambiguities 3
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 2 · field errors 2
+
+#### `test-receipt-3-medium.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 45710 ms
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 10) · invented units 7 · field errors 7 · **SILENT ERROR**
+
+#### `thermal-1-clean.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), clean
+- size ? KB · ? · latency 16478 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `thermal-2-faded.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), faded ink
+- size ? KB · ? · latency 26557 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 3 · field errors 3 · **SILENT ERROR**
+
+#### `thermal-3-noisy-rotated.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), sensor noise + 2.5° rotation
+- size ? KB · ? · latency 21951 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `thermal-4-lowres.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), low resolution (45%)
+- size ? KB · ? · latency 20267 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-1-segoe-print.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Print
+- size ? KB · ? · latency 12164 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-2-ink-free.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Ink Free
+- size ? KB · ? · latency 12290 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-3-segoe-script.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Script
+- size ? KB · ? · latency 19511 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 6) · invented units 0 · field errors 0
+
+#### `hand-4-bradley.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Bradley Hand
+- size ? KB · ? · latency 11859 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 6) · invented units 0 · field errors 0
+
+#### `blur-1-neat-r3.5.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-1-neat.png (r=3.5)
+- size ? KB · ? · latency 13802 ms
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total WRONG · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 1 · **SILENT ERROR**
+
+#### `blur-2-medium-r3.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-3-medium.png (r=3.0)
+- size ? KB · ? · latency 20264 ms
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 10) · invented units 1 · field errors 1 · **SILENT ERROR**
+
+#### `blur-3-thermal-r2.2.jpg` — blurred
+
+- provenance: generated: Gaussian blur of thermal-1-clean (r=2.2)
+- size ? KB · ? · latency 25233 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-1-neat.jpg` — angled
+
+- provenance: generated: perspective warp of test-receipt-1-neat.png
+- size ? KB · ? · latency 21550 ms
+- document_type `stock_ledger` · confidence **medium** · 10 items · total_amount 645500 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 10/10 · extra 0 · total WRONG · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 1
+
+#### `angle-2-thermal.jpg` — angled
+
+- provenance: generated: perspective warp of a clean render of thermal B
+- size ? KB · ? · latency 12770 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-3-hand-segoe.jpg` — angled
+
+- provenance: generated: perspective warp of hand-1-segoe-print
+- size ? KB · ? · latency 43114 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `control-unreadable.jpg` — unreadable_control
+
+- provenance: generated: thermal B blurred (r=11) and noised past legibility — deliberately unreadable
+- size ? KB · ? · latency 8188 ms
+- document_type `other` · confidence **low** · 0 items · total_amount 0 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: 0 fabricated items · control OK
+
+### Re-score of “M1-T2 expanded set, untuned prompt (run 1, reconstructed from vision-results.md)” + normalize_parse — 2026-09-02 18:44 UTC
+
+- source run: `20260902T180000Z-m1-t2-expanded-set-untuned-run-1-reconstructed.json` (model `gemini-2.5-flash`, prompt at `eb506c1`)
+- no model calls: the saved verbatim outputs re-scored with the scoring rules in this script's docstring after passing through the server-side guards (`normalize_parse`)
+
+**Per-category summary:**
+
+| category | n | lines matched | totals exact | gate triggered | silent errors |
+|---|---|---|---|---|---|
+| handwritten_photo | 3 | 27/27 (100%) | 3/3 | 2/3 | **1** |
+| thermal_printed | 4 | 30/30 (100%) | 4/4 | 0/4 | **1** |
+| handwritten_font | 4 | 26/26 (100%) | 4/4 | 1/4 | **0** |
+| blurred | 3 | 28/28 (100%) | 2/3 | 1/3 | **1** |
+| angled | 3 | 23/23 (100%) | 2/3 | 1/3 | **0** |
+| unreadable_control | 1 | n/a (no fabricated items) | n/a | 1/1 | **0** |
+| **all** | 18 | 134/134 (100%) | 15/17 | 6/18 | **3** |
+#### `test-receipt-1-neat.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 15048 ms
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `test-receipt-2-messy.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 39964 ms
+- document_type `receipt` · confidence **medium** · 7 items · total_amount 87500 · ambiguities 3
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 2 · field errors 2
+
+#### `test-receipt-3-medium.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 45710 ms
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 10) · invented units 7 · field errors 7 · **SILENT ERROR**
+
+#### `thermal-1-clean.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), clean
+- size ? KB · ? · latency 16478 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `thermal-2-faded.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), faded ink
+- size ? KB · ? · latency 26557 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 3 · field errors 3 · **SILENT ERROR**
+
+#### `thermal-3-noisy-rotated.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), sensor noise + 2.5° rotation
+- size ? KB · ? · latency 21951 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `thermal-4-lowres.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), low resolution (45%)
+- size ? KB · ? · latency 20267 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-1-segoe-print.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Print
+- size ? KB · ? · latency 12164 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-2-ink-free.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Ink Free
+- size ? KB · ? · latency 12290 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-3-segoe-script.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Script
+- size ? KB · ? · latency 19511 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 6) · invented units 0 · field errors 0
+
+#### `hand-4-bradley.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Bradley Hand
+- size ? KB · ? · latency 11859 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 6) · invented units 0 · field errors 0
+
+#### `blur-1-neat-r3.5.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-1-neat.png (r=3.5)
+- size ? KB · ? · latency 13802 ms
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 10/10 · extra 0 · total WRONG · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 1
+
+#### `blur-2-medium-r3.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-3-medium.png (r=3.0)
+- size ? KB · ? · latency 20264 ms
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 10) · invented units 1 · field errors 1 · **SILENT ERROR**
+
+#### `blur-3-thermal-r2.2.jpg` — blurred
+
+- provenance: generated: Gaussian blur of thermal-1-clean (r=2.2)
+- size ? KB · ? · latency 25233 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-1-neat.jpg` — angled
+
+- provenance: generated: perspective warp of test-receipt-1-neat.png
+- size ? KB · ? · latency 21550 ms
+- document_type `stock_ledger` · confidence **medium** · 10 items · total_amount 645500 · ambiguities 2
+- confirmation gate: **TRIGGERED**
+- score: lines 10/10 · extra 0 · total WRONG · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 1
+
+#### `angle-2-thermal.jpg` — angled
+
+- provenance: generated: perspective warp of a clean render of thermal B
+- size ? KB · ? · latency 12770 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-3-hand-segoe.jpg` — angled
+
+- provenance: generated: perspective warp of hand-1-segoe-print
+- size ? KB · ? · latency 43114 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `control-unreadable.jpg` — unreadable_control
+
+- provenance: generated: thermal B blurred (r=11) and noised past legibility — deliberately unreadable
+- size ? KB · ? · latency 8188 ms
+- document_type `other` · confidence **low** · 0 items · total_amount 0 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: 0 fabricated items · control OK
+
+### Re-score of “M1-T2 expanded set, untuned prompt (run 1, reconstructed from vision-results.md)” — 2026-09-02 18:45 UTC
+
+- source run: `20260902T180000Z-m1-t2-expanded-set-untuned-run-1-reconstructed.json` (model `gemini-2.5-flash`, prompt at `eb506c1`)
+- no model calls: the saved verbatim outputs re-scored with the scoring rules in this script's docstring
+
+**Per-category summary:**
+
+| category | n | lines matched | totals exact | gate triggered | silent errors |
+|---|---|---|---|---|---|
+| handwritten_photo | 3 | 27/27 (100%) | 3/3 | 1/3 | **1** |
+| thermal_printed | 4 | 30/30 (100%) | 4/4 | 0/4 | **1** |
+| handwritten_font | 4 | 26/26 (100%) | 4/4 | 1/4 | **0** |
+| blurred | 3 | 28/28 (100%) | 3/3 | 0/3 | **1** |
+| angled | 3 | 23/23 (100%) | 3/3 | 1/3 | **0** |
+| unreadable_control | 1 | n/a (no fabricated items) | n/a | 1/1 | **0** |
+| **all** | 18 | 134/134 (100%) | 17/17 | 4/18 | **3** |
+#### `test-receipt-1-neat.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 15048 ms
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `test-receipt-2-messy.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 39964 ms
+- document_type `receipt` · confidence **medium** · 7 items · total_amount 87500 · ambiguities 3
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 2 · field errors 2
+
+#### `test-receipt-3-medium.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 45710 ms
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 10) · invented units 7 · field errors 7 · **SILENT ERROR**
+
+#### `thermal-1-clean.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), clean
+- size ? KB · ? · latency 16478 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `thermal-2-faded.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), faded ink
+- size ? KB · ? · latency 26557 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 3 · field errors 3 · **SILENT ERROR**
+
+#### `thermal-3-noisy-rotated.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), sensor noise + 2.5° rotation
+- size ? KB · ? · latency 21951 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `thermal-4-lowres.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), low resolution (45%)
+- size ? KB · ? · latency 20267 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-1-segoe-print.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Print
+- size ? KB · ? · latency 12164 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-2-ink-free.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Ink Free
+- size ? KB · ? · latency 12290 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-3-segoe-script.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Script
+- size ? KB · ? · latency 19511 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 6) · invented units 0 · field errors 0
+
+#### `hand-4-bradley.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Bradley Hand
+- size ? KB · ? · latency 11859 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 6) · invented units 0 · field errors 0
+
+#### `blur-1-neat-r3.5.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-1-neat.png (r=3.5)
+- size ? KB · ? · latency 13802 ms
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `blur-2-medium-r3.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-3-medium.png (r=3.0)
+- size ? KB · ? · latency 20264 ms
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 10) · invented units 1 · field errors 1 · **SILENT ERROR**
+
+#### `blur-3-thermal-r2.2.jpg` — blurred
+
+- provenance: generated: Gaussian blur of thermal-1-clean (r=2.2)
+- size ? KB · ? · latency 25233 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-1-neat.jpg` — angled
+
+- provenance: generated: perspective warp of test-receipt-1-neat.png
+- size ? KB · ? · latency 21550 ms
+- document_type `stock_ledger` · confidence **medium** · 10 items · total_amount 645500 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-2-thermal.jpg` — angled
+
+- provenance: generated: perspective warp of a clean render of thermal B
+- size ? KB · ? · latency 12770 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-3-hand-segoe.jpg` — angled
+
+- provenance: generated: perspective warp of hand-1-segoe-print
+- size ? KB · ? · latency 43114 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `control-unreadable.jpg` — unreadable_control
+
+- provenance: generated: thermal B blurred (r=11) and noised past legibility — deliberately unreadable
+- size ? KB · ? · latency 8188 ms
+- document_type `other` · confidence **low** · 0 items · total_amount 0 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: 0 fabricated items · control OK
+
+### Re-score of “M1-T2 expanded set, untuned prompt (run 1, reconstructed from vision-results.md)” + normalize_parse — 2026-09-02 18:45 UTC
+
+- source run: `20260902T180000Z-m1-t2-expanded-set-untuned-run-1-reconstructed.json` (model `gemini-2.5-flash`, prompt at `eb506c1`)
+- no model calls: the saved verbatim outputs re-scored with the scoring rules in this script's docstring after passing through the server-side guards (`normalize_parse`)
+
+**Per-category summary:**
+
+| category | n | lines matched | totals exact | gate triggered | silent errors |
+|---|---|---|---|---|---|
+| handwritten_photo | 3 | 27/27 (100%) | 3/3 | 2/3 | **1** |
+| thermal_printed | 4 | 30/30 (100%) | 4/4 | 0/4 | **1** |
+| handwritten_font | 4 | 26/26 (100%) | 4/4 | 1/4 | **0** |
+| blurred | 3 | 28/28 (100%) | 3/3 | 1/3 | **1** |
+| angled | 3 | 23/23 (100%) | 3/3 | 1/3 | **0** |
+| unreadable_control | 1 | n/a (no fabricated items) | n/a | 1/1 | **0** |
+| **all** | 18 | 134/134 (100%) | 17/17 | 6/18 | **3** |
+#### `test-receipt-1-neat.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 15048 ms
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `test-receipt-2-messy.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 39964 ms
+- document_type `receipt` · confidence **medium** · 7 items · total_amount 87500 · ambiguities 3
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 2 · field errors 2
+
+#### `test-receipt-3-medium.png` — handwritten_photo
+
+- provenance: AI-generated photo-realistic stand-in (Phase 14, July 2026)
+- size ? KB · ? · latency 45710 ms
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 10) · invented units 7 · field errors 7 · **SILENT ERROR**
+
+#### `thermal-1-clean.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), clean
+- size ? KB · ? · latency 16478 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `thermal-2-faded.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), faded ink
+- size ? KB · ? · latency 26557 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 3 · field errors 3 · **SILENT ERROR**
+
+#### `thermal-3-noisy-rotated.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), sensor noise + 2.5° rotation
+- size ? KB · ? · latency 21951 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `thermal-4-lowres.jpg` — thermal_printed
+
+- provenance: generated: rendered receipt (Consolas), low resolution (45%)
+- size ? KB · ? · latency 20267 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-1-segoe-print.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Print
+- size ? KB · ? · latency 12164 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-2-ink-free.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Ink Free
+- size ? KB · ? · latency 12290 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `hand-3-segoe-script.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Segoe Script
+- size ? KB · ? · latency 19511 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 6) · invented units 0 · field errors 0
+
+#### `hand-4-bradley.jpg` — handwritten_font
+
+- provenance: generated: rendered with a handwriting-style font, NOT human handwriting — Bradley Hand
+- size ? KB · ? · latency 11859 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 84500 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 6) · invented units 0 · field errors 0
+
+#### `blur-1-neat-r3.5.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-1-neat.png (r=3.5)
+- size ? KB · ? · latency 13802 ms
+- document_type `stock_ledger` · confidence **high** · 10 items · total_amount 645500 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `blur-2-medium-r3.jpg` — blurred
+
+- provenance: generated: Gaussian blur of test-receipt-3-medium.png (r=3.0)
+- size ? KB · ? · latency 20264 ms
+- document_type `receipt` · confidence **high** · 10 items · total_amount 343000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 10) · invented units 1 · field errors 1 · **SILENT ERROR**
+
+#### `blur-3-thermal-r2.2.jpg` — blurred
+
+- provenance: generated: Gaussian blur of thermal-1-clean (r=2.2)
+- size ? KB · ? · latency 25233 ms
+- document_type `receipt` · confidence **high** · 8 items · total_amount 272000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 8/8 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-1-neat.jpg` — angled
+
+- provenance: generated: perspective warp of test-receipt-1-neat.png
+- size ? KB · ? · latency 21550 ms
+- document_type `stock_ledger` · confidence **medium** · 10 items · total_amount 645500 · ambiguities 2
+- confirmation gate: **TRIGGERED**
+- score: lines 10/10 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-2-thermal.jpg` — angled
+
+- provenance: generated: perspective warp of a clean render of thermal B
+- size ? KB · ? · latency 12770 ms
+- document_type `receipt` · confidence **high** · 6 items · total_amount 237000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 6/6 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `angle-3-hand-segoe.jpg` — angled
+
+- provenance: generated: perspective warp of hand-1-segoe-print
+- size ? KB · ? · latency 43114 ms
+- document_type `receipt` · confidence **high** · 7 items · total_amount 332000 · ambiguities 0
+- confirmation gate: **not triggered (auto-commit)**
+- score: lines 7/7 · extra 0 · total ok · fabricated unit prices 0 (derived 0) · invented units 0 · field errors 0
+
+#### `control-unreadable.jpg` — unreadable_control
+
+- provenance: generated: thermal B blurred (r=11) and noised past legibility — deliberately unreadable
+- size ? KB · ? · latency 8188 ms
+- document_type `other` · confidence **low** · 0 items · total_amount 0 · ambiguities 1
+- confirmation gate: **TRIGGERED**
+- score: 0 fabricated items · control OK
+
+### M1-T3 — tuning applied, before / after (part 1: offline, 2026-09-03)
+
+**What changed (commit after `eb506c1`):**
+
+1. **Schema + prompt** (`backend/app/ai/vision.py`): each item now carries `unit_written` and
+   `unit_price_written`. The prompt tells the model to copy a unit only when one is written
+   next to the quantity, never to infer one from the product name ("Minyak goreng 2L" ×1 is
+   one item, not two liters), and that a unit price may be derived from line total ÷
+   quantity only with `unit_price_written=false`.
+2. **Server-side guards** (`normalize_parse`, applied to every fresh parse and every
+   revision): a unit the model did not see written is dropped (commit falls back to
+   `pcs`); a unit price with no written basis and no line total is zeroed; a line whose
+   quantity × unit price contradicts its line total, or a written total that contradicts the
+   sum of the lines, becomes an explicit ambiguity — which the unchanged gate rule turns
+   into a question to the owner. 11 pure-function tests in
+   `backend/tests/test_vision_normalize.py`, including legacy payloads without the flags.
+3. **Scoring refinement** (`scripts/vision-baseline.py`): a unit price equal to line total ÷
+   quantity on a document that shows no unit prices is now *derived* (reported, not an
+   error) — it is arithmetic, not a guess, and the resulting cost per unit is correct. `''`
+   and the generic `pcs` are acceptable where no unit is written. `--rescore` re-applies
+   the rules to a saved run; `--normalize` additionally runs the saved outputs through the
+   new guards. The first two "Re-score" sections above predate the manifest fix for the
+   blurred/angled copies of the neat page; the last two are current.
+
+**Before (run 1, untuned prompt, refined scoring):** 134/134 lines, 17/17 totals, gate 4/18,
+**3 silent errors** — all invented units: the glare page (7: `pack`, `bottle`, `sachet`…),
+its blurred copy (1), and the faded thermal receipt (3: `kg`/`liter`/`kg` read off product
+names). Zero fabricated prices under the refined rule (every derived price was consistent).
+
+**After, offline estimate (same outputs + `normalize_parse`):** gate 6/18, **3 silent
+errors** — unchanged, and expectedly so: the old outputs carry no `unit_written` flag, so the
+guard treats their units as written. The sum check did fire deterministically on all three
+copies of the neat page (645.500 written vs 635.500 summed), which the model itself only
+caught on the angled copy.
+
+**After, live (new schema):** **NOT YET RUN.** The Google free tier allows 20 requests/day
+per model and today's 20 were spent on the baseline. The three remaining silent errors are
+exactly the class the `unit_written` flag targets, so the live number is the test of whether
+the model honours the flag. The done-criterion — "the confirmation gate triggers on every
+low-confidence read" — is therefore **not claimed**. Next run: the same 18 images,
+`scripts/vision-baseline.py --label "M1-T3 after (schema flags + guards)"`, once quota
+resets or billing is enabled; then this section gets the live table.

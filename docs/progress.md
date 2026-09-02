@@ -479,3 +479,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Google free-tier quota discovered: 20 `generate_content` requests/day/model** on this project. M1-T1 (3) + run 1 (18) exhausted it; the attempted run 2 is recorded as void (all 429). One full pass per day is the ceiling until billing is enabled — this constrains M1-T3's re-measurement.
 **Deviation:** none to the prompt. Added an M1-T1-style hand-written assessment because the automatic table needed the written-total correction explained.
 **Next:** M1-T3
+
+### [M1-T3] Tune, then re-measure — part 1 (tuning + offline verification)
+**Date:** 2026-09-03
+**Status:** NEEDS HUMAN (live re-measure blocked on Gemini quota); tuning implemented and offline-verified
+**Changed:** backend/app/ai/vision.py, backend/tests/test_vision_normalize.py (new, 11 tests), scripts/vision-baseline.py, scripts/vision-make-samples.py, docs/vision-test-samples/manifest.json, docs/vision-runs/ (run 1 reconstructed as JSON), docs/vision-results.md
+**Gates:** pytest 89 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- Tuning: per-item `unit_written` / `unit_price_written` in the schema and prompt (copy only what is written; never infer a unit from a product name; a derived unit price must be flagged), plus `normalize_parse` server-side guards on every parse and revision: unwritten units dropped, baseless prices zeroed, line arithmetic and lines-vs-total contradictions become ambiguities that the existing gate turns into a question. Legacy pending payloads without the flags are treated as written (tested).
+- Scoring refined after reading the data honestly: line total ÷ quantity is arithmetic, not a fabrication, and gives the correct cost per unit; it is now reported as "derived". Under the refined rule run 1 has **3 silent errors, all invented units** (glare page 7, its blur 1, faded thermal 3), with 134/134 lines and 17/17 totals. Offline re-run of the guards over the same outputs: the sum check fires on all three copies of the neat page; the invented units need the live flag.
+- **Not claimed:** the done-criterion (gate triggers on every low-confidence read) requires the live after-run on all 18 images with the new schema. Not run: 20 requests/day free-tier quota, exhausted by today's baseline (probe at 18:45 UTC still 429).
+**Blocker:** Google free-tier quota, 20 `generate_content`/day/model on this project.
+**What I need:** either billing enabled on the Google Cloud project behind the key in `backend/.env`, or simply the next quota reset (daily). Then run `cd backend && ./.venv/Scripts/python.exe ../scripts/vision-baseline.py --label "M1-T3 after (schema flags + guards)"`, append the live table to the M1-T3 section of `docs/vision-results.md`, and if the silent-error count is 0 mark M1-T3 done and tag `checkpoint/M1`.
+**What I did instead:** moved to M2-T1 (blocked only by M0-T6, which is done).
+**Deviation:** M1-T3 split into part 1 (this) and part 2 (live re-measure), recorded per roadmap §0.1.
+**Next:** M2-T1
