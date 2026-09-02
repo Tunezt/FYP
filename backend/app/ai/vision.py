@@ -156,6 +156,80 @@ async def parse_business_document(image_bytes: bytes, mime_type: str) -> dict:
     return normalize_parse(parsed)
 
 
+# ── Menu photo → draft catalogue (roadmap M5-T5) ─────────────────────────────
+
+MENU_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_menu": {"type": "boolean", "description": "true if the photo is a menu / price list of products for sale"},
+        "products": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Product name as written"},
+                    "category": {"type": "string", "description": "Section heading it appears under, if any; else empty"},
+                    "variants": {
+                        "type": "array",
+                        "description": "Every size/option with its own price. A product with one price has one variant named 'Standar'.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string", "description": "Size/option name as written, or 'Standar'"},
+                                "price": {"type": "number", "description": "Price in rupiah; 0 if not shown"},
+                                "price_written": {"type": "boolean"},
+                            },
+                            "required": ["name", "price", "price_written"],
+                        },
+                    },
+                },
+                "required": ["name", "variants"],
+            },
+        },
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "ambiguities": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["is_menu", "products", "confidence", "ambiguities"],
+}
+
+_MENU_SYSTEM = """You extract a menu or price list from a photo taken in an
+Indonesian/Malaysian small F&B business (café, warung, stall).
+
+Rules:
+- Transcribe product and size names as written — do not translate or tidy.
+- Numbers: Indonesian formats use . as thousands separator (12.500 = 12500);
+  'k' or 'rb' after a number means ×1000 (15k = 15000).
+- A product with several prices (Regular/Large, Hot/Ice, S/M/L) has one variant
+  per price, named as written. A product with one price has exactly one variant
+  named 'Standar'.
+- If a price is not readable, set price to 0 and price_written to false — never
+  guess a price.
+- If the photo is not a menu at all, set is_menu=false with an empty products list.
+- confidence=high only if every name and price is clearly legible; list every
+  doubtful reading in ambiguities."""
+
+
+async def parse_menu_photo(image_bytes: bytes, mime_type: str) -> dict:
+    parsed = await generate_json_from_image(
+        system=_MENU_SYSTEM,
+        prompt="Extract this menu.",
+        image_bytes=image_bytes,
+        mime_type=mime_type,
+        response_schema=MENU_SCHEMA,
+    )
+    parsed.setdefault("is_menu", False)
+    parsed.setdefault("products", [])
+    parsed.setdefault("confidence", "low")
+    parsed.setdefault("ambiguities", [])
+    for product in parsed["products"]:
+        if not product.get("variants"):
+            product["variants"] = [{"name": "Standar", "price": 0, "price_written": False}]
+        for v in product["variants"]:
+            if v.get("price_written") is False:
+                v["price"] = 0
+    return parsed
+
+
 _REVISE_SYSTEM = """A parsed extraction from a photographed business document was
 shown to the owner for confirmation, and the owner replied with a correction or
 something else. Update the extraction according to the owner's message.

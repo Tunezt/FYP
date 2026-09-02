@@ -177,6 +177,14 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
                     facts = await confirm_draft(
                         session, business, payload["draft"], payload["image_path"], payload["parsed"]
                     )
+                elif pending.kind == "menu_draft":
+                    # Menu photo (M5-T5): new products become items with variants.
+                    from app.services.menu_draft import confirm_menu_draft
+
+                    facts = await confirm_menu_draft(session, business, payload["draft"])
+                    await discard_pending(session, pending)
+                    reply = await compose_reply(business, text, "vision_menu_confirm", facts)
+                    return "vision_menu_confirm", reply
                 else:
                     facts = await commit_parse(
                         session, business, payload["parsed"], payload["image_path"]
@@ -196,6 +204,15 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
             # Anything else: maybe a correction, maybe an unrelated question.
             revision = await revise_parse(payload["parsed"], text)
             if not revision["unrelated"]:
+                if pending.kind == "menu_draft":
+                    from app.services.menu_draft import build_menu_draft, menu_draft_summary
+
+                    draft = await build_menu_draft(session, business, revision["parsed"])
+                    await create_pending(
+                        session, business, revision["parsed"], payload["image_path"],
+                        kind="menu_draft", extra={"draft": draft},
+                    )
+                    return "vision_revise", "Oke, ini versi barunya 📋\n\n" + menu_draft_summary(draft)
                 if pending.kind == "goods_receipt":
                     from app.services.invoice_draft import build_draft, draft_summary
 
@@ -231,13 +248,21 @@ async def _handle_image(business: Business, message: dict) -> tuple[str, str | N
 
     image_bytes, mime_type = await download_media(media_id)
     image_path = await upload_receipt_image(business.id, image_bytes, mime_type)
+
+    # A photo captioned "menu" is the onboarding path (M5-T5): products and
+    # prices become a draft catalogue, reviewed and confirmed like an invoice.
+    caption = str(message.get("image", {}).get("caption") or "").lower()
+    if "menu" in caption:
+        return await _handle_menu_photo(business, image_bytes, mime_type, image_path)
+
     parsed = await parse_business_document(image_bytes, mime_type)
 
     if parsed.get("document_type") == "other" or not parsed.get("items"):
         return (
             "vision",
             "Hmm, itu kayaknya bukan nota atau buku stok — aku nggak nemu daftar "
-            "barang di fotonya. Coba foto ulang yang lebih jelas ya 🙏",
+            "barang di fotonya. Coba foto ulang yang lebih jelas ya 🙏 "
+            "(Kalau ini foto daftar menu, kirim ulang dengan keterangan *menu*.)",
         )
 
     # Never write stock from a photo without confirmation (roadmap M5-T4): every
@@ -262,6 +287,20 @@ def _draft_prompt(draft: dict) -> str:
     from app.services.invoice_draft import draft_summary
 
     return "Ini nota belanja yang kubaca, kucocokkan dengan daftar barangmu 🧾\n\n" + draft_summary(draft)
+
+
+async def _handle_menu_photo(business: Business, image_bytes: bytes, mime_type: str, image_path: str) -> tuple[str, str]:
+    from app.ai.vision import parse_menu_photo
+    from app.services.menu_draft import build_menu_draft, menu_draft_summary
+    from app.services.receipts import create_pending
+
+    parsed = await parse_menu_photo(image_bytes, mime_type)
+    if not parsed.get("is_menu") or not parsed.get("products"):
+        return "vision_menu", "Hmm, aku nggak nemu daftar produk dan harga di foto ini. Coba foto papan menunya lebih dekat ya 🙏"
+    async with tenant_session(business.id) as session:
+        draft = await build_menu_draft(session, business, parsed)
+        await create_pending(session, business, parsed, image_path, kind="menu_draft", extra={"draft": draft})
+        return "vision_menu", "Ini menu yang kubaca dari fotonya 📋\n\n" + menu_draft_summary(draft)
 
 
 _XLSX_MIMES = {

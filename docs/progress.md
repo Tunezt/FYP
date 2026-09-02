@@ -741,3 +741,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - The Gemini-side part of the path (parse quality) stays measured under M1; its live re-measure is still blocked on quota (M1-T3 part 2).
 **Deviation:** none
 **Next:** canary (5 tasks since last), then M5-T5
+
+### [M5-T5] Menu photo to draft catalogue
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/ai/vision.py, backend/app/services/menu_draft.py (new), backend/app/whatsapp/processor.py, backend/tests/test_menu_draft.py (new, 4 tests)
+**Gates:** pytest 183 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- Same machinery as M5-T4 pointed at onboarding. `parse_menu_photo` uses a dedicated structured schema (products → variants with `price` and `price_written`; `is_menu`; confidence; ambiguities) and the same Indonesian number rules; an unreadable price is 0 with `price_written=false`, never a guess.
+- Routing: a WhatsApp photo whose caption contains "menu" goes to the menu path; a receipt-parser miss now tells the owner to resend with the caption *menu*.
+- `build_menu_draft` splits products into 🆕 new (with every size and price), ↩️ existing (matched to the catalogue case-insensitively — **left alone, a photo never reprices**), and ❓ unpriced (a question; created at price 0 only if the owner confirms, and the summary says so). The draft is parked as a `menu_draft` pending; YA creates each new product as an item (stock 0, unit `porsi`) with its default variant at the first price and one variant per extra size; corrections rebuild the draft through the existing revision flow.
+- Done-when proved by `test_menu_caption_parks_a_draft_and_one_ya_creates_the_catalogue`: a captioned photo (model mocked) produces the reviewable draft with nothing created, one "ya" creates three items — Es Kopi Susu with Regular 22.000 (default) and Large 27.000, Roti Bakar Coklat 24.000, Pisang Goreng at 0 as announced — and the existing Es Teh Manis keeps its 8.000 despite the board saying 9.000. A non-menu photo is refused without a pending.
+- Live parse quality of menu photos is unmeasured (Gemini quota, see M1-T3 part 2); the schema is ready for the same baseline script.
+**Deviation:** none
+**Next:** M6-T1 — M5 complete, tagged `checkpoint/M5`
