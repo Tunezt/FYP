@@ -140,6 +140,7 @@ class SupplierUpdateIn(BaseModel):
 
 class SupplierReceiptOut(BaseModel):
     id: uuid.UUID
+    kind: str = "photo"            # photo | goods_receipt
     occurred_at: datetime
     total_amount: Decimal | None
     item_count: int
@@ -209,6 +210,55 @@ class PurchaseOrderOut(BaseModel):
     subtotal: Decimal
     created_at: datetime
     lines: list[PoLineOut]
+
+
+# ── Goods receipts (M5-T3) ──────────────────────────────────────────────────
+
+
+class GrLineIn(BaseModel):
+    item_id: uuid.UUID
+    quantity: Decimal = Field(gt=0, le=Decimal("999999"))
+    unit_cost: Decimal = Field(default=Decimal(0), ge=0)   # per received unit
+    uom_id: uuid.UUID | None = None
+    po_line_id: uuid.UUID | None = None
+
+
+class GoodsReceiptCreateIn(BaseModel):
+    supplier_id: uuid.UUID | None = None
+    po_id: uuid.UUID | None = None
+    lines: list[GrLineIn] = Field(min_length=1, max_length=100)
+    notes: str | None = Field(default=None, max_length=500)
+    allow_over_receipt: bool = False
+
+
+class GrLineOut(BaseModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    item_name: str
+    po_line_id: uuid.UUID | None
+    quantity: Decimal
+    uom_code: str | None
+    quantity_item_unit: Decimal
+    item_unit: str
+    unit_cost: Decimal
+    unit_cost_item_unit: Decimal
+    line_total: Decimal
+    stock_after: Decimal
+    avg_cost_after: Decimal
+
+
+class GoodsReceiptOut(BaseModel):
+    id: uuid.UUID
+    number: int
+    supplier_id: uuid.UUID | None
+    supplier_name: str | None
+    po_id: uuid.UUID | None
+    po_number: int | None
+    po_status: str | None
+    received_at: datetime
+    notes: str | None
+    subtotal: Decimal
+    lines: list[GrLineOut]
 
 
 # ── Recipes (M4-T4) ─────────────────────────────────────────────────────────

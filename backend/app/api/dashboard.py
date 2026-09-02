@@ -16,8 +16,8 @@ from sqlalchemy import func, select
 from app.ai.periods import period_range
 from app.core.deps import OwnerCtx
 from app.models import (
-    Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PurchaseOrder, Receipt, RecipeLine,
-    Sale, Staff, Supplier, Uom, UomConversion,
+    Alert, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PurchaseOrder, Receipt,
+    RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
 )
 from app.schemas.dashboard import (
     AlertRow,
@@ -60,6 +60,9 @@ from app.schemas.dashboard import (
     PurchaseOrderCreateIn,
     PurchaseOrderOut,
     PurchaseOrderUpdateIn,
+    GoodsReceiptCreateIn,
+    GoodsReceiptOut,
+    GrLineOut,
 )
 from app.schemas.auth import BusinessOut
 from app.services.velocity import VELOCITY_WINDOW_DAYS
@@ -625,6 +628,81 @@ async def cancel_po(po_id: uuid.UUID, ctx: OwnerCtx):
     except PurchaseOrderInvalid as exc:
         raise _po_error(exc)
     return await _po_out(ctx.session, po)
+
+
+_GR_ERRORS = {
+    "supplier": (404, "Supplier tidak ditemukan"),
+    "po": (404, "Pesanan pembelian tidak ditemukan"),
+    "po_closed": (409, "Pesanan ini belum dikirim, sudah selesai, atau sudah dibatalkan — tidak bisa menerima barang untuknya"),
+    "po_line": (404, "Baris pesanan tidak ditemukan pada pesanan ini"),
+    "po_line_mismatch": (422, "Barang yang diterima tidak cocok dengan baris pesanan yang dipilih"),
+    "item": (404, "Barang tidak ditemukan"),
+    "uom": (404, "Satuan tidak ditemukan"),
+    "quantity": (422, "Jumlah dan harga penerimaan harus angka yang masuk akal (jumlah lebih dari nol)"),
+    "over_receipt": (409, "Jumlah diterima melebihi pesanan — centang 'izinkan kelebihan' kalau memang benar"),
+    "empty": (422, "Penerimaan belum punya barang — tambahkan dulu"),
+    "no_uom": (422, "Barang ini belum punya satuan — atur satuannya di dashboard dulu sebelum menerima dalam satuan lain"),
+    "conversion": (422, "Konversi satuan tidak ditemukan — tambahkan konversinya di Pengaturan dulu"),
+}
+
+
+async def _gr_out(session, receipt: GoodsReceipt) -> GoodsReceiptOut:
+    from app.services.receiving import receipt_lines
+
+    supplier = await session.get(Supplier, receipt.supplier_id) if receipt.supplier_id else None
+    po = await session.get(PurchaseOrder, receipt.po_id) if receipt.po_id else None
+    out_lines = []
+    for l in await receipt_lines(session, receipt.id):
+        item = await session.get(Item, l.item_id)
+        uom = await session.get(Uom, l.uom_id) if l.uom_id else None
+        out_lines.append(GrLineOut(
+            id=l.id, item_id=l.item_id, item_name=item.name if item else "?", po_line_id=l.po_line_id,
+            quantity=l.quantity, uom_code=uom.code if uom else None, quantity_item_unit=l.quantity_item_unit,
+            item_unit=item.unit if item else "", unit_cost=l.unit_cost, unit_cost_item_unit=l.unit_cost_item_unit,
+            line_total=l.line_total, stock_after=item.current_stock if item else Decimal(0),
+            avg_cost_after=item.cost_price if item else Decimal(0),
+        ))
+    return GoodsReceiptOut(
+        id=receipt.id, number=receipt.number, supplier_id=receipt.supplier_id,
+        supplier_name=supplier.name if supplier else None, po_id=receipt.po_id,
+        po_number=po.number if po else None, po_status=po.status if po else None,
+        received_at=receipt.received_at, notes=receipt.notes, subtotal=receipt.subtotal, lines=out_lines,
+    )
+
+
+@router.get("/goods-receipts", response_model=list[GoodsReceiptOut])
+async def list_goods_receipts(ctx: OwnerCtx, limit: int = Query(default=50, ge=1, le=200)):
+    rows = (await ctx.session.execute(select(GoodsReceipt).order_by(GoodsReceipt.number.desc()).limit(limit))).scalars().all()
+    return [await _gr_out(ctx.session, r) for r in rows]
+
+
+@router.get("/goods-receipts/{receipt_id}", response_model=GoodsReceiptOut)
+async def get_goods_receipt(receipt_id: uuid.UUID, ctx: OwnerCtx):
+    receipt = await ctx.session.get(GoodsReceipt, receipt_id)
+    if receipt is None:
+        raise HTTPException(status_code=404, detail="Penerimaan barang tidak ditemukan")
+    return await _gr_out(ctx.session, receipt)
+
+
+@router.post("/goods-receipts", response_model=GoodsReceiptOut, status_code=201)
+async def create_goods_receipt(payload: GoodsReceiptCreateIn, ctx: OwnerCtx):
+    """Receive goods (M5-T3): stock in, `purchase` ledger rows, moving-average
+    cost, PO lines advanced. Partial is fine; over-receipt needs the explicit flag."""
+    from app.services.receiving import GrLineSpec, ReceivingInvalid, receive_goods
+
+    try:
+        received = await receive_goods(
+            ctx.session, ctx.business_id, supplier_id=payload.supplier_id, po_id=payload.po_id,
+            lines=[GrLineSpec(item_id=l.item_id, quantity=l.quantity, unit_cost=l.unit_cost, uom_id=l.uom_id, po_line_id=l.po_line_id)
+                   for l in payload.lines],
+            received_by=ctx.staff_id, notes=payload.notes, allow_over_receipt=payload.allow_over_receipt,
+        )
+    except ReceivingInvalid as exc:
+        status, detail = _GR_ERRORS[exc.code]
+        if exc.code == "over_receipt" and exc.detail:
+            detail = f"{detail} ({exc.detail})"
+        raise HTTPException(status_code=status, detail=detail)
+    return await _gr_out(ctx.session, received.receipt)
 
 
 _RECIPE_ERRORS = {

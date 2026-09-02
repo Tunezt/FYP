@@ -3,6 +3,8 @@ from app.models.models import (  # noqa: F401
     Base,
     Business,
     Expense,
+    GoodsReceipt,
+    GoodsReceiptLine,
     Item,
     ItemVariant,
     LoginOtp,

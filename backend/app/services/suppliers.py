@@ -92,34 +92,59 @@ async def link_receipt(session: AsyncSession, receipt: Receipt) -> Supplier | No
 
 
 async def purchase_history(session: AsyncSession, supplier: Supplier, limit: int = 50) -> dict:
-    """Receipts linked to the supplier, newest first, with totals."""
-    receipts = (
+    """Everything bought from the supplier, newest first, with totals: receipt
+    photos (M5-T1) and goods receipts (M5-T3), merged."""
+    from app.models import GoodsReceipt, GoodsReceiptLine
+
+    photos = (
         await session.execute(
             select(Receipt).where(Receipt.supplier_id == supplier.id)
             .order_by(func.coalesce(Receipt.occurred_at, Receipt.created_at).desc()).limit(limit)
         )
     ).scalars().all()
-    count, total, last = (
+    goods = (
         await session.execute(
-            select(
-                func.count(Receipt.id),
-                func.coalesce(func.sum(Receipt.total_amount), 0),
-                func.max(func.coalesce(Receipt.occurred_at, Receipt.created_at)),
-            ).where(Receipt.supplier_id == supplier.id)
+            select(GoodsReceipt).where(GoodsReceipt.supplier_id == supplier.id)
+            .order_by(GoodsReceipt.received_at.desc()).limit(limit)
+        )
+    ).scalars().all()
+    goods_counts: dict = {}
+    if goods:
+        for rid, n in (await session.execute(
+            select(GoodsReceiptLine.receipt_id, func.count(GoodsReceiptLine.id))
+            .where(GoodsReceiptLine.receipt_id.in_([g.id for g in goods])).group_by(GoodsReceiptLine.receipt_id)
+        )).all():
+            goods_counts[rid] = int(n)
+
+    entries = [
+        {"id": r.id, "kind": "photo", "occurred_at": r.occurred_at or r.created_at,
+         "total_amount": r.total_amount, "item_count": len((r.parsed_data or {}).get("items", []))}
+        for r in photos
+    ] + [
+        {"id": g.id, "kind": "goods_receipt", "occurred_at": g.received_at,
+         "total_amount": g.subtotal, "item_count": goods_counts.get(g.id, 0)}
+        for g in goods
+    ]
+    entries.sort(key=lambda e: e["occurred_at"], reverse=True)
+
+    p_count, p_total, p_last = (
+        await session.execute(
+            select(func.count(Receipt.id), func.coalesce(func.sum(Receipt.total_amount), 0),
+                   func.max(func.coalesce(Receipt.occurred_at, Receipt.created_at)))
+            .where(Receipt.supplier_id == supplier.id)
         )
     ).one()
+    g_count, g_total, g_last = (
+        await session.execute(
+            select(func.count(GoodsReceipt.id), func.coalesce(func.sum(GoodsReceipt.subtotal), 0), func.max(GoodsReceipt.received_at))
+            .where(GoodsReceipt.supplier_id == supplier.id)
+        )
+    ).one()
+    last_dates = [d for d in (p_last, g_last) if d is not None]
     return {
         "supplier": supplier,
-        "purchase_count": int(count or 0),
-        "total_spent": Decimal(total or 0),
-        "last_purchase_at": last,
-        "receipts": [
-            {
-                "id": r.id,
-                "occurred_at": r.occurred_at or r.created_at,
-                "total_amount": r.total_amount,
-                "item_count": len((r.parsed_data or {}).get("items", [])),
-            }
-            for r in receipts
-        ],
+        "purchase_count": int(p_count or 0) + int(g_count or 0),
+        "total_spent": Decimal(p_total or 0) + Decimal(g_total or 0),
+        "last_purchase_at": max(last_dates) if last_dates else None,
+        "receipts": entries[:limit],
     }

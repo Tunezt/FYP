@@ -713,3 +713,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Tests: draft lifecycle and running subtotal, numbering per business, ordering freezes lines, cancel rules including a simulated partial receipt, validation of supplier/item/unit/quantity, the endpoints end to end, RLS on both tables.
 **Deviation:** none
 **Next:** M5-T3
+
+### [M5-T3] Goods receipt
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0013_goods_receipts.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/receiving.py (new), backend/app/services/suppliers.py, backend/app/api/dashboard.py, backend/app/schemas/dashboard.py, backend/tests/test_receiving.py (new, 5 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py, docs/api-contract.md
+**Gates:** pytest 174 passed 0 skipped · migrations round-trip ok (0013 → 0012 → 0013) · frontend build ok · seed ok
+**Notes:**
+- Migration 0013: `goods_receipts` (supplier, optional PO, per-business number, received_at/by, notes, `subtotal`) and `goods_receipt_lines` (as received: quantity, unit, unit cost; as ledgered: `quantity_item_unit`, `unit_cost_item_unit`; `line_total`; optional PO line), RLS on both.
+- `receive_goods` is the event that moves purchased stock: per line it converts the received quantity and cost into the item's own unit (M4-T3), rounds to numeric(12,3) / cents, and calls `add_stock(reason="purchase")`, which increments stock, writes the `purchase` movement (`source_type = goods_receipt`) and recomputes the moving-average cost with the default variant in step (M4-T5). A line against a PO line advances `received_quantity` in the PO line's unit; the PO status is derived: `partially_received` while anything is short, `received` when complete. **Over-receipt is refused (409, naming ordered / already received / now) unless `allow_over_receipt` is set** — explicit, never silent. Partial receipt is normal.
+- Supplier purchase history (M5-T1) now merges receipt photos and goods receipts, newest first, with combined count, total and last date; entries carry `kind`.
+- Owner API: `POST /api/goods-receipts` (from PO or free), list, get; every rule has an Indonesian message.
+- Done-when proved by `test_receiving_8_of_10_leaves_po_partially_received`: PO for 10 kg @150.000, receive 8 → PO `partially_received`, stock 2 → 10, moving average (2 × 140.000 + 8 × 150.000) ÷ 10 = 148.000 on the item and its default variant, one `purchase` movement of +8 at 150.000, **M2-T3 holds**; receiving the remaining 2 → `received`, cancel refused. Also: over-receipt of 11 refused with nothing written, then accepted with the flag; receiving 2.500 g at 150/g against a kg PO line (2.500 kg at 150.000/kg, average 145.555,56); a free receipt without a PO sets a first cost; validation of missing unit, missing conversion, mismatched PO line, unknown item, empty receipt; endpoints and supplier history; RLS.
+**Deviation:** none
+**Next:** M5-T4

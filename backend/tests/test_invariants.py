@@ -60,6 +60,12 @@ KNOWN_MONEY_COLUMNS = {
     ("po_lines", "unit_cost"),
     ("po_lines", "line_total"),
     ("po_lines", "received_quantity"),
+    ("goods_receipts", "subtotal"),
+    ("goods_receipt_lines", "quantity"),
+    ("goods_receipt_lines", "quantity_item_unit"),
+    ("goods_receipt_lines", "unit_cost"),
+    ("goods_receipt_lines", "unit_cost_item_unit"),
+    ("goods_receipt_lines", "line_total"),
 }
 
 # pg_catalog rather than information_schema: the latter only lists columns the
@@ -162,7 +168,7 @@ KNOWN_SCOPED_TABLES = {
     "metric_baselines", "request_logs", "pending_confirmations",
     "stock_movements", "orders", "order_lines", "payments", "item_variants",
     "modifier_groups", "modifiers", "order_line_modifiers", "uoms", "uom_conversions",
-    "recipe_lines", "suppliers", "purchase_orders", "po_lines",
+    "recipe_lines", "suppliers", "purchase_orders", "po_lines", "goods_receipts", "goods_receipt_lines",
 }
 # `sales` is a view since migration 0006 (M3-T2); policies cannot attach to a
 # view, so its isolation rests on `security_invoker` — checked separately below

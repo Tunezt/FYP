@@ -21,7 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.security import hash_pin
 from app.models import (
     Business, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier,
-    Payment, PoLine, PurchaseOrder, RecipeLine, Sale, Staff, StockMovement, Supplier, Uom, UomConversion,
+    GoodsReceipt, GoodsReceiptLine, Payment, PoLine, PurchaseOrder, RecipeLine, Sale, Staff, StockMovement, Supplier,
+    Uom, UomConversion,
 )
 from app.services.sales import InsufficientStock, record_sale
 
@@ -375,6 +376,31 @@ async def test_rls_isolates_purchase_orders(session_factory, two_tenants):
     async with session_factory() as session:
         await _set_tenant(session, a.id)
         session.add(PoLine(business_id=b.id, po_id=ids["po"], item_id=ids["item"], quantity=Decimal(1)))
+        with pytest.raises(Exception):
+            await session.commit()
+
+
+async def test_rls_isolates_goods_receipts(session_factory, two_tenants):
+    """M5-T3 / roadmap §2."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        item = Item(business_id=a.id, name="GR Item A", unit="kg")
+        session.add(item)
+        await session.flush()
+        gr = GoodsReceipt(business_id=a.id, number=1)
+        session.add(gr)
+        await session.flush()
+        session.add(GoodsReceiptLine(business_id=a.id, receipt_id=gr.id, item_id=item.id, quantity=Decimal(1), quantity_item_unit=Decimal(1)))
+        await session.commit()
+        ids = {"gr": gr.id, "item": item.id}
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert await session.get(GoodsReceipt, ids["gr"]) is None
+        assert (await session.execute(select(GoodsReceiptLine).where(GoodsReceiptLine.receipt_id == ids["gr"]))).scalars().all() == []
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(GoodsReceiptLine(business_id=b.id, receipt_id=ids["gr"], item_id=ids["item"], quantity=Decimal(1), quantity_item_unit=Decimal(1)))
         with pytest.raises(Exception):
             await session.commit()
 

@@ -568,6 +568,48 @@ class PoLine(Base):
     updated_at: Mapped[datetime] = _now()
 
 
+class GoodsReceipt(Base):
+    """Goods that arrived (migration 0013, roadmap M5-T3), from a PO or not.
+    The event that moves stock in: each line ledgers a `purchase`."""
+
+    __tablename__ = "goods_receipts"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id"))
+    po_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("purchase_orders.id"))
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    received_at: Mapped[datetime] = _now()
+    received_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    notes: Mapped[str | None] = mapped_column(Text)
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    created_at: Mapped[datetime] = _now()
+
+
+class GoodsReceiptLine(Base):
+    """One received line: as received (quantity, uom, unit_cost) and as ledgered
+    (quantity_item_unit, unit_cost_item_unit)."""
+
+    __tablename__ = "goods_receipt_lines"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    receipt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("goods_receipts.id"), nullable=False)
+    po_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("po_lines.id"))
+    item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    uom_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("uoms.id"))
+    quantity_item_unit: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    unit_cost_item_unit: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    created_at: Mapped[datetime] = _now()
+
+
 class Payment(Base):
     """One payment against an order. Many per order — that is split payment."""
 
