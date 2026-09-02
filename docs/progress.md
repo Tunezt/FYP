@@ -415,3 +415,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **Notes:** `git clone` of 0bee89f into a scratch directory, a brand-new database `wp_fresh` created and bootstrapped with `scripts/db-bootstrap.sql`, then exactly the README backend steps: new venv, `pip install -r requirements.txt`, `cp .env.example .env` (only the database name edited to `wp_fresh`), `alembic upgrade head` (0001 + 0002 applied), `python -m app.seed`, `pytest -q` → **71 passed, 0 skipped**. 20 deprecation warnings in the fresh venv vs 1 here, from newer unpinned dependency versions; no failures. Scratch clone and database dropped afterwards. Frontend `npm install`/`build` was not repeated in the clone; it is exercised by gate 3 on every commit.
 **Deviation:** none
 **Next:** M0-T4
+
+### [M0-T4] Numeric type guard
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/tests/test_invariants.py (new)
+**Gates:** pytest 73 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `test_no_float_money` reads `pg_attribute`/`pg_class` (not `information_schema.columns`, which hides tables the connecting role has no privilege on) for every table, partition, view and materialized view in `public`, and asserts each column matching `amount|price|total|cost|stock|quantity|threshold` has type `numeric`. A `KNOWN_MONEY_COLUMNS` set of the nine columns that exist today guards against the pattern matching nothing after a rename. Views are included so M3-T2's `sales` view stays covered.
+- `test_no_float_money_guard_detects_floats` proves the "would fail if someone added a float column" clause: it creates a temp table with `real`, `double precision` and `numeric` columns inside a rolled-back transaction and asserts exactly the two float columns are reported as `float4` / `float8`.
+- `test_invariants.py` has **no skip marker** by design: with no database URL the fixture calls `pytest.fail` with the fix-it command, per roadmap §2 ("if they skip, you are flying blind").
+- Nothing converted; the existing `numeric(12,2)` / `numeric(12,3)` / `numeric(14,4)` columns are correct.
+**Deviation:** none
+**Next:** M0-T5
