@@ -16,7 +16,7 @@ from sqlalchemy import select
 from app.core.db import tenant_session
 from app.core.deps import PosCtx
 from app.core.security import create_token, decode_token, verify_pin
-from app.models import Business, Item, RequestLog, Staff
+from app.models import Business, Item, ItemVariant, RequestLog, Staff
 from app.schemas.pos import (
     ItemOut,
     OrderIn,
@@ -24,6 +24,7 @@ from app.schemas.pos import (
     OrderOut,
     PaymentOut,
     PosBusinessOut,
+    PosVariantOut,
     PosLoginIn,
     PosLoginOut,
     PosStaffOut,
@@ -42,6 +43,7 @@ from app.services.orders import (
     PaymentMismatch,
     PaymentSpec,
     Reversal,
+    VariantNotFound,
     create_order,
     refund_order,
     void_order,
@@ -107,7 +109,24 @@ async def pos_items(ctx: PosCtx):
     items = (
         (await ctx.session.execute(select(Item).order_by(Item.name))).scalars().all()
     )
-    return items
+    variants = (
+        await ctx.session.execute(
+            select(ItemVariant)
+            .where(ItemVariant.is_active.is_(True))
+            .order_by(ItemVariant.is_default.desc(), ItemVariant.sell_price, ItemVariant.name)
+        )
+    ).scalars().all()
+    by_item: dict[uuid.UUID, list[ItemVariant]] = {}
+    for v in variants:
+        by_item.setdefault(v.item_id, []).append(v)
+    return [
+        ItemOut(
+            id=i.id, name=i.name, unit=i.unit, current_stock=i.current_stock, sell_price=i.sell_price,
+            reorder_threshold=i.reorder_threshold,
+            variants=[PosVariantOut.model_validate(v) for v in by_item.get(i.id, [])],
+        )
+        for i in items
+    ]
 
 
 @router.post("/sales", response_model=SaleOut)
@@ -173,13 +192,16 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             staff_id=ctx.staff_id,
             order_type=payload.order_type,
             lines=[
-                OrderLineSpec(item_id=l.item_id, quantity=l.quantity, unit_price=l.unit_price, notes=l.notes)
+                OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, quantity=l.quantity,
+                              unit_price=l.unit_price, notes=l.notes)
                 for l in payload.lines
             ],
             payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
         )
     except ItemNotFound:
         raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+    except VariantNotFound:
+        raise HTTPException(status_code=404, detail="Varian barang tidak ditemukan atau sudah tidak aktif")
     except InsufficientStock as exc:
         raise HTTPException(
             status_code=409,
@@ -212,7 +234,8 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         sold_at=order.sold_at,
         lines=[
             OrderLineOut(
-                id=cl.line.id, item_id=cl.line.item_id, item_name=cl.item_name, quantity=cl.line.quantity,
+                id=cl.line.id, item_id=cl.line.item_id, variant_id=cl.line.variant_id, item_name=cl.item_name,
+                quantity=cl.line.quantity,
                 unit_price=cl.line.unit_price, line_total=cl.line.line_total, remaining_stock=cl.remaining_stock,
             )
             for cl in created.lines

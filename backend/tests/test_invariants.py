@@ -50,6 +50,8 @@ KNOWN_MONEY_COLUMNS = {
     ("order_lines", "line_total"),
     ("order_lines", "unit_cost_at_sale"),
     ("payments", "amount"),
+    ("item_variants", "sell_price"),
+    ("item_variants", "cost_price"),
 }
 
 # pg_catalog rather than information_schema: the latter only lists columns the
@@ -150,7 +152,7 @@ RLS_ALLOWLIST = {"businesses", "login_otps"}
 KNOWN_SCOPED_TABLES = {
     "staff", "items", "sales_legacy", "expenses", "receipts", "alerts",
     "metric_baselines", "request_logs", "pending_confirmations",
-    "stock_movements", "orders", "order_lines", "payments",
+    "stock_movements", "orders", "order_lines", "payments", "item_variants",
 }
 # `sales` is a view since migration 0006 (M3-T2); policies cannot attach to a
 # view, so its isolation rests on `security_invoker` — checked separately below
@@ -268,6 +270,33 @@ async def test_scoped_views_are_security_invoker(conn):
     assert "sales" in {name for name, _ in rows}, "the sales view is missing"
     unsafe = [name for name, options in rows if "security_invoker=true" not in options]
     assert unsafe == [], f"business-scoped views without security_invoker: {unsafe}"
+
+
+async def test_every_item_has_exactly_one_default_variant(conn):
+    """M4-T1: single-variant products keep working only if every item has its
+    default variant, with prices equal to the item's. Checked per tenant."""
+    business_ids = (await conn.execute(text("select id from businesses"))).scalars().all()
+    problems: list[tuple] = []
+    checked = 0
+    for business_id in business_ids:
+        await conn.rollback()
+        await conn.execute(
+            text("select set_config('app.current_business_id', :bid, true)"), {"bid": str(business_id)}
+        )
+        rows = (await conn.execute(text(
+            """
+            select i.name,
+                   count(v.id) filter (where v.is_default) as defaults,
+                   bool_and(v.sell_price = i.sell_price and v.cost_price = i.cost_price) filter (where v.is_default) as prices_match
+            from items i left join item_variants v on v.item_id = i.id
+            group by i.id, i.name
+            """
+        ))).all()
+        checked += len(rows)
+        problems += [(str(business_id)[:8], name, defaults, ok) for name, defaults, ok in rows if defaults != 1 or ok is not True]
+    await conn.rollback()
+    assert checked > 0, "no items — run `python -m app.seed` first"
+    assert problems == [], f"items without exactly one price-matching default variant: {problems}"
 
 
 # ── M2-T3: the stock ledger reconciles with the cached projection ─────────────

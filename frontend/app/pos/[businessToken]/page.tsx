@@ -7,6 +7,7 @@ import { formatQty, formatRupiah, initials } from "@/lib/format";
 
 type StaffLite = { id: string; name: string; role: string };
 type PosBusiness = { business_name: string; staff: StaffLite[] };
+type Variant = { id: string; name: string; sell_price: string; is_default: boolean };
 type Item = {
   id: string;
   name: string;
@@ -14,6 +15,7 @@ type Item = {
   current_stock: string;
   sell_price: string;
   reorder_threshold: string;
+  variants: Variant[];
 };
 type OrderResult = {
   id: string;
@@ -21,8 +23,14 @@ type OrderResult = {
   lines: { item_name: string; quantity: string; line_total: string; remaining_stock: string }[];
   payments: { method: string; amount: string }[];
 };
-type CartLine = { item: Item; qty: number };
+// A cart line is an item at one of its sizes (variant); stock is the item's.
+type CartLine = { item: Item; variant: Variant | null; qty: number };
 type PayMode = "cash" | "qris" | "split";
+
+const lineKey = (itemId: string, variant: Variant | null) => `${itemId}:${variant?.id ?? "default"}`;
+const linePrice = (l: { item: Item; variant: Variant | null }) => Number(l.variant?.sell_price ?? l.item.sell_price);
+const lineName = (l: { item: Item; variant: Variant | null }) =>
+  l.variant && l.item.variants.length > 1 ? `${l.item.name} · ${l.variant.name}` : l.item.name;
 
 type Screen =
   | { kind: "loading" }
@@ -261,6 +269,7 @@ function SellScreen({
 }) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [selected, setSelected] = useState<Item | null>(null);
+  const [variant, setVariant] = useState<Variant | null>(null);
   const [qty, setQty] = useState(1);
   // One order = many lines + one or more payments (M3-T3). The cart is the order
   // being built; nothing is written until "Bayar" succeeds.
@@ -285,31 +294,37 @@ function SellScreen({
     [items]
   );
 
-  const cartQty = (itemId: string) => cart.find((l) => l.item.id === itemId)?.qty ?? 0;
+  // Units of one item across all its sizes — stock is shared by the parent.
+  const cartQty = (itemId: string) => cart.filter((l) => l.item.id === itemId).reduce((n, l) => n + l.qty, 0);
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
-  const cartTotal = cart.reduce((s, l) => s + Number(l.item.sell_price) * l.qty, 0);
+  const cartTotal = cart.reduce((s, l) => s + linePrice(l) * l.qty, 0);
 
-  function addToCart(item: Item, n: number) {
+  function addToCart(item: Item, v: Variant | null, n: number) {
     setCart((c) => {
-      const existing = c.find((l) => l.item.id === item.id);
-      const max = Number(item.current_stock);
+      const key = lineKey(item.id, v);
+      const others = c.filter((l) => l.item.id === item.id && lineKey(l.item.id, l.variant) !== key)
+        .reduce((s, l) => s + l.qty, 0);
+      const room = Math.max(0, Number(item.current_stock) - others);
+      const existing = c.find((l) => lineKey(l.item.id, l.variant) === key);
       if (existing) {
         return c.map((l) =>
-          l.item.id === item.id ? { ...l, qty: Math.min(max, l.qty + n) } : l
+          lineKey(l.item.id, l.variant) === key ? { ...l, qty: Math.min(room, l.qty + n) } : l
         );
       }
-      return [...c, { item, qty: Math.min(max, n) }];
+      return [...c, { item, variant: v, qty: Math.min(room, n) }];
     });
   }
 
-  function changeLine(itemId: string, delta: number) {
+  function changeLine(key: string, delta: number) {
     setCart((c) =>
       c
-        .map((l) =>
-          l.item.id === itemId
-            ? { ...l, qty: Math.min(Number(l.item.current_stock), l.qty + delta) }
-            : l
-        )
+        .map((l) => {
+          if (lineKey(l.item.id, l.variant) !== key) return l;
+          const others = c.filter((o) => o.item.id === l.item.id && lineKey(o.item.id, o.variant) !== key)
+            .reduce((s, o) => s + o.qty, 0);
+          const room = Math.max(0, Number(l.item.current_stock) - others);
+          return { ...l, qty: Math.min(room, l.qty + delta) };
+        })
         .filter((l) => l.qty > 0)
     );
   }
@@ -330,7 +345,7 @@ function SellScreen({
       const res = await api<OrderResult>("/pos/orders", {
         token,
         body: {
-          lines: cart.map((l) => ({ item_id: l.item.id, quantity: l.qty })),
+          lines: cart.map((l) => ({ item_id: l.item.id, variant_id: l.variant?.id ?? null, quantity: l.qty })),
           payments,
           order_type: "takeaway",
         },
@@ -381,6 +396,7 @@ function SellScreen({
                 disabled={out}
                 onClick={() => {
                   setSelected(item);
+                  setVariant(item.variants.find((v) => v.is_default) ?? item.variants[0] ?? null);
                   setQty(1);
                   setError(null);
                 }}
@@ -396,6 +412,9 @@ function SellScreen({
                 <span className="text-base font-bold leading-tight">{item.name}</span>
                 <span className="font-semibold text-accent-700">
                   {formatRupiah(item.sell_price)}
+                  {item.variants.length > 1 && (
+                    <span className="ink-faint ml-1 text-xs font-medium">· {item.variants.length} ukuran</span>
+                  )}
                 </span>
                 <span
                   className={`mt-1 text-xs font-medium ${low ? "" : "ink-faint"}`}
@@ -423,9 +442,25 @@ function SellScreen({
             <div className="mx-auto mb-5 h-1.5 w-10 rounded-full bg-[color:var(--ink-faint)] opacity-40 sm:hidden" />
             <p className="text-xl font-bold">{selected.name}</p>
             <p className="ink-soft text-sm">
-              {formatRupiah(selected.sell_price)} / {selected.unit} · sisa{" "}
+              {formatRupiah(variant?.sell_price ?? selected.sell_price)} / {selected.unit} · sisa{" "}
               {formatQty(selected.current_stock)}
             </p>
+
+            {selected.variants.length > 1 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {selected.variants.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => setVariant(v)}
+                    className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-colors ${
+                      variant?.id === v.id ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                    }`}
+                  >
+                    {v.name} · {formatRupiah(v.sell_price)}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="mt-6 flex items-center justify-center gap-6">
               <QtyButton label="−" onPress={() => setQty((q) => Math.max(1, q - 1))} />
@@ -438,13 +473,13 @@ function SellScreen({
 
             <button
               onClick={() => {
-                addToCart(selected, qty);
+                addToCart(selected, variant, qty);
                 setSelected(null);
                 setQty(1);
               }}
               className="btn-accent mt-6 w-full py-4 text-lg"
             >
-              Tambah {formatRupiah(Number(selected.sell_price) * qty)}
+              Tambah {formatRupiah(Number(variant?.sell_price ?? selected.sell_price) * qty)}
             </button>
           </div>
         </div>
@@ -456,36 +491,39 @@ function SellScreen({
           <div className="glass-card glass-strong w-full max-w-2xl animate-fade-up px-5 py-3 shadow-pop">
             {cartOpen && (
               <ul className="hairline-b mb-3 max-h-64 overflow-y-auto pb-2">
-                {cart.map((l) => (
-                  <li key={l.item.id} className="flex items-center gap-3 py-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{l.item.name}</p>
-                      <p className="ink-faint text-xs">
-                        {formatRupiah(l.item.sell_price)} × {l.qty}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => changeLine(l.item.id, -1)}
-                        aria-label={`kurangi ${l.item.name}`}
-                        className="glass-card h-9 w-9 rounded-full text-lg font-bold active:scale-90"
-                      >
-                        −
-                      </button>
-                      <span className="w-6 text-center font-semibold tabular-nums">{l.qty}</span>
-                      <button
-                        onClick={() => changeLine(l.item.id, +1)}
-                        aria-label={`tambah ${l.item.name}`}
-                        className="glass-card h-9 w-9 rounded-full text-lg font-bold active:scale-90"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <span className="w-24 text-right text-sm font-semibold tabular-nums">
-                      {formatRupiah(Number(l.item.sell_price) * l.qty)}
-                    </span>
-                  </li>
-                ))}
+                {cart.map((l) => {
+                  const key = lineKey(l.item.id, l.variant);
+                  return (
+                    <li key={key} className="flex items-center gap-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{lineName(l)}</p>
+                        <p className="ink-faint text-xs">
+                          {formatRupiah(linePrice(l))} × {l.qty}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => changeLine(key, -1)}
+                          aria-label={`kurangi ${lineName(l)}`}
+                          className="glass-card h-9 w-9 rounded-full text-lg font-bold active:scale-90"
+                        >
+                          −
+                        </button>
+                        <span className="w-6 text-center font-semibold tabular-nums">{l.qty}</span>
+                        <button
+                          onClick={() => changeLine(key, +1)}
+                          aria-label={`tambah ${lineName(l)}`}
+                          className="glass-card h-9 w-9 rounded-full text-lg font-bold active:scale-90"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="w-24 text-right text-sm font-semibold tabular-nums">
+                        {formatRupiah(linePrice(l) * l.qty)}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             <div className="flex items-center gap-4">

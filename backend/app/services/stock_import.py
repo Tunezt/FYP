@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Business, Item
+from app.services.catalog import ensure_default_variant, sync_default_from_item
 from app.services.stock import open_item_stock, set_absolute_stock
 
 logger = logging.getLogger("stock_import")
@@ -126,6 +127,7 @@ async def apply_stock_template(
             await open_item_stock(
                 session, item, reason="opname", source_type="stock_import", unit_cost=known_cost
             )
+            await ensure_default_variant(session, item)  # M4-T1
             created.append(row["name"])
         else:
             await set_absolute_stock(
@@ -138,6 +140,8 @@ async def apply_stock_template(
                 existing.sell_price = row["sell_price"]
             if row["reorder_threshold"] > 0:
                 existing.reorder_threshold = row["reorder_threshold"]
+            if row["cost_price"] > 0 or row["sell_price"] > 0:
+                await sync_default_from_item(session, existing)  # M4-T1
             updated.append(existing.name)
     await session.flush()
     return {

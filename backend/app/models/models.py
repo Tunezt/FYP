@@ -339,7 +339,9 @@ class OrderLine(Base):
     )
     order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), nullable=False)
-    variant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))  # FK arrives with M4
+    variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("item_variants.id")
+    )  # FK added by migration 0007 (M4-T1); NULL on lines sold before variants existed
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     line_discount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
@@ -347,6 +349,30 @@ class OrderLine(Base):
     unit_cost_at_sale: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
+
+
+class ItemVariant(Base):
+    """A size/option of an item with its own prices (migration 0007, roadmap
+    M4-T1). Stock lives on the parent item; every item has exactly one default
+    variant (partial unique index) so single-variant products stay simple."""
+
+    __tablename__ = "item_variants"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    sku: Mapped[str | None] = mapped_column(Text)
+    sell_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    cost_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
 
 
 class Payment(Base):

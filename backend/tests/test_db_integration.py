@@ -19,7 +19,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.security import hash_pin
-from app.models import Business, Item, Order, OrderLine, Payment, Sale, Staff, StockMovement
+from app.models import Business, Item, ItemVariant, Order, OrderLine, Payment, Sale, Staff, StockMovement
 from app.services.sales import InsufficientStock, record_sale
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
@@ -205,6 +205,31 @@ async def test_rls_isolates_orders_lines_and_payments(session_factory, two_tenan
             session.add(smuggled(order_id))
             with pytest.raises(Exception):
                 await session.commit()
+
+
+async def test_rls_isolates_item_variants(session_factory, two_tenants):
+    """M4-T1 / roadmap §2: B cannot read A's variants; A cannot write B's."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        item = Item(business_id=a.id, name="Variant Item A", unit="cup", sell_price=Decimal("20000"))
+        session.add(item)
+        await session.flush()
+        session.add(ItemVariant(business_id=a.id, item_id=item.id, name="Large", sell_price=Decimal("25000"), is_default=True))
+        await session.commit()
+        item_id = item.id
+
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert (await session.execute(select(ItemVariant).where(ItemVariant.item_id == item_id))).scalars().all() == []
+
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        row = (await session.execute(select(ItemVariant).where(ItemVariant.item_id == item_id))).scalar_one()
+        assert row.sell_price == Decimal("25000.00")
+        session.add(ItemVariant(business_id=b.id, item_id=item_id, name="Smuggled", sell_price=Decimal(1)))
+        with pytest.raises(Exception):
+            await session.commit()
 
 
 async def test_rls_isolates_sales_view(session_factory, two_tenants):

@@ -20,11 +20,16 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Item, Order, OrderLine, Payment
+from app.models import Item, ItemVariant, Order, OrderLine, Payment
+from app.services.catalog import default_variant
 from app.services.sales import ATOMIC_DECREMENT, InsufficientStock, ItemNotFound
 from app.services.stock import record_movement
 
 TWO_PLACES = Decimal("0.01")
+
+
+class VariantNotFound(Exception):
+    pass
 
 
 class PaymentMismatch(Exception):
@@ -42,8 +47,9 @@ class EmptyOrder(Exception):
 class OrderLineSpec:
     item_id: uuid.UUID
     quantity: Decimal
-    unit_price: Decimal | None = None  # None → the item's current sell_price
+    unit_price: Decimal | None = None  # None → the variant's (or item's) current sell_price
     notes: str | None = None
+    variant_id: uuid.UUID | None = None  # None → the item's default variant (M4-T1)
 
 
 @dataclass
@@ -84,21 +90,31 @@ async def create_order(
     sold_at = sold_at or datetime.now(timezone.utc)
 
     # 1. Price every line and take its stock, atomically, before any row exists.
-    priced: list[tuple[OrderLineSpec, Item, Decimal, Decimal, Decimal]] = []
+    #    Price and cost come from the variant (explicit, else the item's default);
+    #    stock is the parent item's until recipes arrive (M4-T4).
+    priced: list[tuple[OrderLineSpec, Item, ItemVariant | None, Decimal, Decimal, Decimal, Decimal]] = []
     for spec in lines:
         item = await session.get(Item, spec.item_id)
         if item is None:
             raise ItemNotFound()
+        if spec.variant_id is not None:
+            variant = await session.get(ItemVariant, spec.variant_id)
+            if variant is None or variant.item_id != item.id or not variant.is_active:
+                raise VariantNotFound()
+        else:
+            variant = await default_variant(session, item.id)
         quantity = Decimal(spec.quantity)
         result = await session.execute(ATOMIC_DECREMENT, {"qty": quantity, "item_id": item.id})
         remaining = result.scalar_one_or_none()
         if remaining is None:
             raise InsufficientStock(item.name, item.current_stock)
-        price = Decimal(spec.unit_price) if spec.unit_price is not None else Decimal(item.sell_price)
+        list_price = Decimal(variant.sell_price) if variant is not None else Decimal(item.sell_price)
+        cost = Decimal(variant.cost_price) if variant is not None else Decimal(item.cost_price)
+        price = Decimal(spec.unit_price) if spec.unit_price is not None else list_price
         line_total = (price * quantity).quantize(TWO_PLACES)
-        priced.append((spec, item, price, line_total, Decimal(remaining)))
+        priced.append((spec, item, variant, price, cost, line_total, Decimal(remaining)))
 
-    subtotal = sum((lt for _, _, _, lt, _ in priced), Decimal(0)).quantize(TWO_PLACES)
+    subtotal = sum((lt for _, _, _, _, _, lt, _ in priced), Decimal(0)).quantize(TWO_PLACES)
     total = subtotal  # discounts, tax, service charge, rounding: M7-T4
 
     # 2. Payments must cover the total exactly — a till does not close on a guess.
@@ -120,15 +136,16 @@ async def create_order(
     await session.flush()
 
     created = CreatedOrder(order=order)
-    for spec, item, price, line_total, remaining in priced:
+    for spec, item, variant, price, cost, line_total, remaining in priced:
         line = OrderLine(
             business_id=business_id,
             order_id=order.id,
             item_id=item.id,
+            variant_id=variant.id if variant is not None else None,
             quantity=Decimal(spec.quantity),
             unit_price=price,
             line_total=line_total,
-            unit_cost_at_sale=item.cost_price,
+            unit_cost_at_sale=cost,
             notes=spec.notes,
         )
         session.add(line)
@@ -141,7 +158,7 @@ async def create_order(
             reason="sale",
             source_type="sale",
             source_id=line.id,
-            unit_cost=item.cost_price,
+            unit_cost=cost,
             staff_id=staff_id,
             created_at=sold_at,
         )

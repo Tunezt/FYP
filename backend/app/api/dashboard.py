@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 
 from app.ai.periods import period_range
 from app.core.deps import OwnerCtx
-from app.models import Alert, Business, Expense, Item, Receipt, Sale, Staff
+from app.models import Alert, Business, Expense, Item, ItemVariant, Receipt, Sale, Staff
 from app.schemas.dashboard import (
     AlertRow,
     BusinessUpdateIn,
@@ -30,6 +30,9 @@ from app.schemas.dashboard import (
     SaleRow,
     SalesPage,
     TrendPoint,
+    VariantCreateIn,
+    VariantOut,
+    VariantUpdateIn,
 )
 from app.schemas.auth import BusinessOut
 from app.services.velocity import VELOCITY_WINDOW_DAYS
@@ -221,6 +224,7 @@ async def create_item(payload: ItemCreateIn, ctx: OwnerCtx):
     ctx.session.add(item)
     await ctx.session.flush()
     # Opening balance goes into the ledger in the same transaction (M2-T2).
+    from app.services.catalog import ensure_default_variant
     from app.services.stock import open_item_stock
 
     await open_item_stock(
@@ -228,6 +232,7 @@ async def create_item(payload: ItemCreateIn, ctx: OwnerCtx):
         unit_cost=item.cost_price if item.cost_price and item.cost_price > 0 else None,
         staff_id=ctx.staff_id,
     )
+    await ensure_default_variant(ctx.session, item)  # M4-T1
     return InventoryItem(
         id=item.id,
         name=item.name,
@@ -262,6 +267,10 @@ async def update_item(item_id: uuid.UUID, payload: ItemUpdateIn, ctx: OwnerCtx):
     if changes or new_stock is not None:
         item.updated_at = datetime.now(timezone.utc)
     await ctx.session.flush()
+    if "sell_price" in changes or "cost_price" in changes:
+        from app.services.catalog import sync_default_from_item
+
+        await sync_default_from_item(ctx.session, item)  # M4-T1: default variant mirrors the item
     return InventoryItem(
         id=item.id,
         name=item.name,
@@ -274,6 +283,57 @@ async def update_item(item_id: uuid.UUID, payload: ItemUpdateIn, ctx: OwnerCtx):
         days_remaining=None,
         below_reorder_threshold=item.current_stock <= item.reorder_threshold,
     )
+
+
+_VARIANT_ERRORS = {
+    "name": (422, "Nama varian tidak boleh kosong"),
+    "duplicate": (409, "Nama varian sudah dipakai untuk barang ini"),
+    "default_inactive": (409, "Varian utama tidak bisa dinonaktifkan — jadikan varian lain sebagai utama dulu"),
+}
+
+
+@router.get("/items/{item_id}/variants", response_model=list[VariantOut])
+async def list_variants(item_id: uuid.UUID, ctx: OwnerCtx):
+    if await ctx.session.get(Item, item_id) is None:
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+    rows = (
+        await ctx.session.execute(
+            select(ItemVariant).where(ItemVariant.item_id == item_id)
+            .order_by(ItemVariant.is_default.desc(), ItemVariant.sell_price, ItemVariant.name)
+        )
+    ).scalars().all()
+    return [VariantOut.model_validate(v) for v in rows]
+
+
+@router.post("/items/{item_id}/variants", response_model=VariantOut, status_code=201)
+async def add_variant(item_id: uuid.UUID, payload: VariantCreateIn, ctx: OwnerCtx):
+    from app.services.catalog import VariantInvalid, create_variant
+
+    item = await ctx.session.get(Item, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+    try:
+        variant = await create_variant(ctx.session, item, **payload.model_dump())
+    except VariantInvalid as exc:
+        status, detail = _VARIANT_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return VariantOut.model_validate(variant)
+
+
+@router.patch("/variants/{variant_id}", response_model=VariantOut)
+async def edit_variant(variant_id: uuid.UUID, payload: VariantUpdateIn, ctx: OwnerCtx):
+    from app.services.catalog import VariantInvalid, update_variant
+
+    variant = await ctx.session.get(ItemVariant, variant_id)
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Varian barang tidak ditemukan")
+    item = await ctx.session.get(Item, variant.item_id)
+    try:
+        variant = await update_variant(ctx.session, variant, item, **payload.model_dump(exclude_none=True))
+    except VariantInvalid as exc:
+        status, detail = _VARIANT_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return VariantOut.model_validate(variant)
 
 
 @router.get("/expenses", response_model=ExpensesPage)

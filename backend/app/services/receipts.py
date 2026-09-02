@@ -17,6 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Business, Expense, Item, PendingConfirmation, Receipt
+from app.services.catalog import ensure_default_variant, sync_default_from_item
 from app.services.stock import add_stock, open_item_stock, set_absolute_stock
 
 logger = logging.getLogger("receipts")
@@ -139,6 +140,7 @@ async def commit_parse(
                 reason="opname" if doc_type == "stock_ledger" else "purchase",
                 source_type="receipt", source_id=receipt.id, unit_cost=known_cost,
             )
+            await ensure_default_variant(session, item)  # M4-T1
             stock_effects.append({"item": name, "action": "created", "stock": float(qty), "unit": unit})
         elif doc_type == "stock_ledger":
             old = match.current_stock
@@ -157,6 +159,7 @@ async def commit_parse(
             )
             if unit_price > 0:
                 match.cost_price = unit_price
+                await sync_default_from_item(session, match)  # M4-T1
             stock_effects.append(
                 {"item": match.name, "action": "added", "added": float(qty), "stock": float(match.current_stock), "unit": match.unit}
             )

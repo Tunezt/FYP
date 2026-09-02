@@ -30,6 +30,15 @@ class PosLoginOut(BaseModel):
     business_name: str
 
 
+class PosVariantOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    sell_price: Decimal
+    is_default: bool
+
+    model_config = {"from_attributes": True}
+
+
 class ItemOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -37,6 +46,7 @@ class ItemOut(BaseModel):
     current_stock: Decimal
     sell_price: Decimal
     reorder_threshold: Decimal
+    variants: list[PosVariantOut] = []  # active variants, default first (M4-T1)
 
     model_config = {"from_attributes": True}
 
@@ -70,6 +80,7 @@ PosOrderType = Literal["dine_in", "takeaway", "delivery", "pickup"]
 
 class OrderLineIn(BaseModel):
     item_id: uuid.UUID
+    variant_id: uuid.UUID | None = None  # None → the item's default variant
     quantity: Decimal = Field(gt=0, le=Decimal("999999"))
     unit_price: Decimal | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=200)
@@ -90,6 +101,7 @@ class OrderIn(BaseModel):
 class OrderLineOut(BaseModel):
     id: uuid.UUID
     item_id: uuid.UUID
+    variant_id: uuid.UUID | None = None
     item_name: str
     quantity: Decimal
     unit_price: Decimal

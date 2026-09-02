@@ -75,6 +75,39 @@ class ItemUpdateIn(BaseModel):
     reorder_threshold: Decimal | None = Field(default=None, ge=0)
 
 
+# ── Variants (M4-T1) ─────────────────────────────────────────────────────────
+
+
+class VariantOut(BaseModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    name: str
+    sku: str | None
+    sell_price: Decimal
+    cost_price: Decimal
+    is_default: bool
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class VariantCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    sku: str | None = Field(default=None, max_length=60)
+    sell_price: Decimal = Field(ge=0)
+    cost_price: Decimal = Field(ge=0, default=Decimal(0))
+    is_default: bool = False
+
+
+class VariantUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    sku: str | None = Field(default=None, max_length=60)
+    sell_price: Decimal | None = Field(default=None, ge=0)
+    cost_price: Decimal | None = Field(default=None, ge=0)
+    is_default: bool | None = None
+    is_active: bool | None = None
+
+
 class ExpenseRow(BaseModel):
     id: uuid.UUID
     amount: Decimal

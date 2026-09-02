@@ -601,3 +601,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Endpoints `POST /pos/orders/{id}/void` and `/refund` documented in `docs/api-contract.md`. Kiosk UI for reversals is not built yet (M3-T3's cart was the kiosk change this milestone); the endpoints are ready for it.
 **Deviation:** none
 **Next:** M4-T1 — M3 complete, tagged `checkpoint/M3`
+
+### [M4-T1] Variants
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0007_item_variants.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/catalog.py (new), backend/app/services/orders.py, backend/app/services/receipts.py, backend/app/services/stock_import.py, backend/app/api/pos.py, backend/app/api/dashboard.py, backend/app/schemas/pos.py, backend/app/schemas/dashboard.py, backend/app/seed.py, backend/tests/test_variants.py (new, 6 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py, frontend/app/pos/[businessToken]/page.tsx
+**Gates:** pytest 122 passed 0 skipped · migrations round-trip ok (0007 → 0006 → 0007) · frontend build ok · seed ok
+**Notes:**
+- Migration 0007: `item_variants` (name, sku, `sell_price`/`cost_price numeric(12,2)`, `is_default`, `is_active`) with RLS in the same migration, one-default-per-item and unique-name-per-item partial/functional unique indexes, the forward FK `order_lines.variant_id → item_variants` now attached, and a backfilled default variant "Standar" per existing item copying its prices (idempotent). `items` untouched.
+- Pricing moves to the variant: `create_order` resolves an explicit `variant_id` (must belong to the item and be active) or the item's default, takes `unit_price` and `unit_cost_at_sale` from it, and stamps `variant_id` on the line. Stock stays on the parent item (recipes are M4-T4). Reporting rolls up through the unchanged `sales` view (`item_id`).
+- The default variant's prices mirror the item's in both directions (`services/catalog.py`): dashboard/Excel/receipt edits of the item sync the default variant; editing the default variant syncs the item. Every item-creation path (dashboard, receipt photo, Excel import, seed) calls `ensure_default_variant`, and a new invariant `test_every_item_has_exactly_one_default_variant` checks all tenants.
+- Owner API: `GET/POST /api/items/{id}/variants`, `PATCH /api/variants/{id}` (Indonesian errors: blank name 422, duplicate 409, deactivating the default 409; promoting a variant demotes the previous default). POS: `/pos/items` lists active variants (default first); `/pos/orders` lines accept `variant_id`. Kiosk: tiles show "· N ukuran", the quantity sheet offers the sizes with their prices, cart lines are per size, stock cap is shared across sizes of one item.
+- Done-when proved by `test_three_sizes_sell_at_three_prices_and_roll_up`: Regular 22.000 / Large 28.000 / Jumbo 32.000 sell as three lines with those prices and their own costs, the parent's stock drops by three, movements carry each variant's cost, and the `sales` view reports 3 sales / 82.000 for the parent item. Seed now gives Es Kopi Susu, Matcha Latte and Americano a Large size, with a quarter of their history sold as Large.
+- Dashboard UI for managing variants is not built (API only); inventory list still shows the item's default price.
+**Deviation:** none
+**Next:** M4-T2

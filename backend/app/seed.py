@@ -24,7 +24,15 @@ from sqlalchemy import delete, select
 from app.core.db import plain_session, tenant_session
 from app.core.security import hash_pin
 from app.models import Business, Expense, Item, Order, OrderLine, Payment, Staff
+from app.services.catalog import create_variant, ensure_default_variant
 from app.services.stock import record_movement
+
+# Sizes for the drinks that have them (M4-T1): (item name, variant name, sell, cost)
+VARIANTS = [
+    ("Es Kopi Susu", "Large", 27000, 10000),
+    ("Matcha Latte", "Large", 33000, 13000),
+    ("Americano", "Large", 22000, 7500),
+]
 
 OWNER_PHONE = "628120001111"
 
@@ -98,9 +106,20 @@ async def seed() -> None:
             items.append((item, weight))
         await session.flush()
 
+        # Every item gets its default "Standar" variant; a few drinks get a Large.
+        defaults = {}
+        for item, _w in items:
+            defaults[item.id] = (await ensure_default_variant(session, item)).id
+        larges = {}
+        by_name = {item.name: item for item, _w in items}
+        for item_name, vname, sell, cost in VARIANTS:
+            v = await create_variant(session, by_name[item_name], name=vname,
+                                     sell_price=Decimal(sell), cost_price=Decimal(cost))
+            larges[by_name[item_name].id] = v
+
         sellable = [(i, w) for i, w in items if w > 0]
         sold_per_item: dict = {}  # item.id -> total quantity sold in the history
-        sale_movements: list[tuple] = []  # (item, qty, sold_at, line, staff_id) — ledgered after the loop
+        sale_movements: list[tuple] = []  # (item, qty, sold_at, line, staff_id, unit_cost) — ledgered after the loop
         for day_offset in range(30, 0, -1):
             day = now - timedelta(days=day_offset)
             weekend = day.weekday() >= 5
@@ -118,7 +137,12 @@ async def seed() -> None:
                 ).astimezone(timezone.utc)
                 # Order model (M3-T2): one order, one line, one payment per sale.
                 # Cash dominates a warung; QRIS is the common alternative.
-                total = item.sell_price * qty
+                # One in four drinks with a Large size sells as Large (M4-T1).
+                large = larges.get(item.id)
+                variant_id, unit_price, unit_cost = defaults[item.id], item.sell_price, item.cost_price
+                if large is not None and rng.random() < 0.25:
+                    variant_id, unit_price, unit_cost = large.id, large.sell_price, large.cost_price
+                total = unit_price * qty
                 staff_id = rng.choice(staff_ids)
                 order = Order(
                     business_id=business_id, staff_id=staff_id, order_type="takeaway",
@@ -128,9 +152,9 @@ async def seed() -> None:
                 session.add(order)
                 await session.flush()
                 line = OrderLine(
-                    business_id=business_id, order_id=order.id, item_id=item.id, quantity=qty,
-                    unit_price=item.sell_price, line_total=total,
-                    unit_cost_at_sale=item.cost_price, created_at=sold_at,
+                    business_id=business_id, order_id=order.id, item_id=item.id, variant_id=variant_id,
+                    quantity=qty, unit_price=unit_price, line_total=total,
+                    unit_cost_at_sale=unit_cost, created_at=sold_at,
                 )
                 session.add(line)
                 session.add(Payment(
@@ -139,7 +163,7 @@ async def seed() -> None:
                     amount=total, created_at=sold_at,
                 ))
                 sold_per_item[item.id] = sold_per_item.get(item.id, Decimal(0)) + qty
-                sale_movements.append((item, qty, sold_at, line, staff_id))
+                sale_movements.append((item, qty, sold_at, line, staff_id, unit_cost))
         await session.flush()
 
         # Stock ledger (M2-T2/M2-T3): the demo café opened 31 days ago with
@@ -153,11 +177,11 @@ async def seed() -> None:
                 reason="opname", source_type="seed", unit_cost=item.cost_price,
                 created_at=opened_at,
             )
-        for item, qty, sold_at, line, staff_id in sale_movements:
+        for item, qty, sold_at, line, staff_id, unit_cost in sale_movements:
             await record_movement(
                 session, business_id=business_id, item_id=item.id, qty_delta=-qty,
                 reason="sale", source_type="sale", source_id=line.id,
-                unit_cost=item.cost_price, staff_id=staff_id, created_at=sold_at,
+                unit_cost=unit_cost, staff_id=staff_id, created_at=sold_at,
             )
 
         for category, description, amount, days_ago in EXPENSES:
