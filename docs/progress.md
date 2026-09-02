@@ -532,3 +532,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - No production code changed. The invariant only needed the M2-T2 paths, which were already writing correctly.
 **Deviation:** none
 **Next:** M2-T4
+
+### [M2-T4] Backfill history
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/services/stock_backfill.py (new), backend/alembic/versions/0004_backfill_stock_movements.py (new), backend/tests/test_stock_backfill.py (new, 3 tests)
+**Gates:** pytest 101 passed 0 skipped · migrations round-trip ok (0004 → 0003 → 0004) · frontend build ok · seed ok · canary (downgrade base → head, seed, suite) ok
+**Notes:**
+- Migration 0004 is data-only. The statements live in `services/stock_backfill.py` so the test runs the identical SQL. Scope is `backfill_items` = items with **no** ledger row when the backfill starts, so anything written live since M2-T2 is never touched and re-running is a no-op (proved by test).
+- Reconstructed: one `sale` row per historical `sales` row (−quantity, staff, `sold_at`, **`unit_cost` NULL** — the cost at the time is unknown and a guess would corrupt margin history); one `purchase` row per receipt-photo line whose name matches an item of the same business (+quantity, written unit price or NULL); an `opname` opening-balance row per item dated at the item's creation carrying whatever remains so `SUM(qty_delta) == current_stock`. Stock-book photos (`document_type = stock_ledger`) are absolute counts with unknown prior state and are deliberately skipped. Backfilled rows are tagged `source_type = backfill_sale | backfill_receipt | backfill_opening` so the downgrade removes exactly them.
+- Tests build a pre-migration business (stock figures, 30 days of `sales`, a purchase photo with one unmatched line, a stock-book photo, zero ledger rows), run the backfill as `app_role`, and assert the M2-T3 invariant holds, the exact rows and NULL costs, that the implied opening figure is recorded even when it is negative rather than hidden, idempotency against an item with live history, and that rollback leaves live rows alone.
+- Canary run before this commit (7 tasks since the last one): clean stash, `downgrade base` → `upgrade head` through 0004, seed, full suite green.
+**Deviation:** canary was late (7 tasks instead of 5) — noted, no consequence found.
+**Next:** M3-T1 — M2 complete, tagged `checkpoint/M2`
