@@ -103,6 +103,12 @@ Chart palettes were validated computationally for colorblind separation and cont
 
 ## 5. 🚨 Current blocker: the Supabase project no longer exists
 
+> **Update 3 Sep 2026 (roadmap M0-T1/M0-T2):** this no longer blocks development. Local
+> Postgres 16 + pgvector is the default — `docker compose up -d`, or on a machine without
+> Docker `python scripts/local-pg.py start` — and the full suite runs green against it
+> (71 passed, 0 skipped). A new Supabase project is now purely a deploy-time concern (M12-T1);
+> the restore sequence below still applies when that day comes.
+
 Diagnosed 1 Sep 2026, three independent confirmations:
 
 - The project host **does not resolve in DNS** (a merely *paused* project still resolves)

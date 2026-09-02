@@ -31,42 +31,80 @@ docs/       progress log, API contract, demo script
 
 ## Running locally
 
-### Backend
+Local Postgres is the development default; Supabase is a deploy target (M12). Nothing
+below needs a Supabase, Meta, Railway or Vercel account — the assistant's Gemini calls need
+a Google AI Studio key, everything else runs offline.
+
+### 1. Database — Postgres 16 + pgvector
+
+With Docker:
+
+```bash
+docker compose up -d        # pgvector/pgvector:pg16, named volume, runs scripts/db-bootstrap.sql once
+```
+
+Without Docker (Windows, no admin needed — downloads a stock Postgres 16 + pgvector build
+into the git-ignored `.pg16/` folder):
+
+```bash
+python scripts/local-pg.py start       # also: stop | status | psql | reset
+```
+
+Either way you get superuser `postgres`/`postgres`, database `warung_pintar` on port 5432,
+and the restricted `app_role` created by `scripts/db-bootstrap.sql`. The app must connect
+as `app_role`: it has no `BYPASSRLS`, so Row-Level Security actually enforces tenant
+isolation. The superuser is for alembic only.
+
+### 2. Backend
 
 ```bash
 cd backend
 python -m venv .venv && .venv/Scripts/activate   # or source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env                              # fill in real values
-alembic upgrade head                              # against your Supabase DATABASE_URL
-uvicorn app.main:app --reload --port 8000
+cp .env.example .env                              # local DB URLs are already filled in
+alembic upgrade head
+python -m app.seed                                # demo café, 30 days of sales
+python dev.py                                     # http://localhost:8000
 ```
 
-Expose the webhook for Meta with a tunnel: `ngrok http 8000`, then register
-`https://<tunnel>/webhooks/whatsapp` + your verify token in the Meta App dashboard and
-subscribe to the `messages` field.
+`python dev.py` is the entrypoint on Windows, not bare `uvicorn`: it selects the event-loop
+policy asyncpg needs there. On macOS/Linux `uvicorn app.main:app --reload --port 8000` also
+works.
 
-### Frontend
+Smoke check: `curl localhost:8000/health/db` should report the database as reachable.
+
+### 3. Frontend
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env.local                        # point at the backend
-npm run dev
+cp .env.example .env.local                        # points at http://localhost:8000
+npm run dev                                       # http://localhost:3000
 ```
 
-### Tests
+Log in as the demo owner (+62 812-000-1111): the OTP is not sent anywhere in development,
+it is printed in the backend log as `[DEV] OTP for ... is ...`.
+
+### 4. Tests and gates
 
 ```bash
-cd backend && pytest                # pure-logic + mocked tests always run
-DATABASE_URL=postgres://... pytest  # additionally runs RLS / concurrency tests
+cd backend && python -m pytest -q      # expect 71 passed, 0 skipped
 ```
 
-### Seed demo data
+The four DB-integration tests (RLS isolation and the concurrent-sale race) run against
+`DATABASE_URL` whenever it points at localhost. **If they skip, local Postgres is down** —
+`python scripts/local-pg.py status` or `docker compose ps`. To point them elsewhere set
+`INTEGRATION_DATABASE_URL`.
 
-```bash
-cd backend && python -m app.seed   # fictional café: Kopi Kenangan Senja, items, staff, 30 days of sales
-```
+Before every commit all four gates in `docs/BUILD-ROADMAP.md` §2 must pass: the test
+suite, `alembic upgrade head && alembic downgrade -1 && alembic upgrade head`,
+`npm run build` in `frontend/`, and `python -m app.seed`.
+
+### Optional: WhatsApp webhook
+
+Expose the webhook for Meta with a tunnel: `ngrok http 8000`, then register
+`https://<tunnel>/webhooks/whatsapp` + your verify token in the Meta App dashboard and
+subscribe to the `messages` field.
 
 ## Demo
 

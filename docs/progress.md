@@ -288,3 +288,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - `backend/.env` (untracked) now points both URLs at the local cluster; the dead Supabase strings are kept commented for M12-T1.
 **Deviation:** removed `create extension if not exists pgcrypto` from migration 0001. `gen_random_uuid()` is core since Postgres 13 and nothing else uses pgcrypto (PIN/OTP hashing is Python `hashlib`). The pgserver build ships only `plpgsql` and `vector`, so the line made 0001 unrunnable there. Not a schema change; Supabase has pgcrypto preinstalled either way.
 **Next:** M0-T2
+
+### [M0-T2] Document the local-first workflow
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** README.md, docs/PROJECT-STATUS.md, .claude/launch.json
+**Gates:** pytest 71 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- README "Running locally" rewritten as a four-step sequence: database (Docker or `scripts/local-pg.py`), backend (`python dev.py` named as the Windows entrypoint, not bare uvicorn), frontend, tests and gates. States the expected `71 passed, 0 skipped` and what a skip means. Supabase is described as a deploy target only.
+- `docs/PROJECT-STATUS.md` §5 gets a dated note that the missing Supabase project no longer blocks development.
+- `.claude/launch.json` backend entry switched from bare uvicorn to `dev.py` so the in-app preview follows the same rule.
+- **Fresh-clone verification is deferred to M0-T3:** a clone of HEAD today would lack the still-uncommitted `0002` migration, `dev.py` and `db_errors.py`, so "follow only the README" cannot be proven until that tree is committed. M0-T3's entry will record the fresh-clone run.
+**Deviation:** none
+**Next:** M0-T3
