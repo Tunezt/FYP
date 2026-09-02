@@ -28,7 +28,15 @@ from app.services.catalog import (
     create_modifier, create_modifier_group, create_variant, ensure_default_variant, set_recipe_line,
 )
 from app.services.stock import record_movement
+from app.services.suppliers import create_supplier
 from app.services.units import ensure_standard_uoms
+
+# Suppliers (M5-T1): (name, phone, address)
+SUPPLIERS = [
+    ("Toko Manis", "0812-3456-7890", "Pasar Anyar Blok C-4"),
+    ("Grosir Barokah", "0813-9876-5432", "Jl. Melati No. 12"),
+    ("Pak Udin Sayur", "0857-1122-3344", "Pasar pagi"),
+]
 
 # Recipes (M4-T4): (item, variant name, [(component item, quantity, uom code)])
 # A large latte uses more beans and milk than a regular one.
@@ -121,6 +129,8 @@ async def seed() -> None:
 
         # Units of measure (M4-T3): the standard set, and each item linked to its unit.
         uoms = await ensure_standard_uoms(session, business_id)
+        for sname, sphone, saddress in SUPPLIERS:  # M5-T1
+            await create_supplier(session, business_id, name=sname, phone=sphone, address=saddress)
 
         items = []
         for name, unit, stock, cost, sell, reorder, weight in ITEMS:

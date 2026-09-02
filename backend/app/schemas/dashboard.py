@@ -109,6 +109,50 @@ class UomConversionCreateIn(BaseModel):
     both_ways: bool = True
 
 
+# ── Suppliers (M5-T1) ───────────────────────────────────────────────────────
+
+
+class SupplierOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    phone: str | None
+    address: str | None
+    notes: str | None
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class SupplierCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+    address: str | None = Field(default=None, max_length=300)
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class SupplierUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+    address: str | None = Field(default=None, max_length=300)
+    notes: str | None = Field(default=None, max_length=500)
+    is_active: bool | None = None
+
+
+class SupplierReceiptOut(BaseModel):
+    id: uuid.UUID
+    occurred_at: datetime
+    total_amount: Decimal | None
+    item_count: int
+
+
+class SupplierHistoryOut(BaseModel):
+    supplier: SupplierOut
+    purchase_count: int
+    total_spent: Decimal
+    last_purchase_at: datetime | None
+    receipts: list[SupplierReceiptOut]
+
+
 # ── Recipes (M4-T4) ─────────────────────────────────────────────────────────
 
 

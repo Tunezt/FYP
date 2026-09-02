@@ -187,6 +187,9 @@ class Receipt(Base):
     image_url: Mapped[str] = mapped_column(Text, nullable=False)
     parsed_data: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'"))
     supplier: Mapped[str | None] = mapped_column(Text)
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("suppliers.id")
+    )  # migration 0011 (M5-T1); linked when the photo's supplier text matches a known supplier
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
     occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -493,6 +496,25 @@ class RecipeLine(Base):
     )
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     uom_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("uoms.id"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class Supplier(Base):
+    """Who the business buys from (migration 0011, roadmap M5-T1). Purchase
+    history is derived from receipts / goods receipts, never stored here."""
+
+    __tablename__ = "suppliers"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    phone: Mapped[str | None] = mapped_column(Text)
+    address: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()

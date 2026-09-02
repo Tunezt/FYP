@@ -105,6 +105,10 @@ async def commit_parse(
     )
     session.add(receipt)
     await session.flush()
+    # Purchase history (M5-T1): link the photo to a known supplier by name.
+    from app.services.suppliers import link_receipt
+
+    await link_receipt(session, receipt)
 
     stock_effects: list[dict] = []
     for entry in parsed.get("items", []):

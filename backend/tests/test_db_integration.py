@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.security import hash_pin
 from app.models import (
     Business, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier,
-    Payment, RecipeLine, Sale, Staff, StockMovement, Uom, UomConversion,
+    Payment, RecipeLine, Sale, Staff, StockMovement, Supplier, Uom, UomConversion,
 )
 from app.services.sales import InsufficientStock, record_sale
 
@@ -331,6 +331,24 @@ async def test_rls_isolates_recipe_lines(session_factory, two_tenants):
     async with session_factory() as session:
         await _set_tenant(session, a.id)
         session.add(RecipeLine(business_id=b.id, variant_id=ids["variant"], component_item_id=ids["beans"], quantity=Decimal(1)))
+        with pytest.raises(Exception):
+            await session.commit()
+
+
+async def test_rls_isolates_suppliers(session_factory, two_tenants):
+    """M5-T1 / roadmap §2."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(Supplier(business_id=a.id, name="Supplier A", phone="0811"))
+        await session.commit()
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert (await session.execute(select(Supplier).where(Supplier.name == "Supplier A"))).scalars().all() == []
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        assert (await session.execute(select(Supplier).where(Supplier.name == "Supplier A"))).scalar_one().phone == "0811"
+        session.add(Supplier(business_id=b.id, name="Smuggled"))
         with pytest.raises(Exception):
             await session.commit()
 

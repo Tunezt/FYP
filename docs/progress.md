@@ -686,3 +686,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Done-when proved by `test_five_bad_rows_import_nothing_and_are_all_named`: a 200-row workbook (120 items, 30 variants, 20 modifier rows, 5 units, 5 conversions, 20 recipe lines) with five deliberate errors — negative stock, unknown item on a variant, unknown selection kind, zero conversion factor, unknown recipe component — yields exactly 5 errors, each naming its sheet and row, and row counts across items/variants/groups/modifiers/units/conversions/recipes/ledger are unchanged afterwards. The clean version imports everything (120 items with opening ledger rows, 150 variants incl. defaults, 10 groups / 20 choices, 5 units, 5 conversions plus their reverses, 20 recipe lines) and re-importing updates in place without duplicates. Validation also accepts references to items that exist only in the database.
 **Deviation:** none
 **Next:** M5-T1 — M4 complete, tagged `checkpoint/M4`
+
+### [M5-T1] Suppliers
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0011_suppliers.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/suppliers.py (new), backend/app/services/receipts.py, backend/app/api/dashboard.py, backend/app/schemas/dashboard.py, backend/app/seed.py, backend/tests/test_suppliers.py (new, 3 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py, docs/api-contract.md
+**Gates:** pytest 163 passed 0 skipped · migrations round-trip ok (0011 → 0010 → 0011) · frontend build ok · seed ok
+**Notes:**
+- Migration 0011: `suppliers` (name unique per business case-insensitively, phone, address, notes, `is_active`) with RLS, plus a nullable `receipts.supplier_id` (additive) so purchase history is derived from the receipts that point at a supplier — never stored on the supplier. Existing receipts are linked when their photo text equals a supplier name (no-op today, idempotent later).
+- Linking rule: a committed receipt photo is attached to a supplier only when the text the model read matches an active supplier exactly (case-insensitive); nothing is auto-created from a photo, so a misread name never becomes a junk supplier. Creating a supplier also picks up earlier unlinked receipts with that name.
+- Owner API: `GET/POST /api/suppliers`, `PATCH /api/suppliers/{id}` (deactivate, never delete), `GET /api/suppliers/{id}/history` (count, total spent, last purchase, recent receipts with item counts). Indonesian errors: blank name 422, duplicate 409, unknown 404. Seed creates three suppliers.
+- Tests: create/update/duplicate/deactivate; a photo committed before the supplier exists is linked once the supplier is created, later photos link on commit case-insensitively, an unknown supplier name stays unlinked and creates nothing, history totals are exact; owner endpoints; RLS.
+- M5-T2 (purchase orders) and M5-T3 (goods receipts) will extend the same history.
+**Deviation:** none
+**Next:** M5-T2

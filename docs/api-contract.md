@@ -46,6 +46,7 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | GET | `/pos/orders/{id}/receipt` | pos | printable receipt: lines with size + modifiers as sold (snapshots), payments, totals; voided orders include reversing lines |
 | GET | `/api/items/{id}/variants` · POST same · PATCH `/api/variants/{id}` | owner | sizes/options with own prices; exactly one default per item, default mirrors the item's prices both ways |
 | GET | `/api/uoms` · POST same · GET/POST `/api/uom-conversions` | owner | units of measure per business (standard set seeded at registration) and conversion factors; items carry `uom_id` |
+| GET/POST | `/api/suppliers` · PATCH `/api/suppliers/{id}` · GET `/api/suppliers/{id}/history` | owner | supplier contact details (deactivate, never delete); history derived from receipt photos linked by supplier name (never auto-created) |
 | POST | `/api/catalog-import` | owner | raw .xlsx body (≤ 5 MB): Barang / Varian / Pilihan / Satuan / Konversi / Resep sheets; validated in full first — any bad row → 422 naming every bad row, nothing written; else counts |
 | GET | `/api/catalog-template` | owner | multi-sheet starter workbook for the catalogue import |
 | GET | `/api/variants/{id}/recipe` · POST same (upsert a component) · PATCH `/api/recipe-lines/{id}` | owner | recipe keyed on the variant: component item, quantity, unit; selling a variant with a recipe consumes components (converted to their units) instead of its own stock |

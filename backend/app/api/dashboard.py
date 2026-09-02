@@ -16,8 +16,8 @@ from sqlalchemy import func, select
 from app.ai.periods import period_range
 from app.core.deps import OwnerCtx
 from app.models import (
-    Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, Receipt, RecipeLine, Sale, Staff, Uom,
-    UomConversion,
+    Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, Receipt, RecipeLine, Sale, Staff, Supplier,
+    Uom, UomConversion,
 )
 from app.schemas.dashboard import (
     AlertRow,
@@ -49,6 +49,11 @@ from app.schemas.dashboard import (
     RecipeLineIn,
     RecipeLineOut,
     RecipeLineUpdateIn,
+    SupplierCreateIn,
+    SupplierHistoryOut,
+    SupplierOut,
+    SupplierReceiptOut,
+    SupplierUpdateIn,
 )
 from app.schemas.auth import BusinessOut
 from app.services.velocity import VELOCITY_WINDOW_DAYS
@@ -405,6 +410,62 @@ async def add_uom_conversion(payload: UomConversionCreateIn, ctx: OwnerCtx):
         status, detail = _UOM_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
     return UomConversionOut.model_validate(conv)
+
+
+_SUPPLIER_ERRORS = {
+    "name": (422, "Nama supplier tidak boleh kosong"),
+    "duplicate": (409, "Supplier dengan nama ini sudah ada"),
+}
+
+
+@router.get("/suppliers", response_model=list[SupplierOut])
+async def list_suppliers(ctx: OwnerCtx, include_inactive: bool = Query(default=False)):
+    stmt = select(Supplier).order_by(Supplier.name)
+    if not include_inactive:
+        stmt = stmt.where(Supplier.is_active.is_(True))
+    return [SupplierOut.model_validate(s) for s in (await ctx.session.execute(stmt)).scalars()]
+
+
+@router.post("/suppliers", response_model=SupplierOut, status_code=201)
+async def add_supplier(payload: SupplierCreateIn, ctx: OwnerCtx):
+    from app.services.suppliers import SupplierInvalid, create_supplier
+
+    try:
+        supplier = await create_supplier(ctx.session, ctx.business_id, **payload.model_dump())
+    except SupplierInvalid as exc:
+        status, detail = _SUPPLIER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return SupplierOut.model_validate(supplier)
+
+
+@router.patch("/suppliers/{supplier_id}", response_model=SupplierOut)
+async def edit_supplier(supplier_id: uuid.UUID, payload: SupplierUpdateIn, ctx: OwnerCtx):
+    from app.services.suppliers import SupplierInvalid, update_supplier
+
+    supplier = await ctx.session.get(Supplier, supplier_id)
+    if supplier is None:
+        raise HTTPException(status_code=404, detail="Supplier tidak ditemukan")
+    try:
+        supplier = await update_supplier(ctx.session, supplier, **payload.model_dump(exclude_none=True))
+    except SupplierInvalid as exc:
+        status, detail = _SUPPLIER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return SupplierOut.model_validate(supplier)
+
+
+@router.get("/suppliers/{supplier_id}/history", response_model=SupplierHistoryOut)
+async def supplier_history(supplier_id: uuid.UUID, ctx: OwnerCtx):
+    from app.services.suppliers import purchase_history
+
+    supplier = await ctx.session.get(Supplier, supplier_id)
+    if supplier is None:
+        raise HTTPException(status_code=404, detail="Supplier tidak ditemukan")
+    h = await purchase_history(ctx.session, supplier)
+    return SupplierHistoryOut(
+        supplier=SupplierOut.model_validate(supplier), purchase_count=h["purchase_count"],
+        total_spent=h["total_spent"], last_purchase_at=h["last_purchase_at"],
+        receipts=[SupplierReceiptOut(**r) for r in h["receipts"]],
+    )
 
 
 _RECIPE_ERRORS = {

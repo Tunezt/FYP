@@ -21,6 +21,7 @@ from app.models.models import (  # noqa: F401
     SaleLegacy,
     Staff,
     StockMovement,
+    Supplier,
     Uom,
     UomConversion,
 )
