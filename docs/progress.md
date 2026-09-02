@@ -440,3 +440,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Views are excluded from this scan (policies cannot attach to them). M3-T2, which turns `sales` into a view, must add the view's own isolation test — noted in the test file.
 **Deviation:** none
 **Next:** canary (5 tasks done), then M0-T6
+
+### [M0-T6] Verify request_logs under RLS
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/tests/test_request_logging.py (new)
+**Gates:** pytest 78 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- **Answer: it never happens.** Every `request_logs` write path resolves a business before writing and skips the row otherwise. Dashboard middleware (`app/main.py`) writes only when `request.state.business_id` was set by an authenticated dependency, and a 401 never sets it. WhatsApp (`app/whatsapp/processor.py`) returns before the log for an unregistered sender (the comment there already names the RLS reason). POS writes inside the authenticated tenant session. So unauthenticated traffic (OTP attempts, unknown numbers, 401s) is instrumented only through the Python logger, never in the table. Not a live bug, not a separate path — by construction unreachable.
+- The nullable `business_id` is therefore dead from `app_role`: WITH CHECK `business_id = current_setting(...)::uuid` evaluates to NULL for a NULL business_id and a NULL check fails. `test_null_business_request_log_is_rejected_by_rls` proves the database refuses such a row; `test_unauthenticated_api_request_writes_no_log` and `test_unregistered_whatsapp_sender_writes_no_log` prove neither path attempts it (counting NULL-business rows with the elevated role, since `app_role` cannot see them at all — the USING clause hides them).
+- Not changed: the column stays nullable (schema changes are additive; migration 0002's cascade rationale still stands). If a future task wants unauthenticated traffic in the table, it needs a design decision, not a quiet NULL.
+**Deviation:** none
+**Next:** M1-T1 — M0 complete, tagged `checkpoint/M0`
