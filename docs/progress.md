@@ -452,3 +452,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Not changed: the column stays nullable (schema changes are additive; migration 0002's cascade rationale still stands). If a future task wants unauthenticated traffic in the table, it needs a design decision, not a quiet NULL.
 **Deviation:** none
 **Next:** M1-T1 — M0 complete, tagged `checkpoint/M0`
+
+### [M1-T1] Baseline on the staged receipts
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** docs/vision-results.md (new), scripts/vision-baseline.py (new)
+**Gates:** pytest 78 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- All 3 images in `docs/vision-test-samples/` (AI-generated stand-ins, labelled as such) run through the real path: `parse_business_document` → `needs_confirmation`, model `gemini-2.5-flash` (the `GEMINI_PRO_MODEL` override, Pro has a zero quota on this account), prompt untouched. `scripts/vision-baseline.py` wraps the real google-genai call to capture the **verbatim** model text before JSON parsing and appends every run to `docs/vision-results.md`, so M1-T3's before/after will be the same script on the same file.
+- Ground truth was transcribed by eye from the images before the run and sits at the top of `docs/vision-results.md`.
+- Results: neat page 50/50 fields correct, `high`, gate open — correct. Messy nota 7/7 items and total correct, `medium` with 3 disclosed ambiguities, gate **triggered** — the designed behaviour. Glare page 10/10 items and total correct but the model **fabricated unit prices (line_total ÷ qty) on 9 lines and invented English units on 9 lines, then claimed `high` with zero ambiguities → gate open → would have been committed silently.** This is the failure M1-T3 exists for, and it contradicts the prompt's own "0 if not shown" rule.
+- Same image gave honest `unit_price = 0` in Phase 14 (July) with the same model alias and temperature 0. The model behind the alias moved. M1-T3 must measure over repeated runs and must not trust self-reported confidence alone; candidate server-side rules are listed in the results file, deliberately not applied.
+- Latency 17–30 s per 2.2 MB image.
+**Deviation:** none — nothing tuned, as the task requires.
+**Next:** M1-T2
