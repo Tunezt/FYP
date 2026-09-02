@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { daySubLabel, groupByDay } from "@/lib/dates";
 import type { AlertRow, Business } from "@/lib/types";
-import { DayHeader, EmptyState, Glass, SeverityBadge, Skeleton } from "@/components/ui";
+import { DayHeader, EmptyState, ErrorState, Glass, SeverityBadge, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconBell, IconBox, IconCheck, IconTrendUp } from "@/components/icons";
 
@@ -47,6 +47,10 @@ export default function AlertsPage() {
 
       {alerts.loading ? (
         <Skeleton className="h-64" />
+      ) : alerts.error && !alerts.data ? (
+        <Glass>
+          <ErrorState onRetry={alerts.reload} />
+        </Glass>
       ) : open.length === 0 && done.length === 0 ? (
         <Glass>
           <EmptyState emoji="🔔" title="Belum ada peringatan">

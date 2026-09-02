@@ -6,7 +6,7 @@ import { useOwnerData } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import { daySubLabel, groupByDay } from "@/lib/dates";
 import type { Business, ExpenseRow, Page, PnlMonth, ReceiptRow } from "@/lib/types";
-import { DayHeader, EmptyState, Glass, Plate, Skeleton } from "@/components/ui";
+import { DayHeader, EmptyState, ErrorState, Glass, Plate, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconReceipt } from "@/components/icons";
 
@@ -131,6 +131,10 @@ export default function MoneyPage() {
           <h2 className="text-base font-bold">Pengeluaran</h2>
           {expenses.loading ? (
             <Skeleton className="mt-3 h-56" />
+          ) : expenses.error && !expenses.data ? (
+            <Plate className="mt-3">
+              <ErrorState onRetry={expenses.reload} />
+            </Plate>
           ) : !expenses.data || expenses.data.rows.length === 0 ? (
             <Plate className="mt-3">
               <EmptyState emoji="🗒️" title="Belum ada pengeluaran">
@@ -200,6 +204,10 @@ export default function MoneyPage() {
           <h2 className="text-base font-bold">Nota terakhir</h2>
           {receipts.loading ? (
             <Skeleton className="mt-3 h-56" />
+          ) : receipts.error && !receipts.data ? (
+            <Plate className="mt-3">
+              <ErrorState onRetry={receipts.reload} />
+            </Plate>
           ) : !receipts.data || receipts.data.rows.length === 0 ? (
             <Plate className="mt-3">
               <EmptyState emoji="📸" title="Belum ada nota">

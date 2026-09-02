@@ -68,6 +68,19 @@ export const IconGear = (p: IconProps) => (
   </Svg>
 );
 
+export const IconSun = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.5v2M12 19.5v2M21.5 12h-2M4.5 12h-2M18.4 5.6l-1.4 1.4M7 17l-1.4 1.4M18.4 18.4 17 17M7 7 5.6 5.6" />
+  </Svg>
+);
+
+export const IconMoon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />
+  </Svg>
+);
+
 export const IconPlus = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 5v14M5 12h14" />
@@ -153,5 +166,141 @@ export const IconTrendUp = (p: IconProps) => (
   <Svg {...p}>
     <path d="M4 17.5 9.5 12l3.5 3.5 7-7.5" />
     <path d="M15.5 8h4.5v4.5" />
+  </Svg>
+);
+
+/* ── Product-category icons ── same 24px grid/stroke as above, used by ItemIcon
+ * to give stock rows a recognizable mark instead of bare initials. */
+
+export const IconCatOil = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 3.5h4" />
+    <path d="M10 3.5v2.3l-1.5 1.4A2 2 0 0 0 8 8.7V18a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V8.7a2 2 0 0 0-.5-1.5L14 5.8V3.5" />
+    <path d="M8 11.5h8" />
+  </Svg>
+);
+
+export const IconCatRice = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.5 11.5h15v.4a7.5 7.5 0 0 1-15 0v-.4Z" />
+    <path d="M5.5 11.5 7 8.5h10l1.5 3" />
+    <path d="M12 20v1.5" />
+  </Svg>
+);
+
+export const IconCatNoodle = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.5 11.5h15a7.5 7.5 0 0 1-15 0Z" />
+    <path d="M7 11.5c1-2.2 3-3.3 5-3.3s4 1.1 5 3.3" />
+    <path d="m13.5 5 5.5 5" />
+    <path d="m15.5 3.5 5.5 5" />
+  </Svg>
+);
+
+export const IconCatSugar = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="4.5" y="11" width="7.5" height="7.5" rx="1" />
+    <rect x="12" y="6.5" width="7.5" height="7.5" rx="1" />
+  </Svg>
+);
+
+export const IconCatMilk = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 9 12 5l4 4v9.5a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 8 18.5V9Z" />
+    <path d="M12 5v4M8 9h8" />
+    <path d="M10.5 13h3v3h-3z" />
+  </Svg>
+);
+
+export const IconCatCoffee = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5.5 9.5h10v4a4.5 4.5 0 0 1-4.5 4.5H10a4.5 4.5 0 0 1-4.5-4.5v-4Z" />
+    <path d="M15.5 11h1.6a2 2 0 0 1 0 4h-1.6" />
+    <path d="M8 6.5c-.2-.7.3-1.2.6-1.8M11.5 6.5c-.2-.7.3-1.2.6-1.8" />
+  </Svg>
+);
+
+export const IconCatTea = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7.5 8h8l-.9 10.2A1.5 1.5 0 0 1 13.1 19.5H9.9a1.5 1.5 0 0 1-1.5-1.3L7.5 8Z" />
+    <path d="M13 8v-.5a2 2 0 0 1 2-2h1.4" />
+    <rect x="15.5" y="4" width="2.6" height="2.4" rx="0.5" />
+  </Svg>
+);
+
+export const IconCatEgg = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3.5c3 0 5.5 5.2 5.5 9.2a5.5 5.5 0 0 1-11 0c0-4 2.5-9.2 5.5-9.2Z" />
+  </Svg>
+);
+
+export const IconCatGas = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="7" y="7.5" width="10" height="12.5" rx="2.5" />
+    <path d="M10 7.5V6a2 2 0 0 1 4 0v1.5" />
+    <path d="M9.5 4.5h5" />
+  </Svg>
+);
+
+export const IconCatCleaning = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 9.5h4.5a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-6.5a2 2 0 0 1 2-2Z" />
+    <path d="M10 9.5V6.5h3.5l3-2" />
+    <path d="M17.5 4.5h1.5M18 7h1.5" />
+  </Svg>
+);
+
+export const IconCatCigarette = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="7" y="6" width="10" height="14" rx="1.5" />
+    <path d="M7 10.5h10" />
+    <path d="M10 6V4.5h4V6" />
+  </Svg>
+);
+
+export const IconCatFlour = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 8.5c0-1.4 1.8-2 4-2s4 .6 4 2V18a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V8.5Z" />
+    <path d="M9.5 6.8 8.5 4.5h7l-1 2.3" />
+    <path d="M10 12.5h4" />
+  </Svg>
+);
+
+export const IconCatWater = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9.5 6.5h5V4.5h-5Z" />
+    <path d="M9 6.5h6v11.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 18V6.5Z" />
+    <path d="M9 13c1.5-1.2 4.5-1.2 6 0" />
+  </Svg>
+);
+
+export const IconCatSauce = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 8.5h4l1 3v7a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 18.5v-7l1-3Z" />
+    <path d="M11 8.5V6h2v2.5" />
+    <path d="M11.5 6V4h1v2" />
+  </Svg>
+);
+
+export const IconCatSnack = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m7.5 5.5 1.5 1.6h6l1.5-1.6" />
+    <path d="M8.5 7.1h7v9.8l1 1.6H7.5l1-1.6V7.1Z" />
+    <path d="M10 11h4" />
+  </Svg>
+);
+
+export const IconCatProduce = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 20v-7.5" />
+    <path d="M12 12.5c-3 0-5-2-5-5 3 0 5 2 5 5Z" />
+    <path d="M12 11c0-3 2-5 5-5 0 3-2 5-5 5Z" />
+  </Svg>
+);
+
+export const IconCatBakery = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.5 14.5a7.5 4 0 0 1 15 0v2a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5v-2Z" />
+    <path d="M9 14.2c.2-1.4.9-2.4 1.7-3.2M12 14.2c.2-1.4.9-2.4 1.7-3.2M15 14.5c.2-1.2.6-2 1.2-2.7" />
   </Svg>
 );

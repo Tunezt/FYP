@@ -6,7 +6,7 @@ import { useOwnerData } from "@/lib/hooks";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
 import type { Business, Page, SaleRow, TrendPoint } from "@/lib/types";
-import { DayHeader, EmptyState, Glass, Segmented, Skeleton, Tile } from "@/components/ui";
+import { DayHeader, EmptyState, ErrorState, Glass, ItemIcon, Segmented, Skeleton } from "@/components/ui";
 
 const RANGES = [
   { value: "7", label: "7 hari" },
@@ -110,6 +110,10 @@ export default function SalesPage() {
         <h2 className="text-base font-bold">Riwayat transaksi</h2>
         {sales.loading ? (
           <Skeleton className="mt-3 h-64" />
+        ) : sales.error && !sales.data ? (
+          <Glass className="mt-3">
+            <ErrorState onRetry={sales.reload} />
+          </Glass>
         ) : !sales.data || sales.data.rows.length === 0 ? (
           <Glass className="mt-3">
             <EmptyState emoji="🧾" title="Belum ada transaksi">
@@ -134,7 +138,7 @@ export default function SalesPage() {
                         <span className="ink-faint w-11 shrink-0 text-xs tabular-nums">
                           {timeLabel(new Date(sale.sold_at), tz)}
                         </span>
-                        <Tile label={sale.item_name} className="h-9 w-9 rounded-lg text-[10px]" />
+                        <ItemIcon name={sale.item_name} className="h-9 w-9 rounded-lg" />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">
                             {formatQty(sale.quantity)}× {sale.item_name}

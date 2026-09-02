@@ -4,9 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useOwnerData } from "@/lib/hooks";
-import { formatQty, formatRupiah } from "@/lib/format";
+import { formatCompactRupiah, formatQty, formatRupiah } from "@/lib/format";
 import type { AlertRow, InventoryItem, Overview, PnlMonth, TrendPoint } from "@/lib/types";
-import { EmptyState, Glass, Plate, Segmented, SeverityBadge, Skeleton, Tile } from "@/components/ui";
+import { EmptyState, ErrorState, Glass, ItemIcon, Plate, Segmented, SeverityBadge, Skeleton } from "@/components/ui";
 import { StatCard } from "@/components/StatCard";
 import {
   IconBell,
@@ -21,11 +21,16 @@ import {
 } from "@/components/icons";
 import { HelpTip } from "@/components/HelpTip";
 import { OnboardingTour } from "@/components/OnboardingTour";
-
-const RANGES = [
-  { value: "7", label: "7 hari" },
-  { value: "30", label: "30 hari" },
+/** Page-wide reporting period — top-right segmented control, matching the
+ * reference's Hari Ini/Minggu Ini/Bulan Ini/Tahun Ini tabs. Drives the "Tren
+ * penjualan" hero section (its own inner range pill is folded into this). */
+const PERIODS = [
+  { value: "today", label: "Hari Ini", days: 1 },
+  { value: "week", label: "Minggu Ini", days: 7 },
+  { value: "month", label: "Bulan Ini", days: 30 },
+  { value: "year", label: "Tahun Ini", days: 365 },
 ] as const;
+type PeriodValue = (typeof PERIODS)[number]["value"];
 
 function stockPill(item: InventoryItem): { text: string; cls: string } {
   const stock = Number(item.current_stock);
@@ -34,11 +39,13 @@ function stockPill(item: InventoryItem): { text: string; cls: string } {
 }
 
 export default function OverviewPage() {
-  const [range, setRange] = useState<"7" | "30">("7");
+  const [period, setPeriod] = useState<PeriodValue>("today");
+  const periodDef = PERIODS.find((p) => p.value === period) ?? PERIODS[0];
+  const window = periodDef.days;
   // All fetches fire in parallel on mount — no waterfall. Trend fetches twice
   // the visible window so "vs periode sebelumnya" is computable client-side.
   const overview = useOwnerData<Overview>("/api/overview");
-  const trend = useOwnerData<TrendPoint[]>(`/api/sales-trend?days=${Number(range) * 2}`);
+  const trend = useOwnerData<TrendPoint[]>(`/api/sales-trend?days=${window * 2}`);
   const items = useOwnerData<InventoryItem[]>("/api/items");
   const alerts = useOwnerData<AlertRow[]>("/api/alerts?limit=6");
   const pnl = useOwnerData<PnlMonth[]>("/api/pnl?months=6");
@@ -49,12 +56,13 @@ export default function OverviewPage() {
       ? ((o.today_revenue - o.yesterday_revenue) / o.yesterday_revenue) * 100
       : null;
 
-  const window = Number(range);
   const visible = (trend.data ?? []).slice(-window);
   const previous = (trend.data ?? []).slice(0, window);
   const visibleTotal = visible.reduce((s, p) => s + p.revenue, 0);
   const previousTotal = previous.reduce((s, p) => s + p.revenue, 0);
   const trendDelta = previousTotal > 0 ? ((visibleTotal - previousTotal) / previousTotal) * 100 : null;
+  // A single day can't draw an area path — show the number without a chart.
+  const chartReady = visible.length >= 2;
 
   const months = pnl.data ?? [];
   const thisMonth = months[months.length - 1];
@@ -69,11 +77,30 @@ export default function OverviewPage() {
     .sort((a, b) => Number(a.current_stock) - Number(b.current_stock));
   const unacked = (alerts.data ?? []).filter((a) => !a.is_acknowledged);
 
+  const reloadAll = () => {
+    overview.reload();
+    trend.reload();
+    items.reload();
+    alerts.reload();
+    pnl.reload();
+  };
+
+  // Primary fetch failed with nothing to show — a dead connection, not a load.
+  if (overview.error && !overview.data) {
+    return (
+      <div className="animate-fade-up">
+        <Glass>
+          <ErrorState onRetry={reloadAll} />
+        </Glass>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-up space-y-7">
       <OnboardingTour enabled={o !== null && !o.onboarding_completed} />
 
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="ink-faint text-sm">
             {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })}
@@ -82,10 +109,13 @@ export default function OverviewPage() {
             {o ? o.business_name : "…"}
           </h1>
         </div>
-        <p className="ink-soft flex items-center gap-2 text-sm">
-          <IconChat className="h-4 w-4 text-[color:var(--good)]" />
-          Asisten WhatsApp aktif
-        </p>
+        <div className="flex flex-col items-end gap-2">
+          <Segmented options={[...PERIODS]} value={period} onChange={setPeriod} />
+          <p className="ink-soft flex items-center gap-2 text-xs">
+            <IconChat className="h-3.5 w-3.5 text-[color:var(--good)]" />
+            Asisten WhatsApp aktif
+          </p>
+        </div>
       </header>
 
       {/* Stat cards */}
@@ -176,7 +206,7 @@ export default function OverviewPage() {
                     <IconTrendUp className="h-3.5 w-3.5" />
                     {trendDelta >= 0 ? "+" : "−"}
                     {Math.abs(trendDelta).toFixed(1)}%
-                    <span className="ink-faint font-medium">vs {window} hari sebelumnya</span>
+                    <span className="ink-faint font-medium">vs {periodDef.label.toLowerCase()} sebelumnya</span>
                   </p>
                 )}
               </>
@@ -184,12 +214,21 @@ export default function OverviewPage() {
               <Skeleton className="mt-2 h-10 w-52" />
             )}
           </div>
-          <Segmented options={[...RANGES]} value={range} onChange={setRange} />
+          <span className="ink-faint mt-1 text-xs font-semibold uppercase tracking-wide">
+            {periodDef.label}
+          </span>
         </div>
         <div className="h-52 w-full md:h-60">
-          {trend.data && (
+          {trend.data && !chartReady && (
+            <div className="flex h-full items-center justify-center px-6 text-center">
+              <p className="ink-faint text-sm">
+                Grafik butuh setidaknya 2 hari data — pilih Minggu Ini ke atas untuk melihat tren.
+              </p>
+            </div>
+          )}
+          {trend.data && chartReady && (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={visible} margin={{ top: 16, left: 4, right: 4, bottom: 0 }}>
+              <AreaChart data={visible} margin={{ top: 16, left: 0, right: 4, bottom: 0 }}>
                 <defs>
                   <linearGradient id="rev-hero" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.24} />
@@ -208,7 +247,13 @@ export default function OverviewPage() {
                   interval="preserveStartEnd"
                   minTickGap={40}
                 />
-                <YAxis hide />
+                <YAxis
+                  tickFormatter={(v: number) => formatCompactRupiah(v)}
+                  tick={{ fontSize: 11, fill: "var(--ink-faint)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={46}
+                />
                 <Tooltip
                   content={({ active, payload }) =>
                     active && payload?.length ? (
@@ -243,91 +288,90 @@ export default function OverviewPage() {
         </div>
       </Glass>
 
-      {/* Low stock + alerts — open rows, no cards */}
-      <div className="grid gap-8 lg:grid-cols-5" data-tour="attention">
-        <section className="lg:col-span-3">
-          <div className="mb-1 flex items-baseline justify-between">
-            <h2 className="text-base font-bold">Stok menipis</h2>
-            <Link href="/inventory" className="text-sm font-semibold text-[color:var(--accent)]">
-              Lihat semua
-            </Link>
-          </div>
-          {items.loading ? (
-            <Skeleton className="h-40" />
-          ) : atRisk.length === 0 ? (
-            <EmptyState emoji="🌿" title="Stok aman semua">
-              Tidak ada barang di bawah batas minimum. Sistem cek ulang tiap malam.
-            </EmptyState>
-          ) : (
-            <ul>
-              {atRisk.slice(0, 5).map((item) => {
-                const pill = stockPill(item);
-                return (
-                  <li key={item.id} className="list-row">
-                    <Tile label={item.name} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{item.name}</p>
-                      <p className="ink-faint text-xs">
-                        {item.days_remaining !== null
-                          ? `±${item.days_remaining} hari lagi di laju sekarang`
-                          : "jarang terjual"}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className={pill.cls}>{pill.text}</span>
-                      <p className="ink-faint mt-1 text-[11px]">
-                        Minimum {formatQty(item.reorder_threshold)} {item.unit}
-                      </p>
-                    </div>
-                    <Link href="/inventory" aria-label={`Lihat ${item.name}`} className="ink-faint">
-                      <IconChevronRight className="h-4 w-4" />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-
-        <section className="lg:col-span-2">
-          <div className="mb-1 flex items-baseline justify-between">
-            <h2 className="text-base font-bold">Peringatan</h2>
-            {unacked.length > 0 && (
-              <Link href="/alerts" className="text-sm font-semibold text-[color:var(--accent)]">
-                Lihat semua
-              </Link>
-            )}
-          </div>
-          {alerts.loading ? (
-            <Skeleton className="h-40" />
-          ) : unacked.length === 0 ? (
-            <EmptyState emoji="🔔" title="Tidak ada peringatan">
-              Kalau ada penjualan yang aneh atau stok kritis, kabarnya muncul di sini dan di
-              WhatsApp.
-            </EmptyState>
-          ) : (
-            <ul>
-              {unacked.slice(0, 4).map((alert) => (
-                <li key={alert.id} className="list-row">
+      {/* Low stock — its own full-width card, matching the reference */}
+      <Plate className="px-6 py-5" data-tour="attention">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-base font-bold">Stok menipis</h2>
+          <Link href="/inventory" className="text-sm font-semibold text-[color:var(--accent)]">
+            Lihat semua
+          </Link>
+        </div>
+        {items.loading ? (
+          <Skeleton className="h-40" />
+        ) : atRisk.length === 0 ? (
+          <EmptyState emoji="🌿" title="Stok aman semua">
+            Tidak ada barang di bawah batas minimum. Sistem cek ulang tiap malam.
+          </EmptyState>
+        ) : (
+          <ul>
+            {atRisk.slice(0, 5).map((item) => {
+              const pill = stockPill(item);
+              return (
+                <li key={item.id} className="list-row">
+                  <ItemIcon name={item.name} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{alert.message}</p>
+                    <p className="truncate text-sm font-semibold">{item.name}</p>
                     <p className="ink-faint text-xs">
-                      {new Date(alert.created_at).toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "short",
-                      })}
+                      {item.days_remaining !== null
+                        ? `±${item.days_remaining} hari lagi di laju sekarang`
+                        : "jarang terjual"}
                     </p>
                   </div>
-                  <SeverityBadge severity={alert.severity} />
+                  <div className="text-right">
+                    <span className={pill.cls}>{pill.text}</span>
+                    <p className="ink-faint mt-1 text-[11px]">
+                      Minimum {formatQty(item.reorder_threshold)} {item.unit}
+                    </p>
+                  </div>
+                  <Link href="/inventory" aria-label={`Lihat ${item.name}`} className="ink-faint">
+                    <IconChevronRight className="h-4 w-4" />
+                  </Link>
                 </li>
-              ))}
-            </ul>
+              );
+            })}
+          </ul>
+        )}
+      </Plate>
+
+      {/* Alerts — same full-width card treatment, stacked below */}
+      <Plate className="px-6 py-5">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-base font-bold">Peringatan</h2>
+          {unacked.length > 0 && (
+            <Link href="/alerts" className="text-sm font-semibold text-[color:var(--accent)]">
+              Lihat semua
+            </Link>
           )}
-        </section>
-      </div>
+        </div>
+        {alerts.loading ? (
+          <Skeleton className="h-40" />
+        ) : unacked.length === 0 ? (
+          <EmptyState emoji="🔔" title="Tidak ada peringatan">
+            Kalau ada penjualan yang aneh atau stok kritis, kabarnya muncul di sini dan di
+            WhatsApp.
+          </EmptyState>
+        ) : (
+          <ul>
+            {unacked.slice(0, 4).map((alert) => (
+              <li key={alert.id} className="list-row">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{alert.message}</p>
+                  <p className="ink-faint text-xs">
+                    {new Date(alert.created_at).toLocaleDateString("id-ID", {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </p>
+                </div>
+                <SeverityBadge severity={alert.severity} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Plate>
 
       {/* Quick actions */}
-      <Plate className="flex flex-wrap items-stretch justify-between gap-1 px-3 py-2.5">
+      <Plate className="flex flex-wrap items-stretch justify-between gap-1 divide-x divide-[color:var(--hairline)] px-1 py-1">
         <QuickAction href="/inventory" icon={<IconPlus className="h-5 w-5" />} label="Tambah barang" />
         <QuickAction href="/sales" icon={<IconChart className="h-5 w-5" />} label="Lihat laporan" />
         <QuickAction href="/settings" icon={<IconGear className="h-5 w-5" />} label="Tautan kasir" />

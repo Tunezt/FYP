@@ -9,16 +9,20 @@
    The POS route forces light via data-theme="pos-light" on <html>. */
 
 :root {
-  --bg-base: #f3f1ea;
-  --bg-wash-1: rgba(43, 122, 78, 0.07);
-  --bg-wash-2: rgba(194, 112, 61, 0.05);
-  --bg-wash-3: rgba(255, 255, 255, 0.85);
+  --bg-base: #f4f4f2;
+  /* Warm-white wash over the blurred backdrop photo — keeps the page reading
+     "clean white" while the photo's soft bokeh texture still shows through. */
+  --bg-scrim: rgba(250, 249, 247, 0.82);
   --ink: #1d221e;
   --ink-soft: #545f58;
   --ink-faint: #6e7972; /* ≥4.5:1 on --bg-base — meta text stays readable */
   --glass: rgba(255, 255, 255, 0.72);
   --glass-strong: rgba(255, 255, 255, 0.92);
   --glass-border: rgba(29, 34, 30, 0.07);
+  /* Popover/tooltip float over arbitrary page content — must stay opaque so
+     text behind never bleeds through (unlike glass cards, which sit on a
+     predictable page background). */
+  --popover-surface: #ffffff;
   --hairline: rgba(29, 34, 30, 0.09);
   --accent: #2b7a4e;
   --accent-deep: #236743;
@@ -33,31 +37,35 @@
   --bad-bg: rgba(179, 66, 58, 0.11);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="pos-light"]) {
-    --bg-base: #10160f;
-    --bg-wash-1: rgba(63, 154, 104, 0.1);
-    --bg-wash-2: rgba(201, 126, 70, 0.06);
-    --bg-wash-3: rgba(255, 255, 255, 0.03);
-    --ink: #eaf0ea;
-    --ink-soft: #a4b1a7;
-    --ink-faint: #7f8b81; /* ≥4.5:1 on the dark base */
-    --glass: rgba(255, 255, 255, 0.055);
-    --glass-strong: rgba(255, 255, 255, 0.09);
-    --glass-border: rgba(255, 255, 255, 0.1);
-    --hairline: rgba(255, 255, 255, 0.09);
-    --accent: #3f9a68;
-    --accent-deep: #55b184;
-    --accent-soft: rgba(63, 154, 104, 0.16);
-    --chart-1: #3f9a68; /* validated vs #15211b */
-    --chart-2: #c97e46;
-    --chart-grid: rgba(255, 255, 255, 0.08);
-    --good: #55b184;
-    --warn: #d99a3e;
-    --warn-bg: rgba(217, 154, 62, 0.14);
-    --bad: #d9705f;
-    --bad-bg: rgba(217, 112, 95, 0.13);
-  }
+/* Dark theme is opt-in via data-theme="dark" on <html> (set by the theme toggle
+   in the dashboard, persisted to localStorage). Light is the true default for
+   everyone regardless of OS setting — the owner-approved reference is light, and
+   auto-following prefers-color-scheme silently hid every light-mode change. */
+:root[data-theme="dark"] {
+  --bg-base: #10160f;
+  /* Deep green-tinted wash — the photo is barely visible through it, just
+     enough texture to avoid a flat fill. */
+  --bg-scrim: rgba(11, 16, 12, 0.88);
+  --ink: #eaf0ea;
+  --ink-soft: #a4b1a7;
+  --ink-faint: #7f8b81; /* ≥4.5:1 on the dark base */
+  --glass: rgba(255, 255, 255, 0.055);
+  --glass-strong: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  /* Opaque, green-tinted dark surface — see note in :root. */
+  --popover-surface: #1c261e;
+  --hairline: rgba(255, 255, 255, 0.09);
+  --accent: #3f9a68;
+  --accent-deep: #55b184;
+  --accent-soft: rgba(63, 154, 104, 0.16);
+  --chart-1: #3f9a68; /* validated vs #15211b */
+  --chart-2: #c97e46;
+  --chart-grid: rgba(255, 255, 255, 0.08);
+  --good: #55b184;
+  --warn: #d99a3e;
+  --warn-bg: rgba(217, 154, 62, 0.14);
+  --bad: #d9705f;
+  --bad-bg: rgba(217, 112, 95, 0.13);
 }
 
 html,
@@ -76,13 +84,61 @@ body {
 body {
   color: var(--ink);
   background-color: var(--bg-base);
-  background-image: radial-gradient(1000px 640px at 12% -8%, var(--bg-wash-1), transparent 60%),
-    radial-gradient(900px 600px at 105% 8%, var(--bg-wash-2), transparent 55%),
-    radial-gradient(1200px 500px at 50% -20%, var(--bg-wash-3), transparent 70%);
+  /* Real out-of-focus photo backdrop (soft neutral bokeh, no recognizable
+     objects) — matches the reference's clean-white-with-texture-blur look.
+     The scrim layer (::before) sits on top so text/cards keep exact contrast. */
+  background-image: url("/bg-ambient.jpg");
+  background-size: cover;
+  background-position: center;
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-feature-settings: "cv11"; /* Inter: open single-story a alternative off; keep defaults otherwise */
+}
+
+/* Theme-tinted scrim over the photo — light: warm-white wash (texture still
+   faintly visible); dark: near-opaque green-tinted wash (photo mostly hidden,
+   keeps the dark theme's own identity). Sits above the photo, below content. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--bg-scrim);
+}
+
+/* Fine film grain — sits above the scrim but behind all app content via
+   z-index:-1 (document order puts it above ::before in the same stacking
+   context), so it textures the backdrop only. Inline SVG turbulence: no
+   extra image asset, no network request. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 140px 140px;
+}
+
+:root[data-theme="dark"] body::after {
+  opacity: 0.06;
+  mix-blend-mode: soft-light;
+}
+
+/* POS is a bright counter kiosk — keep its forced-light surface flat and
+   clean, no photo texture or grain (max legibility at a busy counter). */
+:root[data-theme="pos-light"] body {
+  background-image: none;
+}
+
+:root[data-theme="pos-light"] body::before,
+:root[data-theme="pos-light"] body::after {
+  display: none;
 }
 
 @layer components {
@@ -192,16 +248,32 @@ body {
   }
 }
 
-/* driver.js tour popover — restyled to the system */
+/* driver.js tour popover — restyled to the system. Uses an OPAQUE surface, not
+   the translucent glass token: the popover is positioned over arbitrary page
+   content, so at low opacity (the dark-theme glass is only ~9%) the content
+   behind bleeds through and collides with the popover's own text. */
 .driver-popover {
-  background: var(--glass-strong) !important;
+  background: var(--popover-surface) !important;
   color: var(--ink) !important;
   border: 1px solid var(--glass-border);
   border-radius: 1.25rem !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   box-shadow: 0 12px 40px rgba(24, 32, 26, 0.22) !important;
   font-family: inherit;
+}
+
+/* The arrow is a CSS triangle driver.js hardcodes to white — repoint the
+   visible side to our surface so it matches in dark mode too. */
+.driver-popover-arrow-side-left.driver-popover-arrow {
+  border-left-color: var(--popover-surface) !important;
+}
+.driver-popover-arrow-side-right.driver-popover-arrow {
+  border-right-color: var(--popover-surface) !important;
+}
+.driver-popover-arrow-side-top.driver-popover-arrow {
+  border-top-color: var(--popover-surface) !important;
+}
+.driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-bottom-color: var(--popover-surface) !important;
 }
 
 .driver-popover-title {

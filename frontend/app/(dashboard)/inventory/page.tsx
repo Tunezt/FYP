@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatQty, formatRupiah } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
-import { EmptyState, Glass, Sheet, Skeleton, Tile } from "@/components/ui";
+import { EmptyState, ErrorState, Glass, ItemIcon, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
 
@@ -130,6 +130,10 @@ export default function InventoryPage() {
 
       {items.loading ? (
         <Skeleton className="h-72" />
+      ) : items.error && !items.data ? (
+        <Glass>
+          <ErrorState onRetry={items.reload} />
+        </Glass>
       ) : !items.data || items.data.length === 0 ? (
         <Glass>
           <EmptyState emoji="📦" title="Stok masih kosong">
@@ -250,7 +254,7 @@ function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: Inven
         return (
           <li key={item.id}>
             <button onClick={() => onEdit(item)} className="list-row w-full text-left">
-              <Tile label={item.name} />
+              <ItemIcon name={item.name} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{item.name}</p>
                 <p className="ink-faint text-xs">

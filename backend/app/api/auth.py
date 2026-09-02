@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.db import plain_session, tenant_session
+from app.core.db_errors import raise_if_db_unreachable
 from app.core.deps import OwnerCtx
 from app.core.security import (
     create_pairing_token,
@@ -52,22 +53,25 @@ async def request_otp(payload: PhoneIn):
     code = generate_otp()
     now = datetime.now(timezone.utc)
 
-    async with plain_session() as session:
-        existing = await session.get(LoginOtp, payload.phone)
-        if existing:
-            await session.delete(existing)
-            await session.flush()
-        session.add(
-            LoginOtp(
-                phone=payload.phone,
-                code_hash=hash_otp(code),
-                attempts=0,
-                expires_at=now + timedelta(minutes=OTP_TTL_MINUTES),
+    try:
+        async with plain_session() as session:
+            existing = await session.get(LoginOtp, payload.phone)
+            if existing:
+                await session.delete(existing)
+                await session.flush()
+            session.add(
+                LoginOtp(
+                    phone=payload.phone,
+                    code_hash=hash_otp(code),
+                    attempts=0,
+                    expires_at=now + timedelta(minutes=OTP_TTL_MINUTES),
+                )
             )
-        )
-        registered = (
-            await session.execute(select(Business.id).where(Business.owner_phone == payload.phone))
-        ).scalar_one_or_none() is not None
+            registered = (
+                await session.execute(select(Business.id).where(Business.owner_phone == payload.phone))
+            ).scalar_one_or_none() is not None
+    except Exception as exc:
+        raise_if_db_unreachable(exc)
 
     await send_otp_template(payload.phone, code)
     if settings.environment == "development":
@@ -86,27 +90,32 @@ async def verify_otp(payload: OtpVerifyIn):
     settings = get_settings()
     is_dev_bypass = settings.environment == "development" and payload.code == DEV_BYPASS_CODE
 
-    async with plain_session() as session:
-        if not is_dev_bypass:
-            record = await session.get(LoginOtp, payload.phone)
-            if record is None or record.expires_at < now:
-                raise HTTPException(
-                    status_code=400, detail="Kodenya sudah kedaluwarsa — minta kode baru ya"
-                )
-            if record.attempts >= OTP_MAX_ATTEMPTS:
-                await session.delete(record)
-                raise HTTPException(
-                    status_code=429, detail="Terlalu banyak percobaan — minta kode baru ya"
-                )
-            if record.code_hash != hash_otp(payload.code):
-                record.attempts += 1
-                raise HTTPException(status_code=400, detail="Kodenya salah — cek lagi ya")
+    try:
+        async with plain_session() as session:
+            if not is_dev_bypass:
+                record = await session.get(LoginOtp, payload.phone)
+                if record is None or record.expires_at < now:
+                    raise HTTPException(
+                        status_code=400, detail="Kodenya sudah kedaluwarsa — minta kode baru ya"
+                    )
+                if record.attempts >= OTP_MAX_ATTEMPTS:
+                    await session.delete(record)
+                    raise HTTPException(
+                        status_code=429, detail="Terlalu banyak percobaan — minta kode baru ya"
+                    )
+                if record.code_hash != hash_otp(payload.code):
+                    record.attempts += 1
+                    raise HTTPException(status_code=400, detail="Kodenya salah — cek lagi ya")
 
-            # Success — single use.
-            await session.delete(record)
-        business = (
-            await session.execute(select(Business).where(Business.owner_phone == payload.phone))
-        ).scalar_one_or_none()
+                # Success — single use.
+                await session.delete(record)
+            business = (
+                await session.execute(select(Business).where(Business.owner_phone == payload.phone))
+            ).scalar_one_or_none()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise_if_db_unreachable(exc)
 
     if business is None:
         return OtpVerifyOut(

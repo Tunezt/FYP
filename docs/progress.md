@@ -270,6 +270,98 @@ Everything in Phases 0–10 was written and unit-tested but had never run agains
 
 Nothing above is marked verified without having actually run live.
 
+## Phase 13 — quick cleanup pass: tracing root, stale build cache, seed cascade bug (2026-07-07)
+
+**Done:**
+1. **`outputFileTracingRoot` set** in `frontend/next.config.ts` (points at the frontend dir) — silences the multi-lockfile misdetection warning for good (a stray `package-lock.json` at the Windows user home directory was making Next.js infer the wrong workspace root).
+2. **The "Cannot find module './331.js'" runtime error was a stale `.next` build cache**, not a real bug — confirmed by killing the dev server, deleting `.next`, and doing a clean `npm run dev`. `/overview` and `/settings` both compiled and loaded with zero console/server errors afterward.
+3. **Real bug found while re-running the seed script: `request_logs.business_id` didn't cascade-delete.** Every other business-scoped table (`staff`, `items`, `sales`, `expenses`, `receipts`, `alerts`, `pending_confirmations`) was created with `on delete cascade`; `request_logs` was missed. `app/seed.py`'s own docstring claims re-running it "deletes and recreates the demo business (cascade)" — true only until the first real request_logs rows existed (from Phase 12's live Gemini test and normal dashboard/API traffic), at which point re-seeding threw `ForeignKeyViolationError`. Fixed with a new migration (`0002_request_logs_cascade.py`, since `0001` was already applied live) that drops and recreates the FK with `on delete cascade`. Ran `alembic upgrade head` live, then re-ran `python -m app.seed` successfully — now also picks up the Session 2 fix generating sale timestamps in WIB business hours (07:00–20:59) instead of UTC hours that displayed as 3 AM sales.
+4. Full suite re-verified after the migration: **71/71 passing.**
+
+**Not yet done:** live Gemini vision on real handwritten receipts (still the top risk, waiting on the owner's photos), Meta/WhatsApp template + webhook + round trip, Railway/Vercel deploy.
+
+## Phase 14 — vision pipeline tested live, critical model-access bug found + fixed (2026-07-07)
+
+**Critical finding: `gemini-2.5-pro` (the configured vision model) has a hard 0-request free-tier quota on this Google account** — confirmed via a live `429 RESOURCE_EXHAUSTED` whose violation detail explicitly says `limit: 0` for both requests/day and input-tokens/day on `gemini-2.5-pro`. This is not rate-limiting (retrying does not help) — it requires billing enabled on the Google Cloud project to use this model at all. Every prior "vision not yet tested" status in this doc was blocked on this the whole time, undiscovered until an actual image was sent through.
+
+**Fix:** switched `GEMINI_PRO_MODEL` to `gemini-2.5-flash` in `.env`/`.env.example` (documented inline with the reason). Flash is multimodal and was already proven reliable for text in Phase 12.
+
+**Real test performed:** three synthetic photo-realistic handwritten Indonesian stock-note/receipt images were generated (clearly AI-generated stand-ins for real photos, saved to `docs/vision-test-samples/` — neat/legible, genuinely messy with a coffee stain and folded corner, and medium difficulty with glare) and run through the actual `parse_business_document()` extraction function against the live Gemini API:
+- **Neat ledger (10 items):** every name, quantity, unit, unit price, and line total extracted correctly; total `645.500` matched exactly; `confidence: high`, zero ambiguities.
+- **Messy nota (torn paper, coffee stain, cramped handwriting):** items and total (`87.500`) extracted correctly; the model correctly downgraded to `confidence: medium` and specifically flagged the one genuinely ambiguous token ("RB" unit on "beras") instead of guessing — exactly the gated behavior the schema was designed for.
+- **Medium note (glare, single price column):** items/quantities extracted correctly; `unit_price` correctly returned as `0` for every line rather than hallucinating a per-unit price the photo never showed (only line totals were visible) — correct, honest behavior per the schema's "0 if not shown" rule.
+
+**Not yet done:** the WhatsApp inbound media-download step (`download_media` in `app/whatsapp/client.py`) always calls the real Meta API with no dry-run path, so the *full* WhatsApp round trip (photo in → reply out) is still blocked on real `WHATSAPP_ACCESS_TOKEN`/`PHONE_NUMBER_ID` — tracked already under the Meta checklist. What was verified tonight is the extraction logic itself, which is the part that was the actual open risk. Recommend also testing with real (non-AI-generated) photos once available, though tonight's result is a strong signal the pipeline works.
+
+---
+
+## Session 3 — item category icons, onboarding popover fix, dashboard error states (2026-07-07)
+
+Done directly in Cursor (not Fable — owner preserving weekly LLM budget). All three items built, lint-clean, production build green, and each verified with real screenshots against the live DB in both themes.
+
+### Part 1 — automatic item category icons ✔
+- Replaced the plain-initials `Tile` on item rows with an `ItemIcon` that maps the owner-typed name to a product category by keyword and shows a recognizable hand-drawn icon instead. Falls back to the initials `Tile` when nothing matches, so nothing ever renders blank.
+- **No network / no image fetch** — deterministic local keyword matching (`frontend/lib/itemCategory.ts`), 17 categories: coffee, tea, oil, rice, noodle, milk, sugar, egg, gas, cleaning, cigarette, flour, water, sauce, snack, produce (+ null fallback). This was a deliberate choice over the "auto-fetch a stock photo per item" idea: no external image API/keys, no licensing/latency/broken-URL risk, no layout churn, and it stays on-brand with the existing hand-drawn 24px/1.8px-stroke icon set. Icons live in `components/icons.tsx` (`IconCat*`), category→icon+warm-tone map + `ItemIcon` in `components/ui.tsx`.
+- Keyword order is significant (first substring match wins), tuned so drink names resolve sensibly for a coffee shop: `kopi susu`→coffee (not milk), `teh botol`→tea, `matcha latte`→coffee. Wired into **inventory**, **overview low-stock**, and the **sales** transaction list.
+- **Bug caught during screenshot verification:** `sugar` existed in the type + icon map but its keyword rule was missing from `RULES`, so "Gula Aren" fell back to "GA" initials. Added `{ sugar: ["gula", "sugar"] }`; re-shot and confirmed the sugar-cube icon renders.
+
+### Part 2 — onboarding tour popover readable in dark mode ✔
+- Root cause: `.driver-popover` used `--glass-strong`, which in dark mode is only ~9% white — the page content behind the floating popover bled straight through and collided with its own text. Glass is fine for cards (they sit on a predictable page bg) but wrong for a popover floating over arbitrary content.
+- Fix: new **opaque** `--popover-surface` token (`#ffffff` light / `#1c261e` dark), pointed `.driver-popover` at it, dropped the now-pointless blur. Also repointed the CSS-triangle arrow's visible-side border color to the same token (driver.js hardcodes it white, so it was mismatched in dark mode).
+- Verified by temporarily nulling the seeded business's `onboarding_completed_at` and driving the real tour in a dark browser — popover now has a solid dark surface, fully legible title/description/buttons, no bleed-through. (Note: the tour won't auto-fire under `next dev` because React StrictMode double-invokes the effect and the cleanup's `tour.destroy()` trips `onDestroyed`→complete before the second run; verified against the production build where effects run once. Not a real-user bug — production only.)
+
+### Part 3 — real error state instead of infinite skeleton ✔
+- Previously every list page rendered `loading ? Skeleton : hasData ? rows : EmptyState` — a failed fetch left `useOwnerData` with `error` set but `loading` false and no data, so the skeleton (or empty state) showed forever with no way to recover.
+- Added a shared `ErrorState` (`components/ui.tsx`): 😕 + "Gagal memuat data" + friendly Indonesian line + a **"Coba lagi"** button wired to the hook's `reload()`. Applied the `error && !data` branch to **overview** (top-level guard, retry reloads all five queries), **inventory**, **sales**, **alerts**, and **money** (expenses + receipts sections).
+- Verified by intercepting `/api/overview` to abort in Playwright — the dashboard now shows the error card with a working retry instead of loading forever.
+
+**Not yet done (unchanged, all owner/credential-blocked):** live Gemini vision on real (non-synthetic) handwritten photos, Meta/WhatsApp template submission + webhook + round trip, Railway/Vercel deploy.
+
+---
+
+## Session 4 — visual pass to match owner's reference: atmospheric background + real product photos (2026-07-08)
+
+Owner sent a second reference image (clean-white iOS dashboard with a soft blurred/textured backdrop and **real product photos** in the stock rows) and said the build still felt flat/generic. Two concrete gaps closed, done in Cursor, gated against the (freshly updated) `impeccable` v3.9.1 "absolute-bans" checklist. `.impeccable.md` stays the design-context source of truth (owner chose to skip migrating to the new skill's PRODUCT.md/DESIGN.md format).
+
+### Part 1 — atmospheric textured background ✔
+- The old `body` background was 3 faint radial washes on a flat `--bg-base` — read as a flat tint. Rebuilt as a layered ambient field: 5 overlapping soft radial gradients drifting in from all corners, hues drawn **only from brand tokens** (forest green + terracotta + a new warm-sand `--bg-wash-4`), plus a faint inline-SVG `feTurbulence` film grain on `body::after` (z-index -1, `mix-blend-mode: overlay` light / `soft-light` dark, ~4-7% opacity). **No image asset, no network request.** Grain is suppressed on the POS forced-light route.
+- Deliberately kept low-contrast so it never competes with content; surface tokens (cards/text) untouched, so contrast ratios are unchanged. Verified in both themes — warm depth without touching legibility.
+
+### Part 2 — real product photos for item tiles ✔
+- Owner picked generic (non-branded) photos over mimicking real brands. Generated 17 unbranded studio product photos (one per category) with a single shared style prompt (soft warm cream background, gentle lighting, no text/logos) so the set feels unified; saved to `frontend/public/items/<category>.png`.
+- Reworked `ItemIcon` (`components/ui.tsx`) into a three-tier fallback: matched category → photo tile (`object-cover`, `onError` guarded) → hand-drawn `IconCat*` on a warm tint → initials `Tile` for unmatched names. Nothing ever renders blank/broken. The Session 3 hand-drawn icons are retained as the middle fallback layer.
+- Added a `bakery` category (roti/croissant/kue/donat/…) + a matching `IconCatBakery`, and extended `coffee` keywords (americano/macchiato/mocha) so the seeded demo items ("Croissant", "Roti Bakar Coklat", "Americano") match instead of falling back to initials.
+- Verified against the **real** demo account (`0812-000-1111` / `000000`, "Kopi Kenangan Senja" — not the empty "231" test signup the owner had been looking at) in both themes: iced-coffee photo for the coffee drinks, croissant for the bakery items, brown-sugar bowl for Gula Aren, rice bowl for Nasi Goreng, milk carton for Susu UHT, tea glass for Teh Tarik; "Biji Arabica" correctly falls back to initials.
+
+Lint-clean, production build green. **Not yet done (unchanged, all owner/credential-blocked):** live Gemini vision on real photos, Meta/WhatsApp round trip, Railway/Vercel deploy.
+
+---
+
+## Session 5 — the real reason "nothing changed": no theme control; + image-weight fix (2026-07-08)
+
+**Root cause of the recurring "why is it still green / nothing changed / am I on an old build" complaint: the dashboard had no light/dark control and silently followed the OS `prefers-color-scheme`.** Every screenshot the owner had sent across sessions was dark mode (their OS default); every reference image they sent was light. So the light-mode work from Sessions 2–4 was real and correct but literally never visible to them — it was structurally impossible for the app to match a light reference while the OS forced dark. Only the POS route escaped this (it hard-set `data-theme="pos-light"`); the owner dashboard had no equivalent.
+
+### Part 1 — explicit theme control, light as the true default ✔
+- `frontend/app/globals.css`: converted the dark palette from `@media (prefers-color-scheme: dark) { :root:not([data-theme="pos-light"]) {…} }` to an opt-in `:root[data-theme="dark"] {…}` selector (same for the `body::after` grain rule). Light `:root` is now the default for everyone regardless of OS.
+- `frontend/app/layout.tsx`: added a tiny pre-paint inline script that reads `localStorage.theme` and sets `data-theme="dark"` before hydration — no flash-of-wrong-theme for users who chose dark. No hydration mismatch (React doesn't own the `<html data-theme>` attribute).
+- New `frontend/components/ThemeToggle.tsx` (sun/moon, `IconSun`/`IconMoon` added to `components/icons.tsx`) wired into the dashboard sidebar footer next to logout; toggles `data-theme` and persists to `localStorage`. POS still forces its own theme and never renders the toggle.
+- Verified on the real demo account in both modes: light = clean cream/white matching the owner's reference; toggle flips to dark and back; footer icon swaps moon↔sun.
+
+### Part 2 — product photos were 1024×1024 / ~1.3 MB each (real bug) ✔
+- The Session 4 photos in `frontend/public/items/` shipped at full generation resolution (17 × ~1.1–1.7 MB PNG = ~22 MB) but render at 40×40 px via a plain `<img>` — a genuine payload problem for a low-bandwidth warung product.
+- Downscaled to 160×160 (2× the tile) and palette-quantized (128 colors) in place: **~22 MB → 217 KB total, every file 10–15 KB (99% reduction)**, filenames/category mapping unchanged so `ItemIcon` needed no edit. Quality confirmed crisp at display size. Originals were untracked-only, backed up during the operation then removed after visual confirmation.
+
+### Verification note / process fix
+- Local env had been wiped (no venv, no `sqlalchemy`, no Playwright). Reinstalled `backend/requirements.txt` + Playwright/Chromium, brought up uvicorn + `npm run dev`, re-ran `python -m app.seed` (its date-relative data had drifted — the demo account still existed but "today"/low-stock had aged out), and screenshotted the **real** account (`0812-000-1111` / `000000`) in light + dark, embedded directly in chat.
+- The hero "Tren penjualan" area chart looked blank in `full_page` captures but renders correctly in a normal viewport shot — a recharts + full-page-screenshot stitching quirk, **not** a regression.
+- **Gotcha for future sessions:** a fresh phone-only OTP login creates an *empty placeholder business* (the "215"/"231"/"321" accounts). An empty account looks like a broken/old build. Always validate UI on the seeded **Kopi Kenangan Senja** account (`0812-000-1111` / dev OTP `000000`), on Ringkasan or Stok.
+
+### Known, out-of-scope-for-this-session data quirks (not bugs in this work)
+- The seed generates history for past days but not the current partial day, so right after seeding "Penjualan hari ini" shows Rp 0 / −100% vs kemarin, and stock sits above reorder thresholds so "Stok menipis" is 0 / "Stok aman semua". Cosmetic for a live demo; worth a seed tweak later if the owner wants today's tile populated.
+- Reference-image nav items Pesanan/Produk/Pelanggan were confirmed out of scope: Orders is covered by Penjualan, Products by Stok, and customer CRM isn't part of the product. The 6-item nav stays; the reference is style-only.
+
+Lint-clean. **Not yet done (unchanged, all owner/credential-blocked):** live Gemini vision on real photos, Meta/WhatsApp round trip, Railway/Vercel deploy.
+
 ---
 
 ## Roadmap v2 build log (docs/BUILD-ROADMAP.md)
@@ -301,3 +393,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Fresh-clone verification is deferred to M0-T3:** a clone of HEAD today would lack the still-uncommitted `0002` migration, `dev.py` and `db_errors.py`, so "follow only the README" cannot be proven until that tree is committed. M0-T3's entry will record the fresh-clone run.
 **Deviation:** none
 **Next:** M0-T3
+
+### [M0-T3] Review and commit the uncommitted tree
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** CLAUDE.md, docs/BUILD-ROADMAP.md, docs/progress.md (Sessions 3–5 log), backend/alembic/versions/0002_request_logs_cascade.py, backend/app/core/db_errors.py, backend/dev.py, backend/app/{main,api/auth,api/dashboard,core/db}.py, docs/vision-test-samples/ (3 PNG), frontend/components/{ThemeToggle,ui,icons,StatCard}.tsx, frontend/lib/{itemCategory,format}.ts, frontend/app/{layout.tsx,globals.css}, 5 dashboard pages, frontend/public/ (bg-ambient.jpg + 17 category photos, 280 KB total), .impeccable.md
+**Gates:** pytest 71 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- Reviewed every diff before committing. Backend: DB-unreachable errors mapped to a 503 with Indonesian detail (`db_errors.py`), `/health/db` endpoint, Windows selector event loop in `main.py`/`dev.py`, SSL only for non-localhost DB hosts, dev-only extra CORS origins, stale-token → 401 in `_business()`, `sales-trend` accepts 1–365 days for the Ringkasan period control. Frontend: `ErrorState` on every page instead of an infinite skeleton, opt-in dark theme via `data-theme` + `ThemeToggle`, `ItemIcon` three-tier fallback (photo → category icon → initials), ambient photo backdrop with scrim + grain, compact Rupiah axis labels. All consistent with the Session 3–5 log entries above.
+- One change made during review: `DB_UNAVAILABLE` told the user to check Supabase first; it now names local Postgres first (`scripts/local-pg.py status` / `docker compose ps`) and Supabase second, matching the M0-T2 workflow.
+- `docs/vision-test-samples/` are the three AI-generated stand-in receipts from Phase 14 (6.6 MB). Committed unaltered because M1-T1 baselines on exactly these files.
+- Fresh-clone check for M0-T2's done-criterion runs against this commit next; result recorded in the following entry.
+**Deviation:** none
+**Next:** fresh-clone verification, then M0-T4

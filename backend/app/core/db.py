@@ -10,6 +10,7 @@ Background jobs (cron) connect with the same credentials but iterate businesses
 explicitly and set the tenant context per business — never a cross-tenant query
 by accident.
 """
+import ssl
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -21,6 +22,10 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+_connect_args: dict = {"statement_cache_size": 0, "timeout": 5}
+if "localhost" not in settings.database_url and "127.0.0.1" not in settings.database_url:
+    _connect_args["ssl"] = ssl.create_default_context()
+
 # statement_cache_size=0 keeps asyncpg compatible with Supabase's PgBouncer
 # transaction-mode pooler (prepared statements don't survive pooled connections).
 engine = create_async_engine(
@@ -28,7 +33,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=5,
-    connect_args={"statement_cache_size": 0},
+    connect_args=_connect_args,
 )
 
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

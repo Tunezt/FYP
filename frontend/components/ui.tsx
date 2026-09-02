@@ -1,6 +1,26 @@
 "use client";
 
 import { useState } from "react";
+import { categorize, type ItemCategory } from "@/lib/itemCategory";
+import {
+  IconCatBakery,
+  IconCatCigarette,
+  IconCatCleaning,
+  IconCatCoffee,
+  IconCatEgg,
+  IconCatFlour,
+  IconCatGas,
+  IconCatMilk,
+  IconCatNoodle,
+  IconCatOil,
+  IconCatProduce,
+  IconCatRice,
+  IconCatSauce,
+  IconCatSnack,
+  IconCatSugar,
+  IconCatTea,
+  IconCatWater,
+} from "@/components/icons";
 
 /* Shared primitives — glass is a material for elevated surfaces; quieter
  * tinted flats ("plate") carry secondary content so the page has texture
@@ -76,6 +96,72 @@ export function Tile({ label, className = "" }: { label: string; className?: str
   );
 }
 
+/* Category → icon + warm tinted tone. Consistent per category so the same kind
+ * of product always reads the same across the app. */
+const CATEGORY_ICONS: Record<
+  ItemCategory,
+  { Icon: (p: { className?: string }) => React.ReactNode; tone: string }
+> = {
+  oil: { Icon: IconCatOil, tone: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
+  rice: { Icon: IconCatRice, tone: "bg-accent-100 text-accent-800 dark:bg-accent-900 dark:text-accent-200" },
+  noodle: { Icon: IconCatNoodle, tone: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300" },
+  sugar: { Icon: IconCatSugar, tone: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300" },
+  milk: { Icon: IconCatMilk, tone: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300" },
+  coffee: { Icon: IconCatCoffee, tone: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
+  tea: { Icon: IconCatTea, tone: "bg-accent-100 text-accent-800 dark:bg-accent-900 dark:text-accent-200" },
+  egg: { Icon: IconCatEgg, tone: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
+  gas: { Icon: IconCatGas, tone: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300" },
+  cleaning: { Icon: IconCatCleaning, tone: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300" },
+  cigarette: { Icon: IconCatCigarette, tone: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300" },
+  flour: { Icon: IconCatFlour, tone: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
+  water: { Icon: IconCatWater, tone: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300" },
+  sauce: { Icon: IconCatSauce, tone: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300" },
+  snack: { Icon: IconCatSnack, tone: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300" },
+  produce: { Icon: IconCatProduce, tone: "bg-accent-100 text-accent-800 dark:bg-accent-900 dark:text-accent-200" },
+  bakery: { Icon: IconCatBakery, tone: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
+};
+
+/** Item identity mark. Three-tier fallback so a row is never blank:
+ *  1. matched category  → real product photo (public/items/<category>.png)
+ *  2. photo failed load  → the hand-drawn category icon on a warm tint
+ *  3. no category match   → initials Tile. */
+export function ItemIcon({ name, className = "" }: { name: string; className?: string }) {
+  const category = categorize(name);
+  const [photoFailed, setPhotoFailed] = useState(false);
+
+  if (!category) return <Tile label={name} className={className} />;
+
+  const { Icon, tone } = CATEGORY_ICONS[category];
+
+  if (photoFailed) {
+    return (
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone} ${className}`}
+        aria-hidden
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl ${className}`}
+      style={{ background: "var(--hairline)" }}
+      aria-hidden
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/items/${category}.png`}
+        alt=""
+        loading="lazy"
+        className="h-full w-full object-cover"
+        onError={() => setPhotoFailed(true)}
+      />
+    </span>
+  );
+}
+
 export function SeverityBadge({ severity }: { severity: string }) {
   const label = severity === "high" ? "penting" : severity === "medium" ? "sedang" : "info";
   const cls = severity === "high" ? "pill-bad" : severity === "medium" ? "pill-warn" : "pill-good";
@@ -102,6 +188,31 @@ export function EmptyState({
 
 export function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-2xl bg-[color:var(--hairline)] ${className}`} />;
+}
+
+/** Shown when a data fetch fails — distinct from the loading skeleton so a dead
+ * connection never looks like an endless load. Offers an explicit retry. */
+export function ErrorState({
+  onRetry,
+  title = "Gagal memuat data",
+  children,
+}: {
+  onRetry: () => void;
+  title?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="px-6 py-12 text-center">
+      <p className="text-3xl">😕</p>
+      <p className="mt-3 font-semibold">{title}</p>
+      <p className="ink-soft mx-auto mt-1 max-w-sm text-sm">
+        {children ?? "Sambungan ke server sedang bermasalah. Coba lagi sebentar ya."}
+      </p>
+      <button onClick={onRetry} className="btn-accent mx-auto mt-4 px-4 py-2.5 text-sm">
+        Coba lagi
+      </button>
+    </div>
+  );
 }
 
 export function Segmented<T extends string>({

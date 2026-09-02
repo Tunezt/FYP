@@ -17,9 +17,16 @@ export const viewport: Viewport = {
   ],
 };
 
+// Applies a saved dark preference before first paint so there's no flash of the
+// (default) light theme on reload. Light is the default; only "dark" opts in.
+const themeInitScript = `(function(){try{if(localStorage.getItem("theme")==="dark"){document.documentElement.setAttribute("data-theme","dark");}}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="font-sans">{children}</body>
     </html>
   );

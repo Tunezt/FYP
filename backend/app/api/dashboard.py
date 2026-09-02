@@ -41,7 +41,12 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 async def _business(ctx) -> Business:
     business = await ctx.session.get(Business, ctx.business_id)
     if business is None:
-        raise HTTPException(status_code=404, detail="Usaha tidak ditemukan")
+        # The business is resolved from the caller's own auth token, so a miss
+        # means the token references a business that no longer exists (e.g. it
+        # was re-created with a new id after a dev re-seed). That's an invalid
+        # session, not a missing resource — 401 lets the frontend clear the
+        # stale token and bounce to login instead of dead-ending on an error.
+        raise HTTPException(status_code=401, detail="Sesi sudah berakhir — silakan masuk lagi ya")
     return business
 
 
@@ -106,7 +111,7 @@ async def overview(ctx: OwnerCtx):
 
 
 @router.get("/sales-trend", response_model=list[TrendPoint])
-async def sales_trend(ctx: OwnerCtx, days: int = Query(default=30, ge=7, le=90)):
+async def sales_trend(ctx: OwnerCtx, days: int = Query(default=30, ge=1, le=365)):
     business = await _business(ctx)
     tz = ZoneInfo(business.timezone)
     since_utc, _, _ = period_range("today", business.timezone)

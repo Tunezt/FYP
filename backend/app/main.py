@@ -1,5 +1,12 @@
+import asyncio
 import logging
+import sys
 import time
+
+if sys.platform == "win32":
+    # asyncpg + SSL on Windows defaults to ProactorEventLoop, which hangs or
+    # resets Supabase pooler connections — SelectorEventLoop is required.
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +22,16 @@ app = FastAPI(title="Warung Pintar API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    allow_origins=(
+        [
+            settings.frontend_origin,
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+        ]
+        if settings.environment == "development"
+        else [settings.frontend_origin]
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,6 +73,22 @@ async def latency_header(request: Request, call_next):
 @app.get("/health")
 async def health():
     return {"status": "ok", "environment": settings.environment}
+
+
+@app.get("/health/db")
+async def health_db():
+    from sqlalchemy import text
+
+    from app.core.db import plain_session
+    from app.core.db_errors import DB_UNAVAILABLE
+
+    try:
+        async with plain_session() as session:
+            await session.execute(text("select 1"))
+        return {"status": "ok", "database": "connected"}
+    except Exception as exc:
+        logger.warning("database health check failed: %s", exc)
+        return {"status": "error", "database": "unreachable", "detail": DB_UNAVAILABLE}
 
 
 def _include_routers() -> None:

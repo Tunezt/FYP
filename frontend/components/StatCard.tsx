@@ -30,8 +30,8 @@ export function StatCard({
     <Plate className="flex min-h-[172px] flex-col overflow-hidden">
       <div className="flex-1 px-5 pt-5">
         <span
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--accent)]"
-          style={{ background: "var(--accent-soft)" }}
+          className="ink-soft flex h-10 w-10 items-center justify-center rounded-xl"
+          style={{ background: "var(--hairline)" }}
         >
           {icon}
         </span>
