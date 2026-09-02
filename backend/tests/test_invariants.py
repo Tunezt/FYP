@@ -148,10 +148,13 @@ RLS_ALLOWLIST = {"businesses", "login_otps"}
 
 # Tables that must be covered today — guards against the scan matching nothing.
 KNOWN_SCOPED_TABLES = {
-    "staff", "items", "sales", "expenses", "receipts", "alerts",
+    "staff", "items", "sales_legacy", "expenses", "receipts", "alerts",
     "metric_baselines", "request_logs", "pending_confirmations",
     "stock_movements", "orders", "order_lines", "payments",
 }
+# `sales` is a view since migration 0006 (M3-T2); policies cannot attach to a
+# view, so its isolation rests on `security_invoker` — checked separately below
+# and exercised end-to-end in test_db_integration.py.
 
 # Plain tables and partitions only: policies do not attach to views. M3-T2, which
 # turns `sales` into a view, owes the view its own explicit isolation test.
@@ -245,6 +248,26 @@ async def test_rls_guard_detects_policyless_table(conn):
 
     await conn.execute(text("alter table rls_guard_probe force row level security"))
     assert await _rls_gaps(conn, temp_oid) == {}
+
+
+async def test_scoped_views_are_security_invoker(conn):
+    """M3-T2: a view over business-scoped tables must run as the caller
+    (`security_invoker = true`), otherwise it executes as its owner — the
+    migration role, which bypasses RLS — and leaks every tenant's rows."""
+    public_oid = await _public_oid(conn)
+    rows = (await conn.execute(text(
+        """
+        select c.relname, coalesce(array_to_string(c.reloptions, ','), '') as options
+        from pg_class c
+        where c.relnamespace = :schema_oid and c.relkind = 'v'
+          and exists (select 1 from pg_attribute a
+                      where a.attrelid = c.oid and a.attname = 'business_id' and not a.attisdropped)
+        order by 1
+        """
+    ), {"schema_oid": public_oid})).all()
+    assert "sales" in {name for name, _ in rows}, "the sales view is missing"
+    unsafe = [name for name, options in rows if "security_invoker=true" not in options]
+    assert unsafe == [], f"business-scoped views without security_invoker: {unsafe}"
 
 
 # ── M2-T3: the stock ledger reconciles with the cached projection ─────────────
@@ -355,7 +378,7 @@ async def test_stock_ledger_reconciles_after_a_simulated_day(conn):
                 rec = await record_sale(s, business_id=business_id, staff_id=staff_id,
                                         item_id=item_id, quantity=Decimal(qty))
                 await s.commit()
-                sale_ids.append((rec.sale.id, item_id, Decimal(qty)))
+                sale_ids.append((rec.line.id, item_id, Decimal(qty)))
         async with factory() as s:
             await _set_tenant(s, business_id)
             with pytest.raises(InsufficientStock):

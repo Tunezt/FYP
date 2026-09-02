@@ -559,3 +559,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - `sales` untouched; M3-T2 is the authorised structural change.
 **Deviation:** none
 **Next:** M3-T2
+
+### [M3-T2] `sales` becomes a view
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0006_sales_view.py (new), backend/app/services/sales.py, backend/app/api/pos.py, backend/app/seed.py, backend/app/models/models.py, backend/app/models/__init__.py, backend/tests/test_db_integration.py, backend/tests/test_invariants.py, backend/tests/test_stock_movements.py, backend/tests/test_stock_backfill.py
+**Gates:** pytest 104 passed 0 skipped · migrations round-trip ok (0006 → 0005 → 0006, idempotent backfill) · frontend build ok · seed ok
+**Notes:**
+- The one authorised structural change (§1.6), in one migration: `sales` → `sales_legacy`; backfill one order + one line + one payment per legacy row, **line id = legacy sale id** so `stock_movements.source_id` and every other reference still resolves; payment method `other` with reference `legacy` (how it was paid is unknown — `other` is the honest value); `unit_cost_at_sale` NULL for legacy lines; `create view sales with (security_invoker = true)` shaped exactly `id, business_id, item_id, quantity, unit_price, total_price, staff_id, sold_at`. Applied over the 621 seeded legacy rows: 621 orders, 621 lines (all ids matched), 621 payments, view count 621.
+- **No tool code changed.** `app/ai/tools.py`, `api/dashboard.py`, `services/anomaly.py`, `services/velocity.py` read `Sale` untouched and keep working through the view. `Sale` model marked read-only; `SaleLegacy` model added so models.py mirrors the schema.
+- Write paths moved: `record_sale` now creates Order + OrderLine (with the `unit_cost_at_sale` snapshot) + Payment (method `cash` by default — the kiosk does not ask yet; M3-T3 adds real methods) + the stock movement (`source_id` = line id). `RecordedSale` exposes `order` and `line`; POS response shape unchanged. The seed writes orders/lines/payments (cash 70 % / QRIS 30 %) instead of `Sale` rows.
+- Isolation on the view: `test_rls_isolates_sales_view` (A sees its sale in the old shape with the line id, B sees nothing, no tenant context fails closed, INSERT into the view fails) and the invariant `test_scoped_views_are_security_invoker` (every `business_id` view in `public` must carry `security_invoker=true` — a view without it runs as the migration role and bypasses RLS). `KNOWN_SCOPED_TABLES` swaps `sales` for `sales_legacy`; the float guard still covers the view's columns.
+- Downgrade drops the view and renames back; re-upgrade skips legacy rows already present as lines, verified by gate 2. Rows in the view can now be negative-quantity reversing lines (M3-T4); readers summing revenue will net them, which is the intended accounting effect.
+**Deviation:** none
+**Next:** M3-T3

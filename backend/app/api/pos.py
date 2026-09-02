@@ -124,14 +124,14 @@ async def pos_record_sale(payload: SaleIn, ctx: PosCtx):
         )
     )
 
-    sale = recorded.sale
+    line, order = recorded.line, recorded.order
     return SaleOut(
-        id=sale.id,
-        item_id=sale.item_id,
+        id=line.id,
+        item_id=line.item_id,
         item_name=recorded.item_name,
-        quantity=sale.quantity,
-        unit_price=sale.unit_price,
-        total_price=sale.total_price,
+        quantity=line.quantity,
+        unit_price=line.unit_price,
+        total_price=line.line_total,
         remaining_stock=recorded.remaining_stock,
-        sold_at=sale.sold_at,
+        sold_at=order.sold_at,
     )

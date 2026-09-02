@@ -107,7 +107,37 @@ class Item(Base):
 
 
 class Sale(Base):
+    """READ-ONLY since migration 0006 (roadmap M3-T2): `sales` is a
+    `security_invoker` view over order_lines ⨝ orders, shaped exactly like the
+    original table so every reader keeps working. `id` is the order line id.
+    Writes go through the order model (services/sales.py); an INSERT here fails
+    at the database."""
+
     __tablename__ = "sales"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id"), nullable=False
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    total_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    staff_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("staff.id"), nullable=False
+    )
+    sold_at: Mapped[datetime] = _now()
+
+
+class SaleLegacy(Base):
+    """The original one-row-per-item `sales` table, renamed by migration 0006 and
+    kept as an archive. Fully backfilled into orders/order_lines/payments; no
+    application code reads or writes it. Mirrored here only so models.py stays a
+    1:1 picture of the schema."""
+
+    __tablename__ = "sales_legacy"
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     business_id: Mapped[uuid.UUID] = mapped_column(

@@ -18,7 +18,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.security import hash_pin
-from app.models import Business, Item, Receipt, Sale, Staff, StockMovement
+from app.models import Business, Item, Order, OrderLine, Receipt, Staff, StockMovement
 from app.services.stock_backfill import BACKFILL_STATEMENTS, ROLLBACK_STATEMENTS
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
@@ -66,8 +66,14 @@ async def legacy_business(session_factory):
         s.add_all([kopi, gula, idle])
         await s.flush()
         for d in range(30, 0, -1):  # 30 days × 2 cups, no ledger rows (pre-M2 code)
-            s.add(Sale(business_id=bid, item_id=kopi.id, quantity=Decimal(2), unit_price=Decimal(22000),
-                       total_price=Decimal(44000), staff_id=staff.id, sold_at=now - timedelta(days=d)))
+            # Sales live in the order model since M3-T2 (the `sales` view reads them);
+            # the backfill's `from sales` query sees these lines exactly like legacy rows.
+            order = Order(business_id=bid, staff_id=staff.id, subtotal=Decimal(44000), total=Decimal(44000),
+                          sold_at=now - timedelta(days=d))
+            s.add(order)
+            await s.flush()
+            s.add(OrderLine(business_id=bid, order_id=order.id, item_id=kopi.id, quantity=Decimal(2),
+                            unit_price=Decimal(22000), line_total=Decimal(44000)))
         s.add(Receipt(  # a purchase photo whose commit added 5 kg of gula at 38.000
             business_id=bid, image_url="receipts/legacy.jpg", supplier="Toko Manis",
             total_amount=Decimal(190000), created_at=now - timedelta(days=10),

@@ -13,6 +13,7 @@ from app.models.models import (  # noqa: F401
     Receipt,
     RequestLog,
     Sale,
+    SaleLegacy,
     Staff,
     StockMovement,
 )

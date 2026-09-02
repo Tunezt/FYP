@@ -207,6 +207,50 @@ async def test_rls_isolates_orders_lines_and_payments(session_factory, two_tenan
                 await session.commit()
 
 
+async def test_rls_isolates_sales_view(session_factory, two_tenants):
+    """M3-T2: `sales` is a security_invoker view over order_lines ⨝ orders. A
+    sale recorded by A is visible to A through the view with the original
+    shape, invisible to B, and fails closed with no tenant context."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        staff = Staff(business_id=a.id, name="Viewer", pin_hash=hash_pin("0000"))
+        item = Item(business_id=a.id, name="View Item A", unit="pcs", current_stock=Decimal(4),
+                    cost_price=Decimal("5000"), sell_price=Decimal("12000"))
+        session.add_all([staff, item])
+        await session.commit()
+        staff_id, item_id = staff.id, item.id
+
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        recorded = await record_sale(session, business_id=a.id, staff_id=staff_id, item_id=item_id,
+                                     quantity=Decimal(3))
+        await session.commit()
+        line_id = recorded.line.id
+
+    async with session_factory() as session:  # A: old shape, exact numbers, id = line id
+        await _set_tenant(session, a.id)
+        sale = (await session.execute(select(Sale).where(Sale.item_id == item_id))).scalar_one()
+        assert sale.id == line_id
+        assert sale.quantity == Decimal("3.000") and sale.unit_price == Decimal("12000.00")
+        assert sale.total_price == Decimal("36000.00") and sale.staff_id == staff_id
+
+    async with session_factory() as session:  # B: nothing
+        await _set_tenant(session, b.id)
+        assert (await session.execute(select(Sale).where(Sale.item_id == item_id))).scalars().all() == []
+
+    async with session_factory() as session:  # no context: fails closed, never leaks
+        with pytest.raises(Exception):
+            (await session.execute(select(Sale))).scalars().all()
+
+    async with session_factory() as session:  # the view is read-only
+        await _set_tenant(session, a.id)
+        session.add(Sale(business_id=a.id, item_id=item_id, quantity=Decimal(1), unit_price=Decimal(1),
+                         total_price=Decimal(1), staff_id=staff_id))
+        with pytest.raises(Exception):
+            await session.commit()
+
+
 async def test_concurrent_sale_of_last_unit(session_factory, two_tenants):
     """Two staff sell the last unit at the same moment: exactly one succeeds,
     stock never goes negative (the brief's atomic UPDATE guarantee)."""

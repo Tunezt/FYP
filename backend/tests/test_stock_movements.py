@@ -111,7 +111,7 @@ async def test_sale_writes_sale_movement_with_cost_snapshot(session_factory, bus
             session, business_id=business.id, staff_id=staff.id, item_id=item.id, quantity=Decimal(2)
         )
         await session.commit()
-        item_id, sale_id, staff_id = item.id, recorded.sale.id, staff.id
+        item_id, sale_id, staff_id = item.id, recorded.line.id, staff.id  # sale id == line id (M3-T2)
 
     async with session_factory() as session:
         await _set_tenant(session, business.id)

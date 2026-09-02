@@ -23,7 +23,7 @@ from sqlalchemy import delete, select
 
 from app.core.db import plain_session, tenant_session
 from app.core.security import hash_pin
-from app.models import Business, Expense, Item, Sale, Staff
+from app.models import Business, Expense, Item, Order, OrderLine, Payment, Staff
 from app.services.stock import record_movement
 
 OWNER_PHONE = "628120001111"
@@ -100,7 +100,7 @@ async def seed() -> None:
 
         sellable = [(i, w) for i, w in items if w > 0]
         sold_per_item: dict = {}  # item.id -> total quantity sold in the history
-        sale_movements: list[tuple] = []  # (item, qty, sold_at, sale) — ledgered after the loop
+        sale_movements: list[tuple] = []  # (item, qty, sold_at, line, staff_id) — ledgered after the loop
         for day_offset in range(30, 0, -1):
             day = now - timedelta(days=day_offset)
             weekend = day.weekday() >= 5
@@ -116,15 +116,30 @@ async def seed() -> None:
                 sold_at = day.astimezone(ZoneInfo("Asia/Jakarta")).replace(
                     hour=rng.randint(7, 20), minute=rng.randint(0, 59), second=0, microsecond=0
                 ).astimezone(timezone.utc)
-                sale = Sale(
-                    business_id=business_id, item_id=item.id, quantity=qty,
-                    unit_price=item.sell_price,
-                    total_price=item.sell_price * qty,
-                    staff_id=rng.choice(staff_ids), sold_at=sold_at,
+                # Order model (M3-T2): one order, one line, one payment per sale.
+                # Cash dominates a warung; QRIS is the common alternative.
+                total = item.sell_price * qty
+                staff_id = rng.choice(staff_ids)
+                order = Order(
+                    business_id=business_id, staff_id=staff_id, order_type="takeaway",
+                    status="completed", subtotal=total, total=total, sold_at=sold_at,
+                    created_at=sold_at,
                 )
-                session.add(sale)
+                session.add(order)
+                await session.flush()
+                line = OrderLine(
+                    business_id=business_id, order_id=order.id, item_id=item.id, quantity=qty,
+                    unit_price=item.sell_price, line_total=total,
+                    unit_cost_at_sale=item.cost_price, created_at=sold_at,
+                )
+                session.add(line)
+                session.add(Payment(
+                    business_id=business_id, order_id=order.id,
+                    method=rng.choices(["cash", "qris"], weights=[7, 3])[0],
+                    amount=total, created_at=sold_at,
+                ))
                 sold_per_item[item.id] = sold_per_item.get(item.id, Decimal(0)) + qty
-                sale_movements.append((item, qty, sold_at, sale))
+                sale_movements.append((item, qty, sold_at, line, staff_id))
         await session.flush()
 
         # Stock ledger (M2-T2/M2-T3): the demo café opened 31 days ago with
@@ -138,11 +153,11 @@ async def seed() -> None:
                 reason="opname", source_type="seed", unit_cost=item.cost_price,
                 created_at=opened_at,
             )
-        for item, qty, sold_at, sale in sale_movements:
+        for item, qty, sold_at, line, staff_id in sale_movements:
             await record_movement(
                 session, business_id=business_id, item_id=item.id, qty_delta=-qty,
-                reason="sale", source_type="sale", source_id=sale.id,
-                unit_cost=item.cost_price, staff_id=sale.staff_id, created_at=sold_at,
+                reason="sale", source_type="sale", source_id=line.id,
+                unit_cost=item.cost_price, staff_id=staff_id, created_at=sold_at,
             )
 
         for category, description, amount, days_ago in EXPENSES:
