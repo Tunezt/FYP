@@ -561,3 +561,29 @@ async def test_concurrent_sale_of_last_unit(session_factory, two_tenants):
         assert item.current_stock == Decimal(0)
         sales = (await session.execute(select(Sale).where(Sale.item_id == item_id))).scalars().all()
         assert len(sales) == 1
+
+
+async def test_rls_isolates_shifts(session_factory, two_tenants):
+    """M7-T1 / roadmap §2."""
+    from app.core.security import hash_pin
+    from app.models import Shift, Staff
+
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        cashier = Staff(business_id=a.id, name="Kasir A", pin_hash=hash_pin("1111"))
+        session.add(cashier)
+        await session.flush()
+        shift = Shift(business_id=a.id, staff_id=cashier.id, opening_float=Decimal(50000))
+        session.add(shift)
+        await session.commit()
+        ids = {"shift": shift.id, "cashier": cashier.id}
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert await session.get(Shift, ids["shift"]) is None
+        assert (await session.execute(select(Shift))).scalars().all() == []
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(Shift(business_id=b.id, staff_id=ids["cashier"], opening_float=Decimal(1)))
+        with pytest.raises(Exception):
+            await session.commit()

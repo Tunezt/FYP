@@ -23,7 +23,7 @@ from sqlalchemy import delete, select
 
 from app.core.db import plain_session, tenant_session
 from app.core.security import hash_pin
-from app.models import Business, Item, Order, OrderLine, Payment, Staff
+from app.models import Business, Item, Order, OrderLine, Payment, Shift, Staff
 from app.services.catalog import (
     create_modifier, create_modifier_group, create_variant, ensure_default_variant, set_recipe_line,
 )
@@ -180,6 +180,7 @@ async def seed() -> None:
         sold_per_item: dict = {}  # item.id -> total quantity sold in the history
         sale_movements: list[tuple] = []  # (item, qty, sold_at, line, staff_id, unit_cost) — ledgered after the loop
         day_books: dict = {}  # local date -> (posted_at, {component: amount}) — journalled per day after the loop
+        yesterday_till: list[tuple] = []  # (order, payment) Sari rang up yesterday — her closed shift (M7-T1)
         for day_offset in range(30, 0, -1):
             day = now - timedelta(days=day_offset)
             weekend = day.weekday() >= 5
@@ -218,10 +219,13 @@ async def seed() -> None:
                 )
                 session.add(line)
                 method = rng.choices(["cash", "qris"], weights=[7, 3])[0]
-                session.add(Payment(
+                payment = Payment(
                     business_id=business_id, order_id=order.id, method=method,
                     amount=total, created_at=sold_at,
-                ))
+                )
+                session.add(payment)
+                if day_offset == 1 and staff_id == sari.id:
+                    yesterday_till.append((order, payment))
                 close_of_day = sold_at.astimezone(ZoneInfo("Asia/Jakarta")).replace(hour=21, minute=0).astimezone(timezone.utc)
                 _, components = day_books.setdefault(close_of_day.date(), (close_of_day, {}))
                 components[f"payment:{method}"] = components.get(f"payment:{method}", Decimal(0)) + total
@@ -247,6 +251,26 @@ async def seed() -> None:
                 reason="sale", source_type="sale", source_id=line.id,
                 unit_cost=unit_cost, staff_id=staff_id, created_at=sold_at,
             )
+
+        # Shifts (M7-T1): yesterday Sari opened with a 200.000 float, rang up
+        # her sales, and counted 5.000 short at close. Today's till is not open
+        # yet — the kiosk opens it.
+        yesterday = (now - timedelta(days=1)).astimezone(ZoneInfo("Asia/Jakarta"))
+        opened_at = yesterday.replace(hour=7, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+        closed_at = yesterday.replace(hour=21, minute=5, second=0, microsecond=0).astimezone(timezone.utc)
+        cash_taken = sum((p.amount for _o, p in yesterday_till if p.method == "cash"), Decimal(0))
+        expected = Decimal(200000) + cash_taken
+        shift = Shift(
+            business_id=business_id, staff_id=sari.id, status="closed", opening_float=Decimal(200000),
+            opened_at=opened_at, closed_at=closed_at, closed_by=owner.id,
+            expected_cash=expected, counted_cash=expected - Decimal(5000), variance=Decimal(-5000),
+            notes="kurang 5rb, mungkin kembalian", created_at=opened_at, updated_at=closed_at,
+        )
+        session.add(shift)
+        await session.flush()
+        for order, payment in yesterday_till:
+            order.shift_id = shift.id
+            payment.shift_id = shift.id
 
         # Books (M6-T4/M6-T5): the opening stock is capitalised as owner's
         # capital and the history's sales post through the engine, one summary

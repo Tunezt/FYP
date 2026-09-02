@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from app.core.db import tenant_session
 from app.core.deps import PosCtx
+from app.schemas.pos import ShiftCloseIn, ShiftOpenIn, ShiftOut
 from app.core.security import create_token, decode_token, verify_pin
 from app.models import Business, Item, ItemVariant, RequestLog, Staff
 from app.schemas.pos import (
@@ -370,3 +371,52 @@ async def pos_refund_order(order_id: uuid.UUID, payload: RefundIn, ctx: PosCtx):
         ctx, order_id, refund_order, "/pos/orders/{id}/refund",
         manager_pin=payload.manager_pin, note=payload.note, restock=payload.restock,
     )
+
+
+# ── Shifts (M7-T1) ──────────────────────────────────────────────────────────
+
+_SHIFT_ERRORS = {
+    "already_open": (409, "Shift kamu belum ditutup — tutup dulu sebelum buka yang baru"),
+    "float": (422, "Modal awal tidak boleh negatif"),
+    "not_open": (409, "Belum ada shift yang terbuka"),
+    "closed": (409, "Shift ini sudah ditutup"),
+    "counted": (422, "Uang yang dihitung tidak boleh negatif"),
+}
+
+
+@router.get("/shift", response_model=ShiftOut | None)
+async def pos_current_shift(ctx: PosCtx):
+    """The cashier's open shift with its live cash expectation, or null."""
+    from app.services.shifts import current_shift, shift_view
+
+    shift = await current_shift(ctx.session, ctx.staff_id)
+    return ShiftOut(**await shift_view(ctx.session, shift)) if shift else None
+
+
+@router.post("/shift/open", response_model=ShiftOut, status_code=201)
+async def pos_open_shift(payload: ShiftOpenIn, ctx: PosCtx):
+    from app.services.shifts import ShiftInvalid, open_shift, shift_view
+
+    try:
+        shift = await open_shift(ctx.session, ctx.business_id, staff_id=ctx.staff_id, opening_float=payload.opening_float)
+    except ShiftInvalid as exc:
+        status, detail = _SHIFT_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return ShiftOut(**await shift_view(ctx.session, shift))
+
+
+@router.post("/shift/close", response_model=ShiftOut)
+async def pos_close_shift(payload: ShiftCloseIn, ctx: PosCtx):
+    """Close the cashier's open shift: expected, counted and variance are written once."""
+    from app.services.shifts import ShiftInvalid, close_shift, current_shift, shift_view
+
+    shift = await current_shift(ctx.session, ctx.staff_id)
+    if shift is None:
+        status, detail = _SHIFT_ERRORS["not_open"]
+        raise HTTPException(status_code=status, detail=detail)
+    try:
+        shift = await close_shift(ctx.session, shift, counted_cash=payload.counted_cash, closed_by=ctx.staff_id, notes=payload.notes)
+    except ShiftInvalid as exc:
+        status, detail = _SHIFT_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return ShiftOut(**await shift_view(ctx.session, shift))

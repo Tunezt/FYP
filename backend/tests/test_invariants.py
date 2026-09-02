@@ -21,7 +21,7 @@ DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 # Column names that carry rupiah or quantities. Anything matching must be exact
 # `numeric`, never `real` / `double precision` (roadmap §1.3).
 MONEY_OR_QUANTITY = re.compile(
-    r"amount|price|total|cost|stock|quantity|qty|threshold|discount|charge|rounding|debit|credit"
+    r"amount|price|total|cost|stock|quantity|qty|threshold|discount|charge|rounding|debit|credit|float|cash|variance"
 )
 # Columns that merely *name* a money thing without holding a number (`debit_code`
 # on posting rules, `unit_price_written` flags) — never numeric by design.
@@ -57,6 +57,10 @@ KNOWN_MONEY_COLUMNS = {
     ("order_lines", "line_total"),
     ("order_lines", "unit_cost_at_sale"),
     ("payments", "amount"),
+    ("shifts", "opening_float"),
+    ("shifts", "expected_cash"),
+    ("shifts", "counted_cash"),
+    ("shifts", "variance"),
     ("item_variants", "sell_price"),
     ("item_variants", "cost_price"),
     ("modifiers", "price_delta"),

@@ -203,3 +203,32 @@ class ReversalOut(BaseModel):
     status: str            # voided | refunded
     reversing_lines: list[ReversalLineOut]
     reversing_payments: list[PaymentOut]
+
+
+# ── Shifts (M7-T1) ──────────────────────────────────────────────────────────
+
+
+class ShiftOpenIn(BaseModel):
+    opening_float: Decimal = Field(default=Decimal(0), ge=0)
+
+
+class ShiftCloseIn(BaseModel):
+    counted_cash: Decimal = Field(ge=0)
+    notes: str | None = Field(default=None, max_length=300)
+
+
+class ShiftOut(BaseModel):
+    id: uuid.UUID
+    staff_id: uuid.UUID
+    staff_name: str
+    status: str
+    opening_float: Decimal
+    opened_at: datetime
+    closed_at: datetime | None
+    closed_by: uuid.UUID | None
+    cash_sales: Decimal
+    cash_refunds: Decimal
+    expected_cash: Decimal | None
+    counted_cash: Decimal | None
+    variance: Decimal | None
+    notes: str | None

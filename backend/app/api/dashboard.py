@@ -1282,3 +1282,15 @@ async def stock_template(ctx: OwnerCtx):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="template-stok.xlsx"'},
     )
+
+
+# ── Shifts (M7-T1) ──────────────────────────────────────────────────────────
+
+
+@router.get("/shifts")
+async def list_shifts(ctx: OwnerCtx, limit: int = Query(default=30, ge=1, le=200)):
+    """Newest first; open shifts show their live expected cash."""
+    from app.schemas.pos import ShiftOut
+    from app.services.shifts import list_shifts as _list, shift_view
+
+    return [ShiftOut(**await shift_view(ctx.session, sh)) for sh in await _list(ctx.session, limit=limit)]

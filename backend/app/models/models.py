@@ -60,6 +60,7 @@ po_status = Enum(
     "draft", "ordered", "partially_received", "received", "cancelled", name="po_status", create_type=False
 )
 account_type = Enum("asset", "liability", "equity", "revenue", "expense", name="account_type", create_type=False)
+shift_status = Enum("open", "closed", name="shift_status", create_type=False)
 
 
 class Business(Base):
@@ -336,6 +337,7 @@ class Order(Base):
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     sold_at: Mapped[datetime] = _now()
     created_at: Mapped[datetime] = _now()
+    shift_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("shifts.id"))  # M7-T1
 
 
 class OrderLine(Base):
@@ -702,3 +704,28 @@ class Payment(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     reference: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
+    shift_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("shifts.id"))  # M7-T1: the till it moved through
+
+
+class Shift(Base):
+    """One cashier's till session (migration 0017, roadmap M7-T1). Expected,
+    counted and variance are written once at close and never edited."""
+
+    __tablename__ = "shifts"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    staff_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"), nullable=False)
+    status: Mapped[str] = mapped_column(shift_status, nullable=False, server_default="open")
+    opening_float: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    opened_at: Mapped[datetime] = _now()
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    expected_cash: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    counted_cash: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    variance: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()

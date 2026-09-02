@@ -837,3 +837,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - The seed's five expenses go through the same writer, so the local balance sheet and P&L now show them. `/api/pnl` and `get_profit` still read the `expenses` table (their "recorded expenses" figure); the ledger P&L is the accounting view.
 **Deviation:** none
 **Next:** tag `checkpoint/M6`; M7-T1
+
+### [M7-T1] Shifts
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0017_shifts.py (new), backend/app/models/models.py (`Shift`, `Order.shift_id`, `Payment.shift_id`), backend/app/models/__init__.py, backend/app/services/shifts.py (new), backend/app/services/orders.py, backend/app/api/pos.py (`GET /pos/shift`, `POST /pos/shift/open`, `POST /pos/shift/close`), backend/app/api/dashboard.py (`GET /api/shifts`), backend/app/schemas/pos.py, backend/app/seed.py, backend/tests/test_shifts.py (new, 4 tests), backend/tests/test_db_integration.py (`test_rls_isolates_shifts`), backend/tests/test_invariants.py (money guard now also matches `float|cash|variance`; 4 shift columns in the known set), frontend/app/pos/[businessToken]/page.tsx, docs/api-contract.md
+**Gates:** pytest 221 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `shifts`: staff, opening float, opened/closed at, closed by, expected cash, counted cash, variance, notes. Additive: new table with RLS in the same migration, plus nullable `shift_id` on `orders` and on `payments`. The database enforces one open shift per cashier (partial unique index), non-negative float/count, and that a closed row carries all three figures (tested: a second open row for the same cashier is refused at commit).
+- Attribution follows the till the money moved through: `create_order` stamps the cashier's open shift on the order and its payments; a void/refund stamps the *acting* cashier's open shift on the reversing payments, so a refund paid out in a later shift is that shift's cash while the sale stays where it was made (tested). A sale with no open shift is still a sale (`shift_id` NULL) — discipline is the count, not refusing customers.
+- Expected cash for M7-T1 = float + cash payments − cash refunds attributed to the shift; live while open, written once at close with counted and variance (counted − expected), never edited. M7-T2 adds cash in/out to the formula; M7-T3 posts the variance.
+- Kiosk: header shows "Buka shift" or the live expected cash of the open shift; opening asks for the float, closing asks for the count (+ note) and shows expected / counted / variance. Owner: `GET /api/shifts` lists shifts newest first with the same view (UI comes with the M7-T3 report).
+- Seed: yesterday Sari's shift (float 200.000, her 24 payments attributed, counted 5.000 short); today's till is opened from the kiosk.
+**Deviation:** none
+**Next:** M7-T2

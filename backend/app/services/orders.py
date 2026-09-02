@@ -157,6 +157,7 @@ async def create_order(
     if not payments:
         raise PaymentMismatch(Decimal(0), Decimal(0))
     sold_at = sold_at or datetime.now(timezone.utc)
+    shift_id = await open_shift_id(session, staff_id)  # the cashier's open till, if any (M7-T1)
 
     # 1. Price every line and take its stock, atomically, before any row exists.
     #    Price and cost come from the variant (explicit, else the item's default);
@@ -229,6 +230,7 @@ async def create_order(
 
     # 3. Write the order, its lines, payments and ledger rows.
     order = Order(
+            shift_id=shift_id,
         business_id=business_id,
         staff_id=staff_id,
         order_type=order_type,
@@ -292,6 +294,7 @@ async def create_order(
         payment = Payment(
             business_id=business_id,
             order_id=order.id,
+            shift_id=shift_id,
             method=p.method,
             amount=Decimal(p.amount).quantize(TWO_PLACES),
             reference=p.reference,
@@ -335,6 +338,7 @@ from sqlalchemy import select, text as sql_text  # noqa: E402
 
 from app.core.security import verify_pin  # noqa: E402
 from app.models import Staff  # noqa: E402
+from app.services.shifts import open_shift_id
 
 
 class OrderNotFound(Exception):
@@ -462,12 +466,14 @@ async def _reverse(
                     created_at=now,
                 )
 
+    shift_id = await open_shift_id(session, staff_id)  # the refund leaves the acting cashier's till (M7-T1)
     for p in payments:
         if p.amount <= 0:
             continue
         reversing_payment = Payment(
             business_id=business_id,
             order_id=order_id,
+            shift_id=shift_id,
             method=p.method,
             amount=-p.amount,
             reference=f"{kind}:{p.id}",

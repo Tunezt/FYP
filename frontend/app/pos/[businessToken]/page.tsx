@@ -59,6 +59,20 @@ type OrderResult = {
 // stock is the item's. Same item + size + modifiers merge into one line.
 type CartLine = { item: Item; variant: Variant | null; modifiers: Modifier[]; qty: number };
 type PayMode = "cash" | "qris" | "split";
+// Till session (M7-T1). Money as strings straight from the API (numeric(12,2)).
+type Shift = {
+  id: string;
+  staff_name: string;
+  status: "open" | "closed";
+  opening_float: string;
+  opened_at: string;
+  cash_sales: string;
+  cash_refunds: string;
+  expected_cash: string | null;
+  counted_cash: string | null;
+  variance: string | null;
+  notes: string | null;
+};
 
 const lineKey = (itemId: string, variant: Variant | null, modifiers: Modifier[]) =>
   `${itemId}:${variant?.id ?? "default"}:${modifiers.map((m) => m.id).sort().join(",")}`;
@@ -326,6 +340,51 @@ function SellScreen({
   const [error, setError] = useState<string | null>(null);
   const token = posToken ?? (typeof window !== "undefined" ? localStorage.getItem(POS_TOKEN_KEY) : null);
 
+  // Till session (M7-T1): the cashier's open shift with its live expected cash.
+  // undefined = not loaded yet, null = no shift open.
+  const [shift, setShift] = useState<Shift | null | undefined>(undefined);
+  const [shiftSheet, setShiftSheet] = useState<"open" | "close" | null>(null);
+  const [shiftAmount, setShiftAmount] = useState("");
+  const [shiftNote, setShiftNote] = useState("");
+  const [shiftResult, setShiftResult] = useState<Shift | null>(null);
+  const [shiftError, setShiftError] = useState<string | null>(null);
+  const loadShift = useCallback(() => {
+    api<Shift | null>("/pos/shift", { token }).then(setShift).catch(() => setShift(null));
+  }, [token]);
+  useEffect(() => {
+    loadShift();
+  }, [loadShift]);
+
+  async function submitShift() {
+    const amount = Number(shiftAmount || 0);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setShiftError("Masukkan angka yang benar.");
+      return;
+    }
+    setBusy(true);
+    setShiftError(null);
+    try {
+      if (shiftSheet === "open") {
+        const res = await api<Shift>("/pos/shift/open", { token, body: { opening_float: amount } });
+        setShift(res);
+      } else {
+        const res = await api<Shift>("/pos/shift/close", {
+          token,
+          body: { counted_cash: amount, notes: shiftNote.trim() || null },
+        });
+        setShift(null);
+        setShiftResult(res);
+      }
+      setShiftSheet(null);
+      setShiftAmount("");
+      setShiftNote("");
+    } catch (e: unknown) {
+      setShiftError(e instanceof ApiError ? e.detail : "Gagal menyimpan — coba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const loadItems = useCallback(() => {
     api<Item[]>("/pos/items", { token }).then(setItems).catch(() => setItems([]));
   }, [token]);
@@ -435,6 +494,7 @@ function SellScreen({
       setPayMode("cash");
       setCashPart("");
       loadItems();
+      loadShift();
       setTimeout(() => setFlash(null), 2600);
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.detail : "Gagal menyimpan — coba lagi.");
@@ -450,9 +510,34 @@ function SellScreen({
           <p className="ink-faint text-xs font-medium uppercase tracking-widest">{businessName}</p>
           <p className="text-lg font-bold">Kasir · {staffName}</p>
         </div>
-        <button onClick={onLock} className="btn-quiet px-4 py-2 text-sm">
-          🔒 Kunci
-        </button>
+        <div className="flex items-center gap-2">
+          {shift === undefined ? null : shift === null ? (
+            <button
+              onClick={() => {
+                setShiftError(null);
+                setShiftSheet("open");
+              }}
+              className="btn-accent px-4 py-2 text-sm"
+            >
+              Buka shift
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setShiftError(null);
+                setShiftSheet("close");
+              }}
+              className="glass-card px-4 py-1.5 text-left"
+              title="Tutup shift"
+            >
+              <p className="ink-faint text-[10px] font-medium uppercase tracking-wide">Shift buka · kas seharusnya</p>
+              <p className="text-sm font-semibold tabular-nums">{formatRupiah(shift.expected_cash ?? shift.opening_float)}</p>
+            </button>
+          )}
+          <button onClick={onLock} className="btn-quiet px-4 py-2 text-sm">
+            🔒 Kunci
+          </button>
+        </div>
       </header>
 
       {items === null ? (
@@ -505,6 +590,102 @@ function SellScreen({
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Shift sheet (M7-T1): open with a float, close with a count */}
+      {shiftSheet && (
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          onClick={() => !busy && setShiftSheet(null)}
+        >
+          <div
+            className="glass-card glass-strong w-full max-w-md animate-fade-up rounded-b-none rounded-t-4xl px-8 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-xl font-bold">{shiftSheet === "open" ? "Buka shift" : "Tutup shift"}</p>
+            {shiftSheet === "open" ? (
+              <p className="ink-soft text-sm">Modal awal di laci kasir.</p>
+            ) : shift ? (
+              <div className="ink-soft mt-1 space-y-0.5 text-sm">
+                <p>
+                  Modal awal {formatRupiah(shift.opening_float)} · tunai masuk {formatRupiah(shift.cash_sales)}
+                  {Number(shift.cash_refunds) > 0 ? ` · tunai keluar ${formatRupiah(shift.cash_refunds)}` : ""}
+                </p>
+                <p>
+                  Kas seharusnya{" "}
+                  <span className="font-semibold tabular-nums">{formatRupiah(shift.expected_cash ?? 0)}</span>
+                </p>
+              </div>
+            ) : null}
+            <label className="mt-5 block">
+              <span className="ink-faint text-xs font-medium uppercase tracking-wide">
+                {shiftSheet === "open" ? "Modal awal (Rp)" : "Uang dihitung (Rp)"}
+              </span>
+              <input
+                autoFocus
+                inputMode="numeric"
+                value={shiftAmount}
+                onChange={(e) => setShiftAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                className="glass-card mt-1 w-full rounded-2xl px-4 py-3 text-2xl font-bold tabular-nums"
+                placeholder="0"
+              />
+            </label>
+            {shiftSheet === "close" && (
+              <input
+                value={shiftNote}
+                onChange={(e) => setShiftNote(e.target.value)}
+                className="glass-card mt-3 w-full rounded-2xl px-4 py-2 text-sm"
+                placeholder="Catatan (opsional)"
+              />
+            )}
+            {shiftError && <p className="mt-3 text-sm text-red-600">{shiftError}</p>}
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setShiftSheet(null)} className="btn-quiet flex-1 py-3">
+                Batal
+              </button>
+              <button onClick={submitShift} disabled={busy} className="btn-accent flex-1 py-3 text-lg">
+                {shiftSheet === "open" ? "Buka" : "Tutup shift"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shift closed: the count against the expectation */}
+      {shiftResult && (
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/40"
+          onClick={() => setShiftResult(null)}
+        >
+          <div
+            className="glass-card glass-strong w-full max-w-sm animate-fade-up rounded-4xl px-8 py-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="ink-faint text-center text-xs font-medium uppercase tracking-wide">
+              Shift ditutup · {shiftResult.staff_name}
+            </p>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="ink-soft">Kas seharusnya</dt>
+                <dd className="font-semibold tabular-nums">{formatRupiah(shiftResult.expected_cash ?? 0)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="ink-soft">Uang dihitung</dt>
+                <dd className="font-semibold tabular-nums">{formatRupiah(shiftResult.counted_cash ?? 0)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="ink-soft">Selisih</dt>
+                <dd className={`font-bold tabular-nums ${Number(shiftResult.variance) < 0 ? "text-red-600" : ""}`}>
+                  {Number(shiftResult.variance) > 0 ? "+" : ""}
+                  {formatRupiah(shiftResult.variance ?? 0)}
+                </dd>
+              </div>
+            </dl>
+            <button onClick={() => setShiftResult(null)} className="btn-accent mt-6 w-full py-3">
+              Oke
+            </button>
+          </div>
         </div>
       )}
 
