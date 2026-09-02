@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.security import hash_pin
 from app.models import (
     Business, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier,
-    Payment, Sale, Staff, StockMovement, Uom, UomConversion,
+    Payment, RecipeLine, Sale, Staff, StockMovement, Uom, UomConversion,
 )
 from app.services.sales import InsufficientStock, record_sale
 
@@ -306,6 +306,33 @@ async def test_rls_isolates_uoms(session_factory, two_tenants):
             session.add(smuggled())
             with pytest.raises(Exception):
                 await session.commit()
+
+
+async def test_rls_isolates_recipe_lines(session_factory, two_tenants):
+    """M4-T4 / roadmap §2."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        latte = Item(business_id=a.id, name="Recipe Latte A", unit="cup", sell_price=Decimal("20000"))
+        beans = Item(business_id=a.id, name="Recipe Beans A", unit="kg", current_stock=Decimal(1))
+        session.add_all([latte, beans])
+        await session.flush()
+        variant = ItemVariant(business_id=a.id, item_id=latte.id, name="Standar", is_default=True, sell_price=Decimal("20000"))
+        session.add(variant)
+        await session.flush()
+        session.add(RecipeLine(business_id=a.id, variant_id=variant.id, component_item_id=beans.id, quantity=Decimal("0.018")))
+        await session.commit()
+        ids = {"variant": variant.id, "beans": beans.id}
+
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert (await session.execute(select(RecipeLine).where(RecipeLine.variant_id == ids["variant"]))).scalars().all() == []
+
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(RecipeLine(business_id=b.id, variant_id=ids["variant"], component_item_id=ids["beans"], quantity=Decimal(1)))
+        with pytest.raises(Exception):
+            await session.commit()
 
 
 async def test_rls_isolates_sales_view(session_factory, two_tenants):

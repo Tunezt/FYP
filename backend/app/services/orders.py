@@ -22,16 +22,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import select
 
-from app.models import Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier, Payment
+from app.models import (
+    Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier, Payment, RecipeLine,
+    StockMovement,
+)
 from app.services.catalog import default_variant
 from app.services.sales import ATOMIC_DECREMENT, InsufficientStock, ItemNotFound
 from app.services.stock import record_movement
+from app.services.units import convert_quantity, to_ledger_precision
 
 TWO_PLACES = Decimal("0.01")
 
 
 class VariantNotFound(Exception):
     pass
+
+
+class RecipeUnitMismatch(Exception):
+    """A recipe line is in a unit but the component item has no unit set."""
+
+    def __init__(self, component_name: str):
+        self.component_name = component_name
+        super().__init__(component_name)
+
+
+async def _active_recipe(session: AsyncSession, variant_id: uuid.UUID) -> list[RecipeLine]:
+    return (
+        await session.execute(
+            select(RecipeLine).where(RecipeLine.variant_id == variant_id, RecipeLine.is_active.is_(True))
+            .order_by(RecipeLine.created_at)
+        )
+    ).scalars().all()
 
 
 class ModifierSelectionInvalid(Exception):
@@ -140,7 +161,7 @@ async def create_order(
     # 1. Price every line and take its stock, atomically, before any row exists.
     #    Price and cost come from the variant (explicit, else the item's default);
     #    stock is the parent item's until recipes arrive (M4-T4).
-    priced: list[tuple] = []  # (spec, item, variant, modifiers, price, cost, line_total, remaining)
+    priced: list[tuple] = []  # (spec, item, variant, modifiers, price, cost, line_total, remaining, consumed)
     for spec in lines:
         item = await session.get(Item, spec.item_id)
         if item is None:
@@ -153,17 +174,43 @@ async def create_order(
             variant = await default_variant(session, item.id)
         modifiers = await _resolve_modifiers(session, item, spec.modifier_ids)
         quantity = Decimal(spec.quantity)
-        result = await session.execute(ATOMIC_DECREMENT, {"qty": quantity, "item_id": item.id})
-        remaining = result.scalar_one_or_none()
-        if remaining is None:
-            raise InsufficientStock(item.name, item.current_stock)
+        # Stock: a variant with a recipe is made to order — its components are
+        # consumed (converted into each component's unit, guarded per component)
+        # and the sold item's own stock is left alone. Otherwise the item itself
+        # is decremented, as before. `consumed` = [(component item, qty in its unit)].
+        consumed: list[tuple[Item, Decimal]] = []
+        recipe = await _active_recipe(session, variant.id) if variant is not None else []
+        if recipe:
+            for rl in recipe:
+                component = await session.get(Item, rl.component_item_id)
+                if component is None:
+                    raise ItemNotFound()
+                needed = Decimal(rl.quantity) * quantity
+                if rl.uom_id is not None and rl.uom_id != component.uom_id:
+                    if component.uom_id is None:
+                        raise RecipeUnitMismatch(component.name)
+                    needed = await convert_quantity(session, needed, rl.uom_id, component.uom_id)
+                needed = to_ledger_precision(needed)
+                if needed <= 0:
+                    continue
+                left = (await session.execute(ATOMIC_DECREMENT, {"qty": needed, "item_id": component.id})).scalar_one_or_none()
+                if left is None:
+                    raise InsufficientStock(component.name, component.current_stock)
+                component.current_stock = Decimal(left)
+                consumed.append((component, needed))
+            remaining = Decimal(item.current_stock)
+        else:
+            result = await session.execute(ATOMIC_DECREMENT, {"qty": quantity, "item_id": item.id})
+            remaining = result.scalar_one_or_none()
+            if remaining is None:
+                raise InsufficientStock(item.name, item.current_stock)
         list_price = Decimal(variant.sell_price) if variant is not None else Decimal(item.sell_price)
         cost = Decimal(variant.cost_price) if variant is not None else Decimal(item.cost_price)
         base = Decimal(spec.unit_price) if spec.unit_price is not None else list_price
         # The line's unit price is all-in: base (variant) plus every chosen modifier.
         price = (base + sum((Decimal(m.price_delta) for m in modifiers), Decimal(0))).quantize(TWO_PLACES)
         line_total = (price * quantity).quantize(TWO_PLACES)
-        priced.append((spec, item, variant, modifiers, price, cost, line_total, Decimal(remaining)))
+        priced.append((spec, item, variant, modifiers, price, cost, line_total, Decimal(remaining), consumed))
 
     subtotal = sum((p[6] for p in priced), Decimal(0)).quantize(TWO_PLACES)
     total = subtotal  # discounts, tax, service charge, rounding: M7-T4
@@ -187,7 +234,7 @@ async def create_order(
     await session.flush()
 
     created = CreatedOrder(order=order)
-    for spec, item, variant, modifiers, price, cost, line_total, remaining in priced:
+    for spec, item, variant, modifiers, price, cost, line_total, remaining, consumed in priced:
         line = OrderLine(
             business_id=business_id,
             order_id=order.id,
@@ -201,18 +248,27 @@ async def create_order(
         )
         session.add(line)
         await session.flush()
-        await record_movement(
-            session,
-            business_id=business_id,
-            item_id=item.id,
-            qty_delta=-Decimal(spec.quantity),
-            reason="sale",
-            source_type="sale",
-            source_id=line.id,
-            unit_cost=cost,
-            staff_id=staff_id,
-            created_at=sold_at,
-        )
+        if consumed:
+            # Recipe-expanded: one ledger row per component, at the component's cost.
+            for component, needed in consumed:
+                await record_movement(
+                    session, business_id=business_id, item_id=component.id, qty_delta=-needed,
+                    reason="sale", source_type="sale", source_id=line.id,
+                    unit_cost=component.cost_price, staff_id=staff_id, created_at=sold_at,
+                )
+        else:
+            await record_movement(
+                session,
+                business_id=business_id,
+                item_id=item.id,
+                qty_delta=-Decimal(spec.quantity),
+                reason="sale",
+                source_type="sale",
+                source_id=line.id,
+                unit_cost=cost,
+                staff_id=staff_id,
+                created_at=sold_at,
+            )
         # Snapshot the chosen modifiers: the receipt and old margins must not
         # change when the catalogue is edited later.
         snapshots = [
@@ -353,20 +409,32 @@ async def _reverse(
                 name=snap.name, price_delta=snap.price_delta,
             ))
         if restock:
-            after = (await session.execute(RESTOCK, {"qty": line.quantity, "item_id": line.item_id})).scalar_one()
-            reversal.restocked[line.item_id] = Decimal(after)
-            await record_movement(
-                session,
-                business_id=business_id,
-                item_id=line.item_id,
-                qty_delta=line.quantity,
-                reason=reason,
-                source_type="sale",
-                source_id=reversing.id,
-                unit_cost=line.unit_cost_at_sale,
-                staff_id=staff_id,
-                created_at=now,
-            )
+            # Put back exactly what the sale took: the item itself, or — for a
+            # made-to-order variant — every component the recipe consumed.
+            taken = (
+                await session.execute(
+                    select(StockMovement).where(
+                        StockMovement.source_type == "sale", StockMovement.source_id == line.id,
+                        StockMovement.reason == "sale",
+                    )
+                )
+            ).scalars().all()
+            for m in taken:
+                back = -Decimal(m.qty_delta)
+                after = (await session.execute(RESTOCK, {"qty": back, "item_id": m.item_id})).scalar_one()
+                reversal.restocked[m.item_id] = Decimal(after)
+                await record_movement(
+                    session,
+                    business_id=business_id,
+                    item_id=m.item_id,
+                    qty_delta=back,
+                    reason=reason,
+                    source_type="sale",
+                    source_id=reversing.id,
+                    unit_cost=m.unit_cost,
+                    staff_id=staff_id,
+                    created_at=now,
+                )
 
     for p in payments:
         if p.amount <= 0:

@@ -475,6 +475,29 @@ class UomConversion(Base):
     created_at: Mapped[datetime] = _now()
 
 
+class RecipeLine(Base):
+    """One component of a variant (migration 0010, roadmap M4-T4): `quantity`
+    of `component_item` in `uom` per unit sold. Deactivated, never deleted."""
+
+    __tablename__ = "recipe_lines"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    variant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("item_variants.id", ondelete="CASCADE"), nullable=False
+    )
+    component_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id"), nullable=False
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    uom_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("uoms.id"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
 class Payment(Base):
     """One payment against an order. Many per order — that is split payment."""
 

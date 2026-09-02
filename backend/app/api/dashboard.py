@@ -16,7 +16,8 @@ from sqlalchemy import func, select
 from app.ai.periods import period_range
 from app.core.deps import OwnerCtx
 from app.models import (
-    Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, Receipt, Sale, Staff, Uom, UomConversion,
+    Alert, Business, Expense, Item, ItemVariant, Modifier, ModifierGroup, Receipt, RecipeLine, Sale, Staff, Uom,
+    UomConversion,
 )
 from app.schemas.dashboard import (
     AlertRow,
@@ -45,6 +46,9 @@ from app.schemas.dashboard import (
     UomConversionOut,
     UomCreateIn,
     UomOut,
+    RecipeLineIn,
+    RecipeLineOut,
+    RecipeLineUpdateIn,
 )
 from app.schemas.auth import BusinessOut
 from app.services.velocity import VELOCITY_WINDOW_DAYS
@@ -401,6 +405,71 @@ async def add_uom_conversion(payload: UomConversionCreateIn, ctx: OwnerCtx):
         status, detail = _UOM_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
     return UomConversionOut.model_validate(conv)
+
+
+_RECIPE_ERRORS = {
+    "self": (422, "Bahan tidak boleh barang itu sendiri"),
+    "quantity": (422, "Jumlah bahan harus lebih dari nol"),
+}
+
+
+async def _recipe_out(session, line: RecipeLine) -> RecipeLineOut:
+    component = await session.get(Item, line.component_item_id)
+    uom = await session.get(Uom, line.uom_id) if line.uom_id else None
+    return RecipeLineOut(
+        id=line.id, variant_id=line.variant_id, component_item_id=line.component_item_id,
+        component_name=component.name if component else "?", quantity=line.quantity,
+        uom_id=line.uom_id, uom_code=uom.code if uom else None, is_active=line.is_active,
+    )
+
+
+@router.get("/variants/{variant_id}/recipe", response_model=list[RecipeLineOut])
+async def get_recipe(variant_id: uuid.UUID, ctx: OwnerCtx):
+    from app.services.catalog import recipe_lines_for
+
+    if await ctx.session.get(ItemVariant, variant_id) is None:
+        raise HTTPException(status_code=404, detail="Varian barang tidak ditemukan")
+    return [await _recipe_out(ctx.session, l) for l in await recipe_lines_for(ctx.session, variant_id)]
+
+
+@router.post("/variants/{variant_id}/recipe", response_model=RecipeLineOut, status_code=201)
+async def put_recipe_line(variant_id: uuid.UUID, payload: RecipeLineIn, ctx: OwnerCtx):
+    """Upsert one component of the variant's recipe (M4-T4)."""
+    from app.services.catalog import RecipeInvalid, set_recipe_line
+
+    variant = await ctx.session.get(ItemVariant, variant_id)
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Varian barang tidak ditemukan")
+    component = await ctx.session.get(Item, payload.component_item_id)
+    if component is None:
+        raise HTTPException(status_code=404, detail="Bahan tidak ditemukan")
+    if payload.uom_id is not None and await ctx.session.get(Uom, payload.uom_id) is None:
+        raise HTTPException(status_code=404, detail="Satuan tidak ditemukan")
+    try:
+        line = await set_recipe_line(ctx.session, variant, component, quantity=payload.quantity, uom_id=payload.uom_id)
+    except RecipeInvalid as exc:
+        status, detail = _RECIPE_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return await _recipe_out(ctx.session, line)
+
+
+@router.patch("/recipe-lines/{line_id}", response_model=RecipeLineOut)
+async def edit_recipe_line(line_id: uuid.UUID, payload: RecipeLineUpdateIn, ctx: OwnerCtx):
+    line = await ctx.session.get(RecipeLine, line_id)
+    if line is None:
+        raise HTTPException(status_code=404, detail="Bahan resep tidak ditemukan")
+    changes = payload.model_dump(exclude_none=True)
+    if "quantity" in changes:
+        line.quantity = changes["quantity"]
+    if "uom_id" in changes:
+        if await ctx.session.get(Uom, changes["uom_id"]) is None:
+            raise HTTPException(status_code=404, detail="Satuan tidak ditemukan")
+        line.uom_id = changes["uom_id"]
+    if "is_active" in changes:
+        line.is_active = changes["is_active"]
+    line.updated_at = datetime.now(timezone.utc)
+    await ctx.session.flush()
+    return await _recipe_out(ctx.session, line)
 
 
 _MODIFIER_ERRORS = {

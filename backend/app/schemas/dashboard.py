@@ -109,6 +109,32 @@ class UomConversionCreateIn(BaseModel):
     both_ways: bool = True
 
 
+# ── Recipes (M4-T4) ─────────────────────────────────────────────────────────
+
+
+class RecipeLineOut(BaseModel):
+    id: uuid.UUID
+    variant_id: uuid.UUID
+    component_item_id: uuid.UUID
+    component_name: str
+    quantity: Decimal
+    uom_id: uuid.UUID | None
+    uom_code: str | None
+    is_active: bool
+
+
+class RecipeLineIn(BaseModel):
+    component_item_id: uuid.UUID
+    quantity: Decimal = Field(gt=0, le=Decimal("999999"))
+    uom_id: uuid.UUID | None = None   # None = the component's own unit
+
+
+class RecipeLineUpdateIn(BaseModel):
+    quantity: Decimal | None = Field(default=None, gt=0, le=Decimal("999999"))
+    uom_id: uuid.UUID | None = None
+    is_active: bool | None = None
+
+
 # ── Variants (M4-T1) ─────────────────────────────────────────────────────────
 
 

@@ -644,3 +644,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Nothing consumes across units in production paths yet — that is recipes (M4-T4), which `consume_stock` was built for.
 **Deviation:** none
 **Next:** M4-T4
+
+### [M4-T4] Recipes
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0010_recipe_lines.py (new), backend/app/models/models.py, backend/app/models/__init__.py, backend/app/services/catalog.py, backend/app/services/orders.py, backend/app/api/pos.py, backend/app/api/dashboard.py, backend/app/schemas/pos.py, backend/app/schemas/dashboard.py, backend/app/seed.py, backend/tests/test_recipes.py (new, 6 tests), backend/tests/test_db_integration.py, backend/tests/test_invariants.py, docs/api-contract.md, frontend/app/pos/[businessToken]/page.tsx
+**Gates:** pytest 149 passed 0 skipped · migrations round-trip ok (0010 → 0009 → 0010) · frontend build ok · seed ok
+**Notes:**
+- Migration 0010: `recipe_lines` keyed on **variant** (`variant_id`, `component_item_id`, `quantity numeric(12,3)`, `uom_id`, `is_active`) with RLS, unique per (variant, component). Lines are deactivated, never deleted.
+- Selling a variant with active recipe lines makes it **made to order**: `create_order` converts each component quantity × sold quantity into the component's unit (kg↔g, liter↔ml via M4-T3), rounds to numeric(12,3), takes it with the same atomic conditional UPDATE per component (an empty component rejects the whole order naming the component, and nothing else moves), and writes one `sale` movement per component at the component's cost with `source_id` = the line. The sold item's own stock is untouched. Variants without a recipe behave exactly as before.
+- Reversals generalised: a void/refund now puts back **whatever the sale took** — it reverses the `sale` movements attached to the line (the item itself, or every component), so recipes and plain items share one code path.
+- Owner API: `GET/POST /api/variants/{id}/recipe` (upsert by component), `PATCH /api/recipe-lines/{id}`; Indonesian errors (self-reference, zero quantity, unknown unit/component). POS `/pos/items` reports `made_to_order`; the kiosk shows "dibuat saat dipesan" instead of stock, never marks such items sold out, and does not cap the quantity by the item's own stock.
+- Done-when proved by `test_selling_one_large_latte_consumes_beans_and_milk`: Large (24 g beans, 180 ml milk) → beans 5.000 → 4.976 kg, milk 10.000 → 9.820 l, two `sale` rows at the components' costs, latte stock untouched, **M2-T3 reconciliation holds**. Also: Regular × 3 scales (18 g / 120 ml each); out of beans rejects naming "Biji Arabica" with milk untouched; void restores 0.048 kg and 0.360 l via `sale_void` rows; a recipe unit on a component without a unit is refused; owner endpoints and made-to-order flag; RLS.
+- Seed: Es Kopi Susu and Americano (Standar and Large) are made from Biji Arabica, Susu UHT and Gula Aren in g/ml. Their historical sales (before recipes) still ledger against the drink itself, which is honest history; new sales consume the raw materials.
+- Cost of a made-to-order line is still the variant's entered `cost_price`; deriving it from components is M4-T5/M9-T4 (`get_recipe_cost`).
+**Deviation:** none
+**Next:** M4-T5

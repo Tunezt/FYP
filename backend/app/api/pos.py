@@ -48,6 +48,7 @@ from app.services.orders import (
     OrderNotReversible,
     PaymentMismatch,
     PaymentSpec,
+    RecipeUnitMismatch,
     Reversal,
     VariantNotFound,
     create_order,
@@ -126,13 +127,14 @@ async def pos_items(ctx: PosCtx):
     by_item: dict[uuid.UUID, list[ItemVariant]] = {}
     for v in variants:
         by_item.setdefault(v.item_id, []).append(v)
-    from app.services.catalog import modifier_catalog
+    from app.services.catalog import made_to_order_item_ids, modifier_catalog
 
     groups_by_item = await modifier_catalog(ctx.session)
+    made_to_order = await made_to_order_item_ids(ctx.session)
     return [
         ItemOut(
             id=i.id, name=i.name, unit=i.unit, current_stock=i.current_stock, sell_price=i.sell_price,
-            reorder_threshold=i.reorder_threshold,
+            reorder_threshold=i.reorder_threshold, made_to_order=i.id in made_to_order,
             variants=[PosVariantOut.model_validate(v) for v in by_item.get(i.id, [])],
             modifier_groups=[
                 PosModifierGroupOut(
@@ -220,6 +222,11 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
     except VariantNotFound:
         raise HTTPException(status_code=404, detail="Varian barang tidak ditemukan atau sudah tidak aktif")
+    except RecipeUnitMismatch as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Bahan '{exc.component_name}' belum punya satuan — atur satuannya di dashboard dulu",
+        )
     except ModifierSelectionInvalid as exc:
         messages = {
             "unknown": "Pilihan tambahan tidak dikenali atau sudah tidak aktif",

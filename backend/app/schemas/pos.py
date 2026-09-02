@@ -67,6 +67,7 @@ class ItemOut(BaseModel):
     reorder_threshold: Decimal
     variants: list[PosVariantOut] = []  # active variants, default first (M4-T1)
     modifier_groups: list[PosModifierGroupOut] = []  # active groups (M4-T2)
+    made_to_order: bool = False  # has a recipe: components are consumed, not this stock (M4-T4)
 
     model_config = {"from_attributes": True}
 

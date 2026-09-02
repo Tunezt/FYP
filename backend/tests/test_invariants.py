@@ -54,6 +54,7 @@ KNOWN_MONEY_COLUMNS = {
     ("item_variants", "cost_price"),
     ("modifiers", "price_delta"),
     ("order_line_modifiers", "price_delta"),
+    ("recipe_lines", "quantity"),
 }
 
 # pg_catalog rather than information_schema: the latter only lists columns the
@@ -156,6 +157,7 @@ KNOWN_SCOPED_TABLES = {
     "metric_baselines", "request_logs", "pending_confirmations",
     "stock_movements", "orders", "order_lines", "payments", "item_variants",
     "modifier_groups", "modifiers", "order_line_modifiers", "uoms", "uom_conversions",
+    "recipe_lines",
 }
 # `sales` is a view since migration 0006 (M3-T2); policies cannot attach to a
 # view, so its isolation rests on `security_invoker` — checked separately below

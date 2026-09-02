@@ -14,7 +14,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Item, ItemVariant, Modifier, ModifierGroup
+from app.models import Item, ItemVariant, Modifier, ModifierGroup, RecipeLine
 
 DEFAULT_VARIANT_NAME = "Standar"
 
@@ -262,6 +262,74 @@ async def update_modifier(session: AsyncSession, modifier: Modifier, **changes) 
     modifier.updated_at = datetime.now(timezone.utc)
     await session.flush()
     return modifier
+
+
+# ── Recipes (roadmap M4-T4) ─────────────────────────────────────────────────
+
+
+class RecipeInvalid(Exception):
+    """`code`: self (a variant cannot be made of its own item), quantity."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
+async def recipe_lines_for(session: AsyncSession, variant_id: uuid.UUID, active_only: bool = False) -> list[RecipeLine]:
+    stmt = select(RecipeLine).where(RecipeLine.variant_id == variant_id).order_by(RecipeLine.created_at)
+    if active_only:
+        stmt = stmt.where(RecipeLine.is_active.is_(True))
+    return (await session.execute(stmt)).scalars().all()
+
+
+async def set_recipe_line(
+    session: AsyncSession, variant: ItemVariant, component: Item, *, quantity: Decimal, uom_id: uuid.UUID | None = None,
+) -> RecipeLine:
+    """Upsert one component of a variant (reactivates a deactivated line)."""
+    if component.id == variant.item_id:
+        raise RecipeInvalid("self")
+    quantity = Decimal(quantity)
+    if quantity <= 0:
+        raise RecipeInvalid("quantity")
+    existing = (
+        await session.execute(
+            select(RecipeLine).where(RecipeLine.variant_id == variant.id, RecipeLine.component_item_id == component.id)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        existing.quantity = quantity
+        existing.uom_id = uom_id
+        existing.is_active = True
+        existing.updated_at = datetime.now(timezone.utc)
+        await session.flush()
+        return existing
+    line = RecipeLine(
+        business_id=variant.business_id, variant_id=variant.id, component_item_id=component.id,
+        quantity=quantity, uom_id=uom_id,
+    )
+    session.add(line)
+    await session.flush()
+    return line
+
+
+async def deactivate_recipe_line(session: AsyncSession, line: RecipeLine) -> RecipeLine:
+    line.is_active = False
+    line.updated_at = datetime.now(timezone.utc)
+    await session.flush()
+    return line
+
+
+async def made_to_order_item_ids(session: AsyncSession) -> set[uuid.UUID]:
+    """Items with at least one active variant that has an active recipe line."""
+    rows = (
+        await session.execute(
+            select(ItemVariant.item_id)
+            .join(RecipeLine, RecipeLine.variant_id == ItemVariant.id)
+            .where(RecipeLine.is_active.is_(True), ItemVariant.is_active.is_(True))
+            .distinct()
+        )
+    ).scalars().all()
+    return set(rows)
 
 
 async def modifier_catalog(session: AsyncSession, item_ids: list[uuid.UUID] | None = None):

@@ -24,9 +24,20 @@ from sqlalchemy import delete, select
 from app.core.db import plain_session, tenant_session
 from app.core.security import hash_pin
 from app.models import Business, Expense, Item, Order, OrderLine, Payment, Staff
-from app.services.catalog import create_modifier, create_modifier_group, create_variant, ensure_default_variant
+from app.services.catalog import (
+    create_modifier, create_modifier_group, create_variant, ensure_default_variant, set_recipe_line,
+)
 from app.services.stock import record_movement
 from app.services.units import ensure_standard_uoms
+
+# Recipes (M4-T4): (item, variant name, [(component item, quantity, uom code)])
+# A large latte uses more beans and milk than a regular one.
+RECIPES = [
+    ("Es Kopi Susu", "Standar", [("Biji Arabica", 18, "g"), ("Susu UHT", 120, "ml"), ("Gula Aren", 15, "g")]),
+    ("Es Kopi Susu", "Large", [("Biji Arabica", 24, "g"), ("Susu UHT", 180, "ml"), ("Gula Aren", 20, "g")]),
+    ("Americano", "Standar", [("Biji Arabica", 18, "g")]),
+    ("Americano", "Large", [("Biji Arabica", 24, "g")]),
+]
 
 # Modifier groups (M4-T2): (item, group name, selection, required, [(modifier, price_delta, default)])
 MODIFIERS = [
@@ -139,6 +150,17 @@ async def seed() -> None:
             for order, (mname, delta, is_default) in enumerate(choices):
                 await create_modifier(session, group, name=mname, price_delta=Decimal(delta),
                                       is_default=is_default, sort_order=order)
+        # Recipes: the drinks are made to order from the raw materials.
+        variant_by = {}
+        for item, _w in items:
+            variant_by[(item.name, "Standar")] = defaults[item.id]
+        for item_id, v in larges.items():
+            variant_by[(next(i.name for i, _w in items if i.id == item_id), v.name)] = v.id
+        from app.models import ItemVariant
+        for item_name, vname, components in RECIPES:
+            variant = await session.get(ItemVariant, variant_by[(item_name, vname)])
+            for comp_name, qty, code in components:
+                await set_recipe_line(session, variant, by_name[comp_name], quantity=Decimal(qty), uom_id=uoms[code].id)
 
         sellable = [(i, w) for i, w in items if w > 0]
         sold_per_item: dict = {}  # item.id -> total quantity sold in the history

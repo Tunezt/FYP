@@ -27,6 +27,7 @@ type Item = {
   reorder_threshold: string;
   variants: Variant[];
   modifier_groups: ModifierGroup[];
+  made_to_order: boolean; // has a recipe: components are consumed, its own stock is not the limit
 };
 type Receipt = {
   order_id: string;
@@ -341,12 +342,14 @@ function SellScreen({
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
   const cartTotal = cart.reduce((s, l) => s + linePrice(l) * l.qty, 0);
 
+  const stockCap = (item: Item) => (item.made_to_order ? 999 : Number(item.current_stock));
+
   function addToCart(item: Item, v: Variant | null, mods: Modifier[], n: number) {
     setCart((c) => {
       const key = lineKey(item.id, v, mods);
       const others = c.filter((l) => l.item.id === item.id && lineKey(l.item.id, l.variant, l.modifiers) !== key)
         .reduce((s, l) => s + l.qty, 0);
-      const room = Math.max(0, Number(item.current_stock) - others);
+      const room = Math.max(0, stockCap(item) - others);
       const existing = c.find((l) => lineKey(l.item.id, l.variant, l.modifiers) === key);
       if (existing) {
         return c.map((l) =>
@@ -364,7 +367,7 @@ function SellScreen({
           if (lineKey(l.item.id, l.variant, l.modifiers) !== key) return l;
           const others = c.filter((o) => o.item.id === l.item.id && lineKey(o.item.id, o.variant, o.modifiers) !== key)
             .reduce((s, o) => s + o.qty, 0);
-          const room = Math.max(0, Number(l.item.current_stock) - others);
+          const room = Math.max(0, stockCap(l.item) - others);
           return { ...l, qty: Math.min(room, l.qty + delta) };
         })
         .filter((l) => l.qty > 0)
@@ -462,8 +465,8 @@ function SellScreen({
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {sellable.map((item) => {
             const stock = Number(item.current_stock);
-            const low = stock <= Number(item.reorder_threshold);
-            const out = stock <= 0;
+            const low = !item.made_to_order && stock <= Number(item.reorder_threshold);
+            const out = !item.made_to_order && stock <= 0;
             const inCart = cartQty(item.id);
             return (
               <button
@@ -496,7 +499,7 @@ function SellScreen({
                   className={`mt-1 text-xs font-medium ${low ? "" : "ink-faint"}`}
                   style={low ? { color: "var(--warn)" } : undefined}
                 >
-                  {out ? "habis" : `sisa ${formatQty(stock)} ${item.unit}`}
+                  {item.made_to_order ? "dibuat saat dipesan" : out ? "habis" : `sisa ${formatQty(stock)} ${item.unit}`}
                   {low && !out ? " · hampir habis" : ""}
                 </span>
               </button>
@@ -518,8 +521,8 @@ function SellScreen({
             <div className="mx-auto mb-5 h-1.5 w-10 rounded-full bg-[color:var(--ink-faint)] opacity-40 sm:hidden" />
             <p className="text-xl font-bold">{selected.name}</p>
             <p className="ink-soft text-sm">
-              {formatRupiah(variant?.sell_price ?? selected.sell_price)} / {selected.unit} · sisa{" "}
-              {formatQty(selected.current_stock)}
+              {formatRupiah(variant?.sell_price ?? selected.sell_price)} / {selected.unit}
+              {selected.made_to_order ? " · dibuat saat dipesan" : ` · sisa ${formatQty(selected.current_stock)}`}
             </p>
 
             {selected.variants.length > 1 && (
@@ -569,7 +572,7 @@ function SellScreen({
               <span className="w-16 text-center text-4xl font-bold tabular-nums">{qty}</span>
               <QtyButton
                 label="+"
-                onPress={() => setQty((q) => Math.min(Number(selected.current_stock), q + 1))}
+                onPress={() => setQty((q) => Math.min(stockCap(selected), q + 1))}
               />
             </div>
 

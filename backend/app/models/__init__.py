@@ -15,6 +15,7 @@ from app.models.models import (  # noqa: F401
     Payment,
     PendingConfirmation,
     Receipt,
+    RecipeLine,
     RequestLog,
     Sale,
     SaleLegacy,
