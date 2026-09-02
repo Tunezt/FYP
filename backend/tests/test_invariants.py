@@ -13,7 +13,7 @@ import os
 import re
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
@@ -231,3 +231,158 @@ async def test_rls_guard_detects_policyless_table(conn):
 
     await conn.execute(text("alter table rls_guard_probe force row level security"))
     assert await _rls_gaps(conn, temp_oid) == {}
+
+
+# ── M2-T3: the stock ledger reconciles with the cached projection ─────────────
+#
+# For every item, SUM(stock_movements.qty_delta) == items.current_stock. This is
+# the early-warning system for everything downstream (roadmap M2-T3): a failure
+# here means some path changed stock without writing its ledger row, or wrote a
+# row without changing stock. A failure is a STOP CONDITION (roadmap §3).
+#
+# Runs as app_role, iterating tenants and pinning each in turn — exactly how a
+# nightly job would do it — so it needs no elevated role and cannot be fooled by
+# RLS hiding rows: with no tenant pinned the query fails closed rather than
+# returning an empty, trivially-reconciled set.
+
+RECONCILE_SQL = text(
+    """
+    select i.id, i.name, i.current_stock,
+           coalesce(sum(m.qty_delta), 0) as ledger
+    from items i
+    left join stock_movements m on m.item_id = i.id
+    group by i.id, i.name, i.current_stock
+    having i.current_stock <> coalesce(sum(m.qty_delta), 0)
+    order by i.name
+    """
+)
+
+
+async def _set_tenant(conn, business_id) -> None:
+    await conn.execute(
+        text("select set_config('app.current_business_id', :bid, true)"), {"bid": str(business_id)}
+    )
+
+
+async def _reconciliation_gaps(conn) -> dict[str, list[tuple[str, str, str]]]:
+    """business_id -> [(item name, current_stock, ledger sum)] for every item
+    whose cached stock differs from its ledger. Each tenant in its own
+    transaction so SET LOCAL scoping is exact."""
+    business_ids = (await conn.execute(text("select id from businesses order by created_at"))).scalars().all()
+    gaps: dict[str, list[tuple[str, str, str]]] = {}
+    for business_id in business_ids:
+        await conn.rollback()  # fresh transaction → fresh SET LOCAL
+        await _set_tenant(conn, business_id)
+        rows = (await conn.execute(RECONCILE_SQL)).all()
+        if rows:
+            gaps[str(business_id)] = [(name, str(stock), str(ledger)) for _, name, stock, ledger in rows]
+    await conn.rollback()
+    return gaps
+
+
+async def test_stock_ledger_reconciles_with_current_stock(conn):
+    """M2-T3: after seeding (and whatever the other tests left behind), every
+    item in every business has SUM(qty_delta) == current_stock."""
+    n_items = 0
+    for business_id in (await conn.execute(text("select id from businesses"))).scalars().all():
+        await conn.rollback()
+        await _set_tenant(conn, business_id)
+        n_items += (await conn.execute(text("select count(*) from items"))).scalar_one()
+    assert n_items > 0, "no items in any business — run `python -m app.seed` first"
+
+    gaps = await _reconciliation_gaps(conn)
+    assert gaps == {}, f"items whose cached stock differs from the ledger: {gaps}"
+
+
+async def test_stock_ledger_reconciles_after_a_simulated_day(conn):
+    """M2-T3: a day of sales (including one rejected for insufficient stock), an
+    owner correction, and a void all leave the ledger and the cache equal."""
+    import uuid
+    from decimal import Decimal
+
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.core.security import hash_pin
+    from app.models import Business, Item, Staff, StockMovement
+    from app.services.sales import InsufficientStock, record_sale
+    from app.services.stock import add_stock, open_item_stock, set_absolute_stock
+
+    engine = create_async_engine(DB_URL, connect_args={"statement_cache_size": 0})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    business_id = None
+    try:
+        async with factory() as s:
+            biz = Business(name="Reconcile Day", owner_phone=f"62997{uuid.uuid4().hex[:9]}")
+            s.add(biz)
+            await s.commit()
+            business_id = biz.id
+
+        async with factory() as s:
+            await _set_tenant(s, business_id)
+            staff = Staff(business_id=business_id, name="Kasir", pin_hash=hash_pin("2222"))
+            s.add(staff)
+            await s.flush()
+            kopi = Item(business_id=business_id, name="Kopi", unit="cup", current_stock=Decimal(10),
+                        cost_price=Decimal(7000), sell_price=Decimal(20000))
+            roti = Item(business_id=business_id, name="Roti", unit="pcs", current_stock=Decimal(2),
+                        cost_price=Decimal(9000), sell_price=Decimal(24000))
+            s.add_all([kopi, roti])
+            await s.flush()
+            await open_item_stock(s, kopi, unit_cost=kopi.cost_price)
+            await open_item_stock(s, roti, unit_cost=roti.cost_price)
+            await s.commit()
+            staff_id, kopi_id, roti_id = staff.id, kopi.id, roti.id
+
+        # A day of sales: 6 coffees, 2 breads, then a third bread that must be rejected.
+        sale_ids = []
+        for item_id, qty in [(kopi_id, 2), (kopi_id, 1), (roti_id, 1), (kopi_id, 3), (roti_id, 1)]:
+            async with factory() as s:
+                await _set_tenant(s, business_id)
+                rec = await record_sale(s, business_id=business_id, staff_id=staff_id,
+                                        item_id=item_id, quantity=Decimal(qty))
+                await s.commit()
+                sale_ids.append((rec.sale.id, item_id, Decimal(qty)))
+        async with factory() as s:
+            await _set_tenant(s, business_id)
+            with pytest.raises(InsufficientStock):
+                await record_sale(s, business_id=business_id, staff_id=staff_id,
+                                  item_id=roti_id, quantity=Decimal(1))
+            await s.rollback()
+
+        # Owner correction: the count says 5 coffees, not 4.
+        async with factory() as s:
+            await _set_tenant(s, business_id)
+            item = await s.get(Item, kopi_id)
+            await set_absolute_stock(s, item, Decimal(5), reason="correction", source_type="whatsapp")
+            await s.commit()
+
+        # Void the 3-coffee sale: a reversing row, nothing deleted (M3-T4 builds the
+        # endpoint; the ledger shape is fixed here).
+        void_sale_id, void_item, void_qty = sale_ids[3]
+        async with factory() as s:
+            await _set_tenant(s, business_id)
+            item = await s.get(Item, void_item)
+            await add_stock(s, item, void_qty, reason="sale_void", source_type="sale",
+                            source_id=void_sale_id, unit_cost=item.cost_price)
+            await s.commit()
+
+        async with factory() as s:
+            await _set_tenant(s, business_id)
+            kopi = await s.get(Item, kopi_id)
+            roti = await s.get(Item, roti_id)
+            assert kopi.current_stock == Decimal("8.000")   # 10 −2 −1 −3 → corrected to 5 → +3 void
+            assert roti.current_stock == Decimal("0.000")   # 2 −1 −1, third rejected
+            n_rows = (await s.execute(select(func.count(StockMovement.id)))).scalar_one()
+            assert n_rows == 2 + 5 + 1 + 1  # openings, sales, correction, void; no row for the rejection
+
+        gaps = await _reconciliation_gaps(conn)
+        assert str(business_id) not in gaps, gaps.get(str(business_id))
+        assert gaps == {}, gaps
+    finally:
+        if business_id is not None:
+            async with factory() as s:
+                row = await s.get(Business, business_id)
+                if row:
+                    await s.delete(row)
+                await s.commit()
+        await engine.dispose()

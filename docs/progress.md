@@ -520,3 +520,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Zero-quantity item creation writes no opening row (nothing moved); the reconciliation still holds (0 == 0).
 **Deviation:** none
 **Next:** M2-T3
+
+### [M2-T3] Stock reconciliation invariant
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/tests/test_invariants.py
+**Gates:** pytest 98 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `test_stock_ledger_reconciles_with_current_stock`: for every business, pinned one tenant at a time as `app_role` (the way a nightly job would run it, and fail-closed under RLS), every item must satisfy `SUM(stock_movements.qty_delta) == items.current_stock`. Passes against the seeded database (11 items, 632 ledger rows). Failure lists every offending item with both figures; it is a stop condition per roadmap §3.
+- `test_stock_ledger_reconciles_after_a_simulated_day`: its own business, two items with opening rows, five sales through `record_sale`, one sale rejected by the atomic guard (writes no row), a WhatsApp-style correction, and a void written as a reversing `sale_void` row — final stock 8 and 0, exactly 9 ledger rows, invariant holds across all businesses. The void endpoint itself is M3-T4; the ledger shape of a void is fixed here.
+- No production code changed. The invariant only needed the M2-T2 paths, which were already writing correctly.
+**Deviation:** none
+**Next:** M2-T4
