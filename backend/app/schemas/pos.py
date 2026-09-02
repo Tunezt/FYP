@@ -112,3 +112,30 @@ class OrderOut(BaseModel):
     sold_at: datetime
     lines: list[OrderLineOut]
     payments: list[PaymentOut]
+
+
+# ── Void / refund (M3-T4): reversals authorised by the manager (owner) PIN ────
+
+
+class ReversalIn(BaseModel):
+    manager_pin: str = Field(min_length=4, max_length=6, pattern=r"^\d{4,6}$")
+    note: str | None = Field(default=None, max_length=200)
+
+
+class RefundIn(ReversalIn):
+    restock: bool = True  # False when the goods are not coming back
+
+
+class ReversalLineOut(BaseModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    quantity: Decimal      # negative: this is the reversing line
+    line_total: Decimal    # negative
+    stock_after: Decimal | None  # None when not restocked
+
+
+class ReversalOut(BaseModel):
+    order_id: uuid.UUID
+    status: str            # voided | refunded
+    reversing_lines: list[ReversalLineOut]
+    reversing_payments: list[PaymentOut]

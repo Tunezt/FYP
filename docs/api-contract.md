@@ -40,6 +40,9 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | POST | `/pos/login` | pairing token in body | `{staff_id, pin}` → pos JWT |
 | GET | `/pos/items` | pos | |
 | POST | `/pos/sales` | pos | atomic decrement; 409 on insufficient stock; triggers velocity check |
+| POST | `/pos/orders` | pos | multi-line order + payments (cash/qris/transfer/card/ewallet/other); payments must equal total (422); per-line atomic stock guard, all-or-nothing (409); writes order, lines with `unit_cost_at_sale`, payments, stock movements |
+| POST | `/pos/orders/{id}/void` | pos | `{manager_pin, note?}` — owner PIN; reversing lines, payments and `sale_void` stock movements; original untouched; 403 wrong PIN, 409 already reversed |
+| POST | `/pos/orders/{id}/refund` | pos | `{manager_pin, restock?, note?}` — like void with `refund` movements; `restock=false` reverses money only |
 
 ## Webhooks
 

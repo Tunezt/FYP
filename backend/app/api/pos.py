@@ -27,10 +27,25 @@ from app.schemas.pos import (
     PosLoginIn,
     PosLoginOut,
     PosStaffOut,
+    RefundIn,
+    ReversalIn,
+    ReversalLineOut,
+    ReversalOut,
     SaleIn,
     SaleOut,
 )
-from app.services.orders import OrderLineSpec, PaymentMismatch, PaymentSpec, create_order
+from app.services.orders import (
+    ManagerPinRejected,
+    OrderLineSpec,
+    OrderNotFound,
+    OrderNotReversible,
+    PaymentMismatch,
+    PaymentSpec,
+    Reversal,
+    create_order,
+    refund_order,
+    void_order,
+)
 from app.services.sales import InsufficientStock, ItemNotFound, record_sale
 from app.services.velocity import check_low_stock_for_item
 
@@ -203,4 +218,64 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             for cl in created.lines
         ],
         payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in created.payments],
+    )
+
+
+_STATUS_ID = {"voided": "sudah dibatalkan", "refunded": "sudah dikembalikan", "open": "masih terbuka"}
+
+
+def _reversal_out(rev: Reversal) -> ReversalOut:
+    return ReversalOut(
+        order_id=rev.order.id,
+        status=rev.order.status,
+        reversing_lines=[
+            ReversalLineOut(
+                id=l.id, item_id=l.item_id, quantity=l.quantity, line_total=l.line_total,
+                stock_after=rev.restocked.get(l.item_id),
+            )
+            for l in rev.reversing_lines
+        ],
+        reversing_payments=[
+            PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in rev.reversing_payments
+        ],
+    )
+
+
+async def _run_reversal(ctx, order_id: uuid.UUID, fn, path: str, **kwargs) -> ReversalOut:
+    start = time.perf_counter()
+    try:
+        rev = await fn(ctx.session, business_id=ctx.business_id, order_id=order_id, staff_id=ctx.staff_id, **kwargs)
+    except ManagerPinRejected:
+        raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik untuk memasukkan PIN-nya")
+    except OrderNotFound:
+        raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
+    except OrderNotReversible as exc:
+        raise HTTPException(
+            status_code=409, detail=f"Transaksi ini {_STATUS_ID.get(exc.status, exc.status)} — tidak bisa dibalik lagi"
+        )
+    ctx.session.add(
+        RequestLog(
+            business_id=ctx.business_id, channel="pos", path=path,
+            latency_ms=int((time.perf_counter() - start) * 1000), status="ok",
+        )
+    )
+    return _reversal_out(rev)
+
+
+@router.post("/orders/{order_id}/void", response_model=ReversalOut)
+async def pos_void_order(order_id: uuid.UUID, payload: ReversalIn, ctx: PosCtx):
+    """Manager-PIN gated. Writes reversing lines, payments and stock movements;
+    the original order stays readable in full (M3-T4)."""
+    return await _run_reversal(
+        ctx, order_id, void_order, "/pos/orders/{id}/void", manager_pin=payload.manager_pin, note=payload.note,
+    )
+
+
+@router.post("/orders/{order_id}/refund", response_model=ReversalOut)
+async def pos_refund_order(order_id: uuid.UUID, payload: RefundIn, ctx: PosCtx):
+    """Manager-PIN gated. Like void, but `restock=false` keeps stock down when
+    the goods are not coming back."""
+    return await _run_reversal(
+        ctx, order_id, refund_order, "/pos/orders/{id}/refund",
+        manager_pin=payload.manager_pin, note=payload.note, restock=payload.restock,
     )

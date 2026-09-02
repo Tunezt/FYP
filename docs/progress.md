@@ -587,3 +587,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - No discount/tax/service charge/rounding yet — `subtotal == total` until M7-T4. `points` is not offered as a POS method until M8-T2.
 **Deviation:** none
 **Next:** M3-T4
+
+### [M3-T4] Void and refund as reversals
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/app/services/orders.py, backend/app/schemas/pos.py, backend/app/api/pos.py, backend/tests/test_order_reversals.py (new, 6 tests), docs/api-contract.md
+**Gates:** pytest 114 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `void_order` / `refund_order` write **reversing rows only**: one negative-quantity line per original line (same price, same `unit_cost_at_sale`, note "void oleh <manager>: …"), one negative payment per original payment (reference `void:<payment id>`), and one positive stock movement per line (`sale_void` or `refund`, `unit_cost` = the cost as sold, `source_id` = the reversing line). The order's `status` moves to `voided` / `refunded` — the one state transition the enum exists for; every other original row is untouched and the order's totals stay as sold. A second reversal is refused (409).
+- **Manager PIN**: the schema has owner/staff roles only, so the owner's PIN is the manager PIN; any active owner-role staff of the business may authorise. Wrong PIN → 403 in Indonesian and nothing written.
+- `refund(restock=false)` reverses money and revenue but writes no stock movement, for goods that are not coming back. Default restocks.
+- Done-when proved by `test_void_restocks_via_new_movement_rows_and_keeps_original`: stock 8→10 and 2→3 **through new `sale_void` rows** (per item the ledger reads opname, sale, sale_void — nothing removed), the reconciliation invariant holds, the original two lines and two payments are intact alongside the reversing four, line totals and payments both net to zero, and the `sales` view sums the order to zero revenue.
+- Endpoints `POST /pos/orders/{id}/void` and `/refund` documented in `docs/api-contract.md`. Kiosk UI for reversals is not built yet (M3-T3's cart was the kiosk change this milestone); the endpoints are ready for it.
+**Deviation:** none
+**Next:** M4-T1 — M3 complete, tagged `checkpoint/M3`
