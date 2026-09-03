@@ -572,3 +572,24 @@ async def test_balance_sheet_balances(conn):
                     await s.delete(row)
                 await s.commit()
         await engine.dispose()
+
+
+async def test_every_business_has_every_standard_posting_rule(conn):
+    """M7-T2: a rule added to services/posting_rules.STANDARD_RULES must reach
+    businesses that already exist (a backfill migration, as 0016 and 0018 do),
+    or the posting engine will refuse their events. Checked per tenant."""
+    from app.services.posting_rules import STANDARD_RULES
+
+    expected = {(e, c) for e, c, *_ in STANDARD_RULES}
+    business_ids = (await conn.execute(text("select id from businesses"))).scalars().all()
+    assert business_ids, "no businesses — run `python -m app.seed` first"
+    missing: dict[str, list[tuple[str, str]]] = {}
+    for business_id in business_ids:
+        await conn.rollback()
+        await _set_tenant(conn, business_id)
+        have = set((await conn.execute(text("select event_type, component from posting_rules"))).all())
+        gap = sorted(expected - have)
+        if gap:
+            missing[str(business_id)] = gap
+    await conn.rollback()
+    assert missing == {}, f"businesses missing standard posting rules: {missing}"

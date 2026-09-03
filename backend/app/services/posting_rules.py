@@ -65,6 +65,12 @@ STANDARD_RULES: list[tuple[str, str, str | None, str | None, str]] = [
     # Till and loyalty.
     ("ShiftClosed", "variance_short", "5800", "1100", "Kas kurang saat tutup shift"),
     ("ShiftClosed", "variance_over", "1100", "5800", "Kas lebih saat tutup shift"),
+    # Cash in and out (M7-T2); backfilled for existing businesses by migration 0018.
+    ("CashIn", "owner", "1100", "3100", "Kas masuk dari pemilik"),
+    ("CashIn", "bank", "1100", "1110", "Kas masuk dari bank"),
+    ("BankDrop", "cash", "1110", "1100", "Setor kas ke bank"),
+    ("SupplierPaid", "cash", "2100", "1100", "Bayar supplier tunai dari laci"),
+    ("SupplierPaid", "transfer", "2100", "1110", "Bayar supplier lewat transfer"),
     ("PointsEarned", "points", "5600", "2300", "Poin diberikan ke pelanggan"),
     ("PointsRedeemed", "points", "2300", "4100", "Poin ditukar"),
 ]

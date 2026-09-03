@@ -22,6 +22,7 @@ from app.models.models import (  # noqa: F401
     PoLine,
     PostingRule,
     Shift,
+    CashMovement,
     PurchaseOrder,
     Receipt,
     RecipeLine,

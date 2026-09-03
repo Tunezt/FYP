@@ -1294,3 +1294,12 @@ async def list_shifts(ctx: OwnerCtx, limit: int = Query(default=30, ge=1, le=200
     from app.services.shifts import list_shifts as _list, shift_view
 
     return [ShiftOut(**await shift_view(ctx.session, sh)) for sh in await _list(ctx.session, limit=limit)]
+
+
+@router.get("/cash-movements")
+async def list_cash_movements(ctx: OwnerCtx, limit: int = Query(default=50, ge=1, le=500)):
+    """Cash in and out (M7-T2), newest first."""
+    from app.schemas.pos import CashMovementOut
+    from app.services.cash import cash_movement_view, list_cash_movements as _list
+
+    return [CashMovementOut(**await cash_movement_view(ctx.session, r)) for r in await _list(ctx.session, limit=limit)]

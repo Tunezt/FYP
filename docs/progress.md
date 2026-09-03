@@ -851,3 +851,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Seed: yesterday Sari's shift (float 200.000, her 24 payments attributed, counted 5.000 short); today's till is opened from the kiosk.
 **Deviation:** none
 **Next:** M7-T2
+
+### [M7-T2] Cash in and out
+**Date:** 2026-09-03
+**Status:** done
+**Changed:** backend/alembic/versions/0018_cash_movements.py (new), backend/app/services/cash.py (new), backend/app/models/models.py (`CashMovement`), backend/app/models/__init__.py, backend/app/services/posting_rules.py (5 new standard rules), backend/app/api/pos.py (`GET /pos/suppliers`, `POST /pos/cash`, `GET /pos/cash`), backend/app/api/dashboard.py (`GET /api/cash-movements`), backend/app/schemas/pos.py, backend/tests/test_cash.py (new, 4 tests), backend/tests/test_db_integration.py (`test_rls_isolates_cash_movements`), backend/tests/test_invariants.py (every business has every standard rule), frontend/app/pos/[businessToken]/page.tsx, docs/api-contract.md, docs/BUILD-ROADMAP.md (appendix A: `CashIn`, `BankDrop`)
+**Gates:** pytest 227 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok
+**Notes:**
+- `cash_movements`: four kinds, each posting in the caller's transaction. `cash_in` (Dr Kas / Cr Modal pemilik, or Cr Bank when the money came from the bank), `petty_cash` (through the M6-T6 expense writer, so it is an expense row on the P&L with Cr Kas), `supplier_payment` (Dr Utang usaha / Cr Kas, or Cr Bank by transfer — this is what settles the payable a goods receipt created), `bank_drop` (Dr Bank / Cr Kas). Rules are data as always: the service holds no account codes, only kind → event type.
+- Stamped with the till the money actually moved through: the acting cashier's open shift, except a supplier paid by transfer, which never touched the drawer and is deliberately unstamped (tested both ways). M7-T3's expectation reads these.
+- Table CHECKs: amount > 0, a supplier payment must name a supplier, a petty cash row must link the expense it wrote. Eight validation cases assert nothing is written — no movement, no journal entry, no expense.
+- New invariant `test_every_business_has_every_standard_posting_rule`: a rule added to `STANDARD_RULES` must reach existing businesses through a backfill migration (0016 and now 0018), or the engine refuses their events. Checked per tenant, non-vacuously.
+- Kiosk: a "Kas" button opens a sheet with the four kinds, amount, reason, a category for petty cash and a supplier picker for payments; the header's expected-cash chip refreshes after each one.
+- Verified in the running kiosk: opened Sari's shift with a 200.000 float and the header chip showed "Shift buka · kas seharusnya Rp 200.000".
+**Deviation:** none
+**Next:** M7-T3 (close with reconciliation); canary due after it (5 tasks since M6-T4)

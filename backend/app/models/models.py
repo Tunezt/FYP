@@ -61,6 +61,9 @@ po_status = Enum(
 )
 account_type = Enum("asset", "liability", "equity", "revenue", "expense", name="account_type", create_type=False)
 shift_status = Enum("open", "closed", name="shift_status", create_type=False)
+cash_movement_kind = Enum(
+    "cash_in", "petty_cash", "supplier_payment", "bank_drop", name="cash_movement_kind", create_type=False
+)
 
 
 class Business(Base):
@@ -729,3 +732,27 @@ class Shift(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
+
+
+class CashMovement(Base):
+    """Money through the till that is not a sale (migration 0018, roadmap
+    M7-T2): cash in, petty cash out, supplier paid, bank drop. Posts to the
+    ledger in the same transaction; stamped with the shift it moved through."""
+
+    __tablename__ = "cash_movements"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    shift_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("shifts.id"))
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    kind: Mapped[str] = mapped_column(cash_movement_kind, nullable=False)
+    via: Mapped[str] = mapped_column(Text, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str | None] = mapped_column(Text)
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id"))
+    expense_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("expenses.id"))
+    occurred_at: Mapped[datetime] = _now()
+    created_at: Mapped[datetime] = _now()

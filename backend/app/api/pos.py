@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.core.db import tenant_session
 from app.core.deps import PosCtx
-from app.schemas.pos import ShiftCloseIn, ShiftOpenIn, ShiftOut
+from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
 from app.core.security import create_token, decode_token, verify_pin
 from app.models import Business, Item, ItemVariant, RequestLog, Staff
 from app.schemas.pos import (
@@ -420,3 +420,52 @@ async def pos_close_shift(payload: ShiftCloseIn, ctx: PosCtx):
         status, detail = _SHIFT_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
     return ShiftOut(**await shift_view(ctx.session, shift))
+
+
+# ── Cash in and out (M7-T2) ─────────────────────────────────────────────────
+
+_CASH_ERRORS = {
+    "kind": (422, "Jenis kas tidak dikenali"),
+    "via": (422, "Sumber atau tujuan uang tidak dikenali"),
+    "amount": (422, "Jumlah tidak boleh nol atau negatif"),
+    "reason": (422, "Alasan tidak boleh kosong"),
+    "supplier": (404, "Supplier tidak ditemukan"),
+}
+
+
+@router.get("/suppliers", response_model=list[PosSupplierOut])
+async def pos_suppliers(ctx: PosCtx):
+    """Names to pick from when paying a supplier from the drawer."""
+    from app.models import Supplier
+
+    rows = (await ctx.session.execute(select(Supplier).where(Supplier.is_active.is_(True)).order_by(Supplier.name))).scalars().all()
+    return [PosSupplierOut.model_validate(r) for r in rows]
+
+
+@router.post("/cash", response_model=CashMovementOut, status_code=201)
+async def pos_record_cash(payload: CashMovementIn, ctx: PosCtx):
+    """Cash in, petty cash out, supplier paid, bank drop — posted to the ledger
+    and stamped with the cashier's open shift."""
+    from app.services.cash import CashInvalid, cash_movement_view, record_cash_movement
+
+    try:
+        row = await record_cash_movement(
+            ctx.session, ctx.business_id, kind=payload.kind, amount=payload.amount, reason=payload.reason,
+            staff_id=ctx.staff_id, via=payload.via, category=payload.category, supplier_id=payload.supplier_id,
+        )
+    except CashInvalid as exc:
+        status, detail = _CASH_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return CashMovementOut(**await cash_movement_view(ctx.session, row))
+
+
+@router.get("/cash", response_model=list[CashMovementOut])
+async def pos_cash_movements(ctx: PosCtx):
+    """This cashier's open shift's movements, newest first (empty without a shift)."""
+    from app.services.cash import cash_movement_view, list_cash_movements
+    from app.services.shifts import current_shift
+
+    shift = await current_shift(ctx.session, ctx.staff_id)
+    if shift is None:
+        return []
+    return [CashMovementOut(**await cash_movement_view(ctx.session, r)) for r in await list_cash_movements(ctx.session, shift_id=shift.id)]

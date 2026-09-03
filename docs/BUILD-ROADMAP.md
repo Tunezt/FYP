@@ -720,6 +720,8 @@ Add a row here before adding the code.
 | `DiscountApplied` | none | Dr discount expense · Cr revenue |
 | `GoodsReceived` | positive, recompute avg cost | Dr inventory · Cr payable |
 | `SupplierPaid` | none | Dr payable · Cr cash |
+| `CashIn` | none | Dr cash · Cr owner capital / bank |
+| `BankDrop` | none | Dr bank · Cr cash |
 | `StockWasted` | negative | Dr waste expense · Cr inventory |
 | `StockCounted` | delta either way | Dr or Cr variance against inventory |
 | `ProductionRun` | negative inputs, positive output | inventory reclassification only |

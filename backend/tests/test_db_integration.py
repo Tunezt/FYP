@@ -587,3 +587,25 @@ async def test_rls_isolates_shifts(session_factory, two_tenants):
         session.add(Shift(business_id=b.id, staff_id=ids["cashier"], opening_float=Decimal(1)))
         with pytest.raises(Exception):
             await session.commit()
+
+
+async def test_rls_isolates_cash_movements(session_factory, two_tenants):
+    """M7-T2 / roadmap §2."""
+    from app.models import CashMovement
+
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        row = CashMovement(business_id=a.id, kind="bank_drop", via="cash", amount=Decimal(10000), reason="setor")
+        session.add(row)
+        await session.commit()
+        row_id = row.id
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert await session.get(CashMovement, row_id) is None
+        assert (await session.execute(select(CashMovement))).scalars().all() == []
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(CashMovement(business_id=b.id, kind="bank_drop", via="cash", amount=Decimal(1), reason="smuggled"))
+        with pytest.raises(Exception):
+            await session.commit()

@@ -73,6 +73,9 @@ type Shift = {
   variance: string | null;
   notes: string | null;
 };
+// Cash in and out (M7-T2).
+type CashKind = "cash_in" | "petty_cash" | "supplier_payment" | "bank_drop";
+type SupplierLite = { id: string; name: string };
 
 const lineKey = (itemId: string, variant: Variant | null, modifiers: Modifier[]) =>
   `${itemId}:${variant?.id ?? "default"}:${modifiers.map((m) => m.id).sort().join(",")}`;
@@ -355,6 +358,61 @@ function SellScreen({
     loadShift();
   }, [loadShift]);
 
+  // Cash in and out (M7-T2): posted to the ledger, stamped with the open shift.
+  const [cashSheet, setCashSheet] = useState(false);
+  const [cashKind, setCashKind] = useState<CashKind>("petty_cash");
+  const [cashInput, setCashInput] = useState("");
+  const [cashReason, setCashReason] = useState("");
+  const [cashCategory, setCashCategory] = useState("operasional");
+  const [cashSupplier, setCashSupplier] = useState("");
+  const [suppliers, setSuppliers] = useState<SupplierLite[]>([]);
+  const [cashError, setCashError] = useState<string | null>(null);
+  const [cashDone, setCashDone] = useState<string | null>(null);
+  function openCashSheet() {
+    setCashError(null);
+    setCashSheet(true);
+    if (suppliers.length === 0) {
+      api<SupplierLite[]>("/pos/suppliers", { token }).then(setSuppliers).catch(() => setSuppliers([]));
+    }
+  }
+  async function submitCash() {
+    const amount = Number(cashInput || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setCashError("Masukkan jumlah lebih dari nol.");
+      return;
+    }
+    if (!cashReason.trim()) {
+      setCashError("Tulis alasannya.");
+      return;
+    }
+    setBusy(true);
+    setCashError(null);
+    try {
+      await api("/pos/cash", {
+        token,
+        body: {
+          kind: cashKind,
+          amount,
+          reason: cashReason.trim(),
+          category: cashKind === "petty_cash" ? cashCategory : null,
+          supplier_id: cashKind === "supplier_payment" ? cashSupplier || null : null,
+        },
+      });
+      setCashSheet(false);
+      setCashInput("");
+      setCashReason("");
+      setCashDone(
+        `${cashKind === "cash_in" ? "Kas masuk" : cashKind === "bank_drop" ? "Setor bank" : cashKind === "supplier_payment" ? "Bayar supplier" : "Kas keluar"} ${formatRupiah(amount)} dicatat`
+      );
+      setTimeout(() => setCashDone(null), 2600);
+      loadShift();
+    } catch (e: unknown) {
+      setCashError(e instanceof ApiError ? e.detail : "Gagal menyimpan — coba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitShift() {
     const amount = Number(shiftAmount || 0);
     if (!Number.isFinite(amount) || amount < 0) {
@@ -534,11 +592,18 @@ function SellScreen({
               <p className="text-sm font-semibold tabular-nums">{formatRupiah(shift.expected_cash ?? shift.opening_float)}</p>
             </button>
           )}
+          <button onClick={openCashSheet} className="btn-quiet px-4 py-2 text-sm" title="Kas masuk / keluar">
+            Kas
+          </button>
           <button onClick={onLock} className="btn-quiet px-4 py-2 text-sm">
             🔒 Kunci
           </button>
         </div>
       </header>
+
+      {cashDone && (
+        <p className="glass-card mb-4 px-4 py-2 text-sm font-medium">{cashDone}</p>
+      )}
 
       {items === null ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -646,6 +711,97 @@ function SellScreen({
               </button>
               <button onClick={submitShift} disabled={busy} className="btn-accent flex-1 py-3 text-lg">
                 {shiftSheet === "open" ? "Buka" : "Tutup shift"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cash sheet (M7-T2): cash in, petty cash, supplier paid, bank drop */}
+      {cashSheet && (
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          onClick={() => !busy && setCashSheet(false)}
+        >
+          <div
+            className="glass-card glass-strong w-full max-w-md animate-fade-up rounded-b-none rounded-t-4xl px-8 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-xl font-bold">Kas masuk / keluar</p>
+            <p className="ink-soft text-sm">Uang laci di luar penjualan. Semua masuk pembukuan.</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["petty_cash", "Kas keluar (beli kecil)"],
+                  ["cash_in", "Kas masuk"],
+                  ["supplier_payment", "Bayar supplier"],
+                  ["bank_drop", "Setor ke bank"],
+                ] as [CashKind, string][]
+              ).map(([kind, label]) => (
+                <button
+                  key={kind}
+                  onClick={() => setCashKind(kind)}
+                  className={`rounded-2xl px-3 py-2.5 text-sm font-semibold transition-colors ${
+                    cashKind === kind ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <label className="mt-4 block">
+              <span className="ink-faint text-xs font-medium uppercase tracking-wide">Jumlah (Rp)</span>
+              <input
+                autoFocus
+                inputMode="numeric"
+                value={cashInput}
+                onChange={(e) => setCashInput(e.target.value.replace(/[^0-9]/g, ""))}
+                className="glass-card mt-1 w-full rounded-2xl px-4 py-3 text-2xl font-bold tabular-nums"
+                placeholder="0"
+              />
+            </label>
+            <input
+              value={cashReason}
+              onChange={(e) => setCashReason(e.target.value)}
+              className="glass-card mt-3 w-full rounded-2xl px-4 py-2 text-sm"
+              placeholder={cashKind === "petty_cash" ? "Beli apa? (mis. es batu)" : "Alasan"}
+            />
+            {cashKind === "petty_cash" && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["bahan baku", "operasional", "lainnya"].map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setCashCategory(cat)}
+                    className={`rounded-2xl px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      cashCategory === cat ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+            {cashKind === "supplier_payment" && (
+              <select
+                value={cashSupplier}
+                onChange={(e) => setCashSupplier(e.target.value)}
+                className="glass-card mt-3 w-full rounded-2xl px-4 py-2 text-sm"
+              >
+                <option value="">Pilih supplier…</option>
+                {suppliers.map((sp) => (
+                  <option key={sp.id} value={sp.id}>
+                    {sp.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {cashError && <p className="mt-3 text-sm text-red-600">{cashError}</p>}
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setCashSheet(false)} className="btn-quiet flex-1 py-3">
+                Batal
+              </button>
+              <button onClick={submitCash} disabled={busy} className="btn-accent flex-1 py-3 text-lg">
+                Catat
               </button>
             </div>
           </div>

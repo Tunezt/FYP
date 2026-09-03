@@ -232,3 +232,39 @@ class ShiftOut(BaseModel):
     counted_cash: Decimal | None
     variance: Decimal | None
     notes: str | None
+
+
+# ── Cash in and out (M7-T2) ─────────────────────────────────────────────────
+
+
+class PosSupplierOut(BaseModel):
+    id: uuid.UUID
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class CashMovementIn(BaseModel):
+    kind: Literal["cash_in", "petty_cash", "supplier_payment", "bank_drop"]
+    amount: Decimal = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=200)
+    via: Literal["owner", "bank", "cash", "transfer"] | None = None
+    category: str | None = Field(default=None, max_length=60)
+    supplier_id: uuid.UUID | None = None
+
+
+class CashMovementOut(BaseModel):
+    id: uuid.UUID
+    shift_id: uuid.UUID | None
+    staff_id: uuid.UUID | None
+    staff_name: str | None
+    kind: str
+    via: str
+    direction: str
+    amount: Decimal
+    reason: str
+    category: str | None
+    supplier_id: uuid.UUID | None
+    supplier_name: str | None
+    expense_id: uuid.UUID | None
+    occurred_at: datetime
