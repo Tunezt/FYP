@@ -14,6 +14,7 @@ import { OWNER_TOKEN_KEY } from "@/lib/api";
 import type {
   AlertRow,
   Business,
+  CashMovementRow,
   ExpenseRow,
   InventoryItem,
   Overview,
@@ -21,6 +22,7 @@ import type {
   PnlMonth,
   ReceiptRow,
   SaleRow,
+  ShiftRow,
   StaffMember,
   TrendPoint,
 } from "@/lib/types";
@@ -352,6 +354,121 @@ function buildOverview(): Overview {
   };
 }
 
+
+// Till sessions and the cash through them (M7-T1 … M7-T3): yesterday Sari
+// counted 5.000 short, Budi counted exactly; today's till is still open.
+const SHIFTS: ShiftRow[] = [
+  {
+    id: "demo-shift-1",
+    staff_id: "demo-staff-2",
+    staff_name: "Sari",
+    status: "open",
+    opening_float: "200000",
+    opened_at: jktIso(0, 7),
+    closed_at: null,
+    closed_by: null,
+    cash_sales: "268000",
+    cash_refunds: "0",
+    cash_in: "0",
+    cash_out: "35000",
+    expected_cash: "433000",
+    counted_cash: null,
+    variance: null,
+    notes: null,
+  },
+  {
+    id: "demo-shift-2",
+    staff_id: "demo-staff-2",
+    staff_name: "Sari",
+    status: "closed",
+    opening_float: "200000",
+    opened_at: jktIso(1, 7),
+    closed_at: jktIso(1, 21),
+    closed_by: "demo-staff-1",
+    cash_sales: "512000",
+    cash_refunds: "22000",
+    cash_in: "50000",
+    cash_out: "90000",
+    expected_cash: "650000",
+    counted_cash: "645000",
+    variance: "-5000",
+    notes: "kurang 5rb, mungkin kembalian",
+  },
+  {
+    id: "demo-shift-3",
+    staff_id: "demo-staff-3",
+    staff_name: "Budi",
+    status: "closed",
+    opening_float: "150000",
+    opened_at: jktIso(2, 13),
+    closed_at: jktIso(2, 21),
+    closed_by: "demo-staff-3",
+    cash_sales: "324000",
+    cash_refunds: "0",
+    cash_in: "0",
+    cash_out: "120000",
+    expected_cash: "354000",
+    counted_cash: "354000",
+    variance: "0",
+    notes: null,
+  },
+];
+
+const CASH_MOVEMENTS: CashMovementRow[] = [
+  {
+    id: "demo-cash-1",
+    shift_id: "demo-shift-1",
+    staff_name: "Sari",
+    kind: "petty_cash",
+    via: "cash",
+    direction: "out",
+    amount: "35000",
+    reason: "es batu 3 balok",
+    category: "operasional",
+    supplier_name: null,
+    occurred_at: jktIso(0, 10),
+  },
+  {
+    id: "demo-cash-2",
+    shift_id: "demo-shift-2",
+    staff_name: "Sari",
+    kind: "cash_in",
+    via: "owner",
+    direction: "in",
+    amount: "50000",
+    reason: "tambah modal receh",
+    category: null,
+    supplier_name: null,
+    occurred_at: jktIso(1, 11),
+  },
+  {
+    id: "demo-cash-3",
+    shift_id: "demo-shift-2",
+    staff_name: "Sari",
+    kind: "supplier_payment",
+    via: "cash",
+    direction: "out",
+    amount: "90000",
+    reason: "bayar susu",
+    category: null,
+    supplier_name: "CV Susu Segar",
+    occurred_at: jktIso(1, 15),
+  },
+  {
+    id: "demo-cash-4",
+    shift_id: "demo-shift-3",
+    staff_name: "Budi",
+    kind: "bank_drop",
+    via: "cash",
+    direction: "out",
+    amount: "120000",
+    reason: "setor ke bank",
+    category: null,
+    supplier_name: null,
+    occurred_at: jktIso(2, 20),
+  },
+];
+
 function paginate<T>(rows: T[], page: number, pageSize: number, inflateTotal = 0): Page<T> {
   const start = (page - 1) * pageSize;
   return {
@@ -384,5 +501,7 @@ export function demoData(path: string): unknown {
   if (pathname === "/api/receipts") {
     return paginate(RECEIPTS, num("page", 1), num("page_size", 6));
   }
+  if (pathname === "/api/shifts") return SHIFTS.slice(0, num("limit", 30));
+  if (pathname === "/api/cash-movements") return CASH_MOVEMENTS.slice(0, num("limit", 50));
   return null;
 }

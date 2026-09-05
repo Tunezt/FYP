@@ -88,3 +88,37 @@ export type StaffMember = {
   is_active: boolean;
   created_at: string;
 };
+
+// Till sessions and the cash that moved through them (M7-T1 … M7-T3).
+export type ShiftRow = {
+  id: string;
+  staff_id: string;
+  staff_name: string;
+  status: "open" | "closed";
+  opening_float: string;
+  opened_at: string;
+  closed_at: string | null;
+  closed_by: string | null;
+  cash_sales: string;
+  cash_refunds: string;
+  cash_in: string;
+  cash_out: string;
+  expected_cash: string | null;
+  counted_cash: string | null;
+  variance: string | null;
+  notes: string | null;
+};
+
+export type CashMovementRow = {
+  id: string;
+  shift_id: string | null;
+  staff_name: string | null;
+  kind: "cash_in" | "petty_cash" | "supplier_payment" | "bank_drop";
+  via: string;
+  direction: "in" | "out";
+  amount: string;
+  reason: string;
+  category: string | null;
+  supplier_name: string | null;
+  occurred_at: string;
+};

@@ -228,6 +228,8 @@ class ShiftOut(BaseModel):
     closed_by: uuid.UUID | None
     cash_sales: Decimal
     cash_refunds: Decimal
+    cash_in: Decimal
+    cash_out: Decimal
     expected_cash: Decimal | None
     counted_cash: Decimal | None
     variance: Decimal | None

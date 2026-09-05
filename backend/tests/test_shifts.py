@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.security import hash_pin
@@ -205,4 +205,169 @@ async def test_pos_endpoints_open_report_and_close(session_factory, shop):
         with pytest.raises(HTTPException) as exc:
             await pos_close_shift(ShiftCloseIn(counted_cash=Decimal(0)), ctx)
         assert exc.value.status_code == 409
+        await s.commit()
+
+
+# ── M7-T3: close with reconciliation ────────────────────────────────────────
+
+
+async def _cash(s, c, staff_key, **kw):
+    from app.services.cash import record_cash_movement
+
+    return await record_cash_movement(s, c["bid"], staff_id=c[staff_key], **kw)
+
+
+async def test_close_reconciles_the_whole_drawer_and_posts_the_variance(session_factory, shop):
+    """A simulated shift: float, cash and non-cash sales, a refund, cash in,
+    petty cash, a bank drop, and a supplier paid by transfer that never touched
+    the drawer. Expected = float + cash sales − cash refunds + in − out, and the
+    3.500 short lands on the ledger as one entry against the till."""
+    from app.models import JournalEntry
+    from app.services.ledger import account_balances, entry_lines, trial_balance
+    from app.services.statements import balance_sheet
+    from app.services.suppliers import create_supplier
+
+    c = shop
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        supplier = await create_supplier(s, c["bid"], name="Toko Kopi Jaya")
+        shift = await open_shift(s, c["bid"], staff_id=c["sari"], opening_float=Decimal(200000))
+        sale = await _sell(s, c, "sari", 3, [("cash", 66000)])          # +66.000 cash
+        await _sell(s, c, "sari", 1, [("qris", 22000)])                 # not cash: no effect
+        await refund_order(s, business_id=c["bid"], order_id=sale.order.id, staff_id=c["sari"], manager_pin="1234")
+        await _cash(s, c, "sari", kind="cash_in", amount=Decimal(50000), reason="tambah modal")
+        await _cash(s, c, "sari", kind="petty_cash", amount=Decimal(15000), reason="es batu", category="operasional")
+        await _cash(s, c, "sari", kind="bank_drop", amount=Decimal(40000), reason="setor bank")
+        await _cash(s, c, "sari", kind="supplier_payment", amount=Decimal(30000), reason="bayar kopi",
+                    via="transfer", supplier_id=supplier.id)            # never in the drawer
+        await s.commit()
+        sid = shift.id
+
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        shift = await s.get(Shift, sid)
+        live = await cash_summary(s, shift)
+        assert (live.opening_float, live.cash_sales, live.cash_refunds) == (Decimal("200000.00"), Decimal("66000.00"), Decimal("66000.00"))
+        assert (live.cash_in, live.cash_out) == (Decimal("50000.00"), Decimal("55000.00"))   # 15.000 + 40.000
+        assert live.expected_cash == Decimal("195000.00")               # 200 + 66 − 66 + 50 − 55
+
+        before = (await s.execute(select(func.count(JournalEntry.id)))).scalar_one()
+        await close_shift(s, shift, counted_cash=Decimal(191500), closed_by=c["owner"], notes="kurang 3.500")
+        await s.commit()
+
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        shift = await s.get(Shift, sid)
+        assert shift.expected_cash == Decimal("195000.00") and shift.counted_cash == Decimal("191500.00")
+        assert shift.variance == Decimal("-3500.00")
+
+        entries = (await s.execute(select(JournalEntry).where(JournalEntry.source_type == "shift"))).scalars().all()
+        assert len(entries) == 1 and (await s.execute(select(func.count(JournalEntry.id)))).scalar_one() == before + 1
+        entry = entries[0]
+        assert entry.event_type == "ShiftClosed" and entry.source_id == sid
+        assert entry.posted_at == shift.closed_at and entry.created_by == c["owner"]
+        lines = await entry_lines(s, entry.id)
+        assert {(l.memo, l.debit, l.credit) for l in lines} == {
+            ("variance_short", Decimal("3500.00"), Decimal("0.00")),
+            ("variance_short", Decimal("0.00"), Decimal("3500.00")),
+        }
+
+        balances = await account_balances(s)
+        assert balances["5800"] == Decimal("3500.00")                   # short is an expense
+        # Kas: +66 sale −66 refund +50 in −15 petty −40 drop −3,5 short (the float is not a ledger event)
+        assert balances["1100"] == Decimal("-8500.00")
+        debit, credit = await trial_balance(s)
+        assert debit == credit and (await balance_sheet(s)).balances
+
+
+async def test_counting_over_posts_the_other_way_and_an_exact_count_posts_nothing(session_factory, shop):
+    from app.models import JournalEntry
+    from app.services.ledger import account_balances, entry_lines
+
+    c = shop
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        over = await open_shift(s, c["bid"], staff_id=c["sari"], opening_float=Decimal(100000))
+        await _sell(s, c, "sari", 1, [("cash", 22000)])
+        await close_shift(s, over, counted_cash=Decimal(124000), closed_by=c["sari"])   # 2.000 over
+        assert over.expected_cash == Decimal("122000.00") and over.variance == Decimal("2000.00")
+
+        exact = await open_shift(s, c["bid"], staff_id=c["budi"], opening_float=Decimal(50000))
+        await _cash(s, c, "budi", kind="bank_drop", amount=Decimal(10000), reason="setor")
+        await close_shift(s, exact, counted_cash=Decimal(40000), closed_by=c["budi"])
+        assert exact.expected_cash == Decimal("40000.00") and exact.variance == Decimal("0.00")
+        await s.commit()
+        ids = {"over": over.id, "exact": exact.id}
+
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        entries = (await s.execute(select(JournalEntry).where(JournalEntry.source_type == "shift"))).scalars().all()
+        assert [e.source_id for e in entries] == [ids["over"]]           # the exact count posted nothing
+        lines = await entry_lines(s, entries[0].id)
+        assert {(l.memo, l.debit, l.credit) for l in lines} == {
+            ("variance_over", Decimal("2000.00"), Decimal("0.00")),
+            ("variance_over", Decimal("0.00"), Decimal("2000.00")),
+        }
+        balances = await account_balances(s)
+        assert balances["5800"] == Decimal("-2000.00")                   # over reduces the same expense
+        assert balances["1100"] == Decimal("14000.00")                   # 22 sale − 10 drop + 2 over
+
+
+async def test_a_refused_posting_leaves_the_shift_open(session_factory, shop):
+    """The variance posts in the caller's transaction: if the ledger refuses,
+    the close goes with it and the till is still open, unclosed and uncounted."""
+    from app.models import JournalEntry
+    from app.services.posting_rules import rules_for
+
+    c = shop
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        shift = await open_shift(s, c["bid"], staff_id=c["sari"], opening_float=Decimal(100000))
+        await _sell(s, c, "sari", 1, [("cash", 22000)])
+        await s.commit()
+        sid = shift.id
+
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        rule = (await rules_for(s, "ShiftClosed"))["variance_short"]
+        await s.execute(text("update posting_rules set debit_code = '9999' where id = :id"), {"id": str(rule.id)})
+        await s.commit()
+
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        shift = await s.get(Shift, sid)
+        with pytest.raises(Exception) as exc:
+            await close_shift(s, shift, counted_cash=Decimal(120000), closed_by=c["owner"])
+        assert "account" in str(exc.value) or "9999" in str(exc.value)
+        await s.rollback()
+
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        shift = await s.get(Shift, sid)
+        assert shift.status == "open" and shift.closed_at is None
+        assert shift.expected_cash is None and shift.counted_cash is None and shift.variance is None
+        assert (await s.execute(select(func.count(JournalEntry.id)).where(JournalEntry.source_type == "shift"))).scalar_one() == 0
+        assert await current_shift(s, c["sari"]) is not None
+
+
+async def test_pos_close_reports_the_reconciliation(session_factory, shop):
+    """The kiosk's close sheet gets every line of the sum it is showing."""
+    from app.api.pos import pos_close_shift, pos_current_shift, pos_open_shift, pos_record_cash
+    from app.schemas.pos import CashMovementIn, ShiftCloseIn, ShiftOpenIn
+
+    c = shop
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        ctx = SimpleNamespace(session=s, business_id=c["bid"], staff_id=c["sari"])
+        await pos_open_shift(ShiftOpenIn(opening_float=Decimal(100000)), ctx)
+        await _sell(s, c, "sari", 2, [("cash", 44000)])
+        await pos_record_cash(CashMovementIn(kind="cash_in", amount=Decimal(20000), reason="tambah modal"), ctx)
+        await pos_record_cash(
+            CashMovementIn(kind="petty_cash", amount=Decimal(9000), reason="plastik", category="operasional"), ctx
+        )
+        live = await pos_current_shift(ctx)
+        assert (live.cash_sales, live.cash_in, live.cash_out) == (Decimal("44000.00"), Decimal("20000.00"), Decimal("9000.00"))
+        assert live.expected_cash == Decimal("155000.00")
+        closed = await pos_close_shift(ShiftCloseIn(counted_cash=Decimal(155000)), ctx)
+        assert closed.variance == Decimal("0.00") and closed.expected_cash == Decimal("155000.00")
         await s.commit()

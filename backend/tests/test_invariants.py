@@ -593,3 +593,57 @@ async def test_every_business_has_every_standard_posting_rule(conn):
             missing[str(business_id)] = gap
     await conn.rollback()
     assert missing == {}, f"businesses missing standard posting rules: {missing}"
+
+
+# ── M7-T3: every closed shift's variance is on the books ─────────────────────
+#
+# A counted-short till is money that left without a sale. If the shift row
+# records it but the ledger does not, the books quietly drift from the drawer
+# and every statement downstream is wrong by that amount. So: for every closed
+# shift with a non-zero variance there is exactly one ShiftClosed entry naming
+# it as its source, for |variance|, and a shift that counted exactly posts
+# nothing. Iterates tenants as app_role, like the reconciliation checks above.
+
+SHIFT_VARIANCE_SQL = text(
+    """
+    select s.id,
+           s.variance,
+           coalesce(sum(l.debit + l.credit) filter (where l.id is not null), 0) / 2 as posted,
+           count(distinct e.id) as entries
+    from shifts s
+    left join journal_entries e
+           on e.source_type = 'shift' and e.source_id = s.id and e.event_type = 'ShiftClosed'
+    left join journal_lines l on l.entry_id = e.id
+    where s.status = 'closed'
+    group by s.id, s.variance
+    """
+)
+
+
+async def test_closed_shift_variance_is_posted(conn):
+    """M7-T3: shift rows and the ledger agree about the drawer, in every business."""
+    from decimal import Decimal
+
+    business_ids = (await conn.execute(text("select id from businesses"))).scalars().all()
+    assert business_ids, "no businesses — run `python -m app.seed` first"
+    problems: dict[str, list[str]] = {}
+    n_closed = n_with_variance = 0
+    for business_id in business_ids:
+        await conn.rollback()
+        await _set_tenant(conn, business_id)
+        for shift_id, variance, posted, entries in (await conn.execute(SHIFT_VARIANCE_SQL)).all():
+            n_closed += 1
+            variance, posted = Decimal(variance or 0), Decimal(posted or 0)
+            if variance == 0:
+                if entries:
+                    problems.setdefault(str(business_id), []).append(f"{shift_id}: counted exact but posted {entries} entries")
+                continue
+            n_with_variance += 1
+            if entries != 1 or posted != abs(variance):
+                problems.setdefault(str(business_id), []).append(
+                    f"{shift_id}: variance {variance} but {entries} entries totalling {posted}"
+                )
+    await conn.rollback()
+    assert problems == {}, f"closed shifts whose variance is not on the books: {problems}"
+    assert n_closed > 0, "no closed shifts anywhere — the check ran vacuously"
+    assert n_with_variance > 0, "no closed shift had a variance — the check proved nothing"

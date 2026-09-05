@@ -4,8 +4,16 @@ import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { useOwnerData } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
-import { daySubLabel, groupByDay } from "@/lib/dates";
-import type { Business, ExpenseRow, Page, PnlMonth, ReceiptRow } from "@/lib/types";
+import { dayLabel, daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
+import type {
+  Business,
+  CashMovementRow,
+  ExpenseRow,
+  Page,
+  PnlMonth,
+  ReceiptRow,
+  ShiftRow,
+} from "@/lib/types";
 import { DayHeader, EmptyState, ErrorState, Glass, Plate, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconReceipt } from "@/components/icons";
@@ -19,11 +27,20 @@ function monthName(ym: string): string {
 
 const compact = new Intl.NumberFormat("id-ID", { notation: "compact" });
 
+const CASH_KIND_LABEL: Record<CashMovementRow["kind"], string> = {
+  cash_in: "Kas masuk",
+  petty_cash: "Kas kecil",
+  supplier_payment: "Bayar pemasok",
+  bank_drop: "Setor bank",
+};
+
 export default function MoneyPage() {
   const [expensePage, setExpensePage] = useState(1);
   const pnl = useOwnerData<PnlMonth[]>("/api/pnl?months=6");
   const expenses = useOwnerData<Page<ExpenseRow>>(`/api/expenses?page=${expensePage}&page_size=20`);
   const receipts = useOwnerData<Page<ReceiptRow>>("/api/receipts?page=1&page_size=6");
+  const shifts = useOwnerData<ShiftRow[]>("/api/shifts?limit=12");
+  const cash = useOwnerData<CashMovementRow[]>("/api/cash-movements?limit=200");
   const business = useOwnerData<Business>("/api/business");
   const tz = business.data?.timezone;
 
@@ -124,6 +141,124 @@ export default function MoneyPage() {
           </div>
         )}
       </Glass>
+
+
+      {/* Till report (M7-T3) — every closed shift with the sum its count was
+          checked against, and the cash that moved through it. */}
+      <section>
+        <h2 className="flex items-center gap-2 text-base font-bold">
+          Shift &amp; kas laci
+          <HelpTip title="Kas seharusnya">
+            Modal awal + penjualan tunai − refund tunai + kas masuk − kas keluar. Selisihnya
+            (uang dihitung − kas seharusnya) langsung masuk pembukuan, jadi laporan untung/rugi
+            ikut menghitung kas yang hilang atau lebih.
+          </HelpTip>
+        </h2>
+        {shifts.loading ? (
+          <Skeleton className="mt-3 h-40" />
+        ) : shifts.error && !shifts.data ? (
+          <Plate className="mt-3">
+            <ErrorState onRetry={shifts.reload} />
+          </Plate>
+        ) : !shifts.data || shifts.data.length === 0 ? (
+          <Plate className="mt-3">
+            <EmptyState emoji="🧾" title="Belum ada shift">
+              Kasir membuka shift dari kios POS dengan modal awal, lalu menghitung uang laci saat
+              tutup. Hasilnya muncul di sini.
+            </EmptyState>
+          </Plate>
+        ) : (
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {shifts.data.map((shift) => {
+              const variance = Number(shift.variance ?? 0);
+              const open = shift.status === "open";
+              const movements = (cash.data ?? []).filter((m) => m.shift_id === shift.id);
+              return (
+                <Plate key={shift.id} className="px-5 py-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="truncate text-sm font-semibold">{shift.staff_name}</p>
+                    <p className="ink-faint shrink-0 text-xs">
+                      {dayLabel(new Date(shift.opened_at), tz)} · {timeLabel(new Date(shift.opened_at), tz)}
+                      {shift.closed_at ? `–${timeLabel(new Date(shift.closed_at), tz)}` : ""}
+                    </p>
+                  </div>
+                  <dl className="mt-3 space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <dt className="ink-soft">Modal awal</dt>
+                      <dd className="tabular-nums">{formatRupiah(shift.opening_float)}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="ink-soft">Penjualan tunai</dt>
+                      <dd className="tabular-nums">+ {formatRupiah(shift.cash_sales)}</dd>
+                    </div>
+                    {Number(shift.cash_refunds) > 0 && (
+                      <div className="flex justify-between">
+                        <dt className="ink-soft">Refund tunai</dt>
+                        <dd className="tabular-nums">− {formatRupiah(shift.cash_refunds)}</dd>
+                      </div>
+                    )}
+                    {Number(shift.cash_in) > 0 && (
+                      <div className="flex justify-between">
+                        <dt className="ink-soft">Kas masuk</dt>
+                        <dd className="tabular-nums">+ {formatRupiah(shift.cash_in)}</dd>
+                      </div>
+                    )}
+                    {Number(shift.cash_out) > 0 && (
+                      <div className="flex justify-between">
+                        <dt className="ink-soft">Kas keluar</dt>
+                        <dd className="tabular-nums">− {formatRupiah(shift.cash_out)}</dd>
+                      </div>
+                    )}
+                    <div className="hairline-t flex justify-between pt-1">
+                      <dt className="font-medium">Kas seharusnya</dt>
+                      <dd className="font-semibold tabular-nums">{formatRupiah(shift.expected_cash ?? 0)}</dd>
+                    </div>
+                    {open ? (
+                      <p className="ink-faint pt-1 text-xs">Masih buka — belum dihitung.</p>
+                    ) : (
+                      <>
+                        <div className="flex justify-between">
+                          <dt className="ink-soft">Uang dihitung</dt>
+                          <dd className="tabular-nums">{formatRupiah(shift.counted_cash ?? 0)}</dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="font-medium">Selisih</dt>
+                          <dd
+                            className={`font-bold tabular-nums ${
+                              variance < 0 ? "text-red-600" : variance > 0 ? "text-amber-600" : "ink-soft"
+                            }`}
+                          >
+                            {variance === 0
+                              ? "pas"
+                              : `${variance > 0 ? "+ " : "− "}${formatRupiah(Math.abs(variance))}`}
+                          </dd>
+                        </div>
+                      </>
+                    )}
+                  </dl>
+                  {shift.notes && <p className="ink-faint mt-2 text-xs italic">“{shift.notes}”</p>}
+                  {movements.length > 0 && (
+                    <ul className="hairline-t mt-3 space-y-1 pt-2">
+                      {movements.map((m) => (
+                        <li key={m.id} className="flex justify-between gap-2 text-xs">
+                          <span className="ink-soft truncate">
+                            {CASH_KIND_LABEL[m.kind]}
+                            {m.supplier_name ? ` · ${m.supplier_name}` : ""} — {m.reason}
+                          </span>
+                          <span className="shrink-0 tabular-nums">
+                            {m.direction === "in" ? "+ " : "− "}
+                            {formatRupiah(m.amount)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Plate>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="grid gap-8 lg:grid-cols-5">
         {/* Expenses — day-grouped open rows */}

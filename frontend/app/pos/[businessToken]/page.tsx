@@ -68,6 +68,8 @@ type Shift = {
   opened_at: string;
   cash_sales: string;
   cash_refunds: string;
+  cash_in: string;
+  cash_out: string;
   expected_cash: string | null;
   counted_cash: string | null;
   variance: string | null;
@@ -672,16 +674,40 @@ function SellScreen({
             {shiftSheet === "open" ? (
               <p className="ink-soft text-sm">Modal awal di laci kasir.</p>
             ) : shift ? (
-              <div className="ink-soft mt-1 space-y-0.5 text-sm">
-                <p>
-                  Modal awal {formatRupiah(shift.opening_float)} · tunai masuk {formatRupiah(shift.cash_sales)}
-                  {Number(shift.cash_refunds) > 0 ? ` · tunai keluar ${formatRupiah(shift.cash_refunds)}` : ""}
-                </p>
-                <p>
-                  Kas seharusnya{" "}
-                  <span className="font-semibold tabular-nums">{formatRupiah(shift.expected_cash ?? 0)}</span>
-                </p>
-              </div>
+              // M7-T3: the count is only trustworthy if the cashier can see the
+              // sum it is being checked against, line by line.
+              <dl className="mt-3 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <dt className="ink-soft">Modal awal</dt>
+                  <dd className="tabular-nums">{formatRupiah(shift.opening_float)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="ink-soft">Penjualan tunai</dt>
+                  <dd className="tabular-nums">+{formatRupiah(shift.cash_sales)}</dd>
+                </div>
+                {Number(shift.cash_refunds) > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="ink-soft">Refund tunai</dt>
+                    <dd className="tabular-nums">−{formatRupiah(shift.cash_refunds)}</dd>
+                  </div>
+                )}
+                {Number(shift.cash_in) > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="ink-soft">Kas masuk</dt>
+                    <dd className="tabular-nums">+{formatRupiah(shift.cash_in)}</dd>
+                  </div>
+                )}
+                {Number(shift.cash_out) > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="ink-soft">Kas keluar</dt>
+                    <dd className="tabular-nums">−{formatRupiah(shift.cash_out)}</dd>
+                  </div>
+                )}
+                <div className="hairline-t flex justify-between pt-1">
+                  <dt className="font-semibold">Kas seharusnya</dt>
+                  <dd className="font-semibold tabular-nums">{formatRupiah(shift.expected_cash ?? 0)}</dd>
+                </div>
+              </dl>
             ) : null}
             <label className="mt-5 block">
               <span className="ink-faint text-xs font-medium uppercase tracking-wide">
@@ -822,6 +848,13 @@ function SellScreen({
               Shift ditutup · {shiftResult.staff_name}
             </p>
             <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="ink-soft">Modal awal + tunai bersih</dt>
+                <dd className="tabular-nums">{formatRupiah(shiftResult.opening_float)} + {formatRupiah(
+                  Number(shiftResult.cash_sales) - Number(shiftResult.cash_refunds) +
+                    Number(shiftResult.cash_in) - Number(shiftResult.cash_out),
+                )}</dd>
+              </div>
               <div className="flex justify-between">
                 <dt className="ink-soft">Kas seharusnya</dt>
                 <dd className="font-semibold tabular-nums">{formatRupiah(shiftResult.expected_cash ?? 0)}</dd>

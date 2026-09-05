@@ -29,6 +29,7 @@ from app.services.catalog import (
 )
 from app.services.accounts import ensure_standard_chart
 from app.services.posting_rules import ensure_standard_rules
+from app.services.shifts import post_variance
 from app.services.stock import record_movement
 from app.services.suppliers import create_supplier
 from app.services.units import ensure_standard_uoms
@@ -254,7 +255,8 @@ async def seed() -> None:
 
         # Shifts (M7-T1): yesterday Sari opened with a 200.000 float, rang up
         # her sales, and counted 5.000 short at close. Today's till is not open
-        # yet — the kiosk opens it.
+        # yet — the kiosk opens it. The 5.000 short is posted (M7-T3) like a
+        # real close would post it, so the books match the till report.
         yesterday = (now - timedelta(days=1)).astimezone(ZoneInfo("Asia/Jakarta"))
         opened_at = yesterday.replace(hour=7, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
         closed_at = yesterday.replace(hour=21, minute=5, second=0, microsecond=0).astimezone(timezone.utc)
@@ -271,6 +273,7 @@ async def seed() -> None:
         for order, payment in yesterday_till:
             order.shift_id = shift.id
             payment.shift_id = shift.id
+        await post_variance(session, shift)
 
         # Books (M6-T4/M6-T5): the opening stock is capitalised as owner's
         # capital and the history's sales post through the engine, one summary
