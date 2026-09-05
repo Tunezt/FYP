@@ -1,0 +1,237 @@
+"""How a bill is built (roadmap M7-T4): discounts, tax, service charge, rounding.
+
+`price_order` is a **pure function**. It takes the lines, the business's
+settings and an optional bill discount, and returns every figure an order row
+carries. It touches no session, so the arithmetic can be pinned down by a table
+of cases rather than by running sales — which is the point, because this is
+where being off by one rupiah compounds into a broken ledger.
+
+The four knobs and what they mean:
+
+  tax_inclusive        menu prices already contain the tax (the usual warung),
+                       so tax is *extracted* from the line totals rather than
+                       added on top.
+  service_before_tax   the service charge sits inside the taxable base, so it
+                       is taxed too. Otherwise tax is worked out first and the
+                       service charge is taken on the tax-inclusive amount.
+  rounding_unit        rupiah rounding at the total (100 = to the nearest
+                       hundred). 0 turns it off.
+  rounding_mode        nearest (half up), up, or down.
+
+The identity every result satisfies, and which `test_pricing` asserts on all
+twelve combinations:
+
+  exclusive tax:  total = subtotal − discount + service_charge + tax + rounding
+  inclusive tax:  total = subtotal − discount + service_charge + rounding
+                  (tax_total is the tax *contained* in those figures, and is
+                  reported so the ledger can move it out of revenue)
+
+Applying this at the till — the manager-PIN gate on discounts, the order rows,
+the journal entry and the UI — is M7-T4b. Nothing here writes anything.
+"""
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import PricingSettings
+
+MONEY = Decimal("0.01")
+ROUNDING_MODES = ("nearest", "up", "down")
+
+
+def q(amount: Decimal) -> Decimal:
+    """To the rupiah cent, half up. Every intermediate figure goes through this,
+    so a total is always the sum of figures that were themselves rounded — the
+    same order the receipt prints them in."""
+    return Decimal(amount).quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+class PricingInvalid(Exception):
+    """`code`: quantity, price, discount, line_discount, mode, rate, unit."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
+@dataclass(frozen=True)
+class PricingConfig:
+    """The business's settings, detached from the ORM row so `price_order`
+    stays pure and a test can state a case in one literal."""
+
+    tax_rate: Decimal = Decimal(0)
+    tax_inclusive: bool = True
+    service_charge_rate: Decimal = Decimal(0)
+    service_before_tax: bool = True
+    rounding_unit: Decimal = Decimal(0)
+    rounding_mode: str = "nearest"
+    discount_requires_pin: bool = True
+
+    @classmethod
+    def from_row(cls, row: PricingSettings) -> "PricingConfig":
+        return cls(
+            tax_rate=Decimal(row.tax_rate),
+            tax_inclusive=bool(row.tax_inclusive),
+            service_charge_rate=Decimal(row.service_charge_rate),
+            service_before_tax=bool(row.service_before_tax),
+            rounding_unit=Decimal(row.rounding_unit),
+            rounding_mode=row.rounding_mode,
+            discount_requires_pin=bool(row.discount_requires_pin),
+        )
+
+
+@dataclass(frozen=True)
+class LineInput:
+    unit_price: Decimal
+    quantity: Decimal
+    line_discount: Decimal = Decimal(0)   # an amount off this line, not a rate
+
+
+@dataclass(frozen=True)
+class PricedLine:
+    unit_price: Decimal
+    quantity: Decimal
+    gross: Decimal          # unit_price × quantity
+    line_discount: Decimal
+    line_total: Decimal     # gross − line_discount
+
+
+@dataclass(frozen=True)
+class PricedOrder:
+    """Exactly the figures an `orders` row carries, plus the priced lines."""
+
+    subtotal: Decimal          # Σ gross, before any discount
+    discount_total: Decimal    # line discounts + the bill discount
+    service_charge: Decimal
+    tax_total: Decimal         # added on top (exclusive) or contained (inclusive)
+    rounding: Decimal          # total − the figure before rounding
+    total: Decimal
+    tax_inclusive: bool
+    lines: tuple[PricedLine, ...]
+
+    @property
+    def net(self) -> Decimal:
+        """What the goods cost after discounts, at menu prices."""
+        return q(self.subtotal - self.discount_total)
+
+
+def round_total(amount: Decimal, unit: Decimal, mode: str) -> Decimal:
+    """Rupiah rounding at the total. `unit` 0 means none."""
+    unit = Decimal(unit)
+    if unit < 0:
+        raise PricingInvalid("unit")
+    if mode not in ROUNDING_MODES:
+        raise PricingInvalid("mode")
+    if unit == 0:
+        return q(amount)
+    steps = Decimal(amount) / unit
+    if mode == "nearest":
+        steps = steps.quantize(Decimal(1), rounding=ROUND_HALF_UP)
+    elif mode == "up":
+        steps = steps.to_integral_value(rounding=ROUND_CEILING)
+    else:
+        steps = steps.to_integral_value(rounding=ROUND_FLOOR)
+    return q(steps * unit)
+
+
+def price_order(
+    lines: list[LineInput],
+    config: PricingConfig,
+    *,
+    bill_discount: Decimal = Decimal(0),
+) -> PricedOrder:
+    """Price one bill. Raises rather than silently clamping: a discount larger
+    than the bill, a negative quantity or an unknown rounding mode is a bug in
+    the caller, and a till that quietly charges something else is worse than a
+    till that refuses."""
+    if config.tax_rate < 0 or config.tax_rate >= 1 or config.service_charge_rate < 0 or config.service_charge_rate >= 1:
+        raise PricingInvalid("rate")
+
+    priced: list[PricedLine] = []
+    subtotal = Decimal(0)
+    line_discounts = Decimal(0)
+    for line in lines:
+        quantity, unit_price = Decimal(line.quantity), Decimal(line.unit_price)
+        discount = q(line.line_discount or 0)
+        if quantity <= 0:
+            raise PricingInvalid("quantity")
+        if unit_price < 0:
+            raise PricingInvalid("price")
+        gross = q(unit_price * quantity)
+        if discount < 0 or discount > gross:
+            raise PricingInvalid("line_discount")
+        priced.append(PricedLine(q(unit_price), quantity, gross, discount, q(gross - discount)))
+        subtotal += gross
+        line_discounts += discount
+
+    subtotal = q(subtotal)
+    bill_discount = q(bill_discount or 0)
+    if bill_discount < 0:
+        raise PricingInvalid("discount")
+    discount_total = q(line_discounts + bill_discount)
+    if discount_total > subtotal:
+        raise PricingInvalid("discount")
+
+    net = q(subtotal - discount_total)
+    tax_rate, sc_rate = Decimal(config.tax_rate), Decimal(config.service_charge_rate)
+
+    if not config.tax_inclusive:
+        # Menu prices exclude tax: service and tax are both added on top.
+        if config.service_before_tax:
+            service = q(net * sc_rate)
+            tax = q((net + service) * tax_rate)
+        else:
+            tax = q(net * tax_rate)
+            service = q((net + tax) * sc_rate)
+        before_rounding = q(net + service + tax)
+    else:
+        # Menu prices include tax: the tax already inside `net` is extracted,
+        # never added, or the customer would be charged it twice.
+        net_ex = q(net / (1 + tax_rate))
+        contained = q(net - net_ex)
+        if config.service_before_tax:
+            # The service charge is taxed too, so it is taken on the ex-tax
+            # amount and carries its own tax into what the customer pays.
+            service_ex = q(net_ex * sc_rate)
+            service_tax = q(service_ex * tax_rate)
+            service = q(service_ex + service_tax)
+            tax = q(contained + service_tax)
+        else:
+            service = q(net * sc_rate)
+            tax = contained
+        before_rounding = q(net + service)
+
+    total = round_total(before_rounding, config.rounding_unit, config.rounding_mode)
+    return PricedOrder(
+        subtotal=subtotal,
+        discount_total=discount_total,
+        service_charge=service,
+        tax_total=tax,
+        rounding=q(total - before_rounding),
+        total=total,
+        tax_inclusive=config.tax_inclusive,
+        lines=tuple(priced),
+    )
+
+
+# ── the business's settings ─────────────────────────────────────────────────
+
+
+async def ensure_pricing_settings(session: AsyncSession, business_id: uuid.UUID) -> PricingSettings:
+    """Every business has exactly one row. Created at registration; migration
+    0019 backfills the ones that existed before."""
+    row = (await session.execute(select(PricingSettings))).scalar_one_or_none()
+    if row is None:
+        row = PricingSettings(business_id=business_id)
+        session.add(row)
+        await session.flush()
+    return row
+
+
+async def pricing_config(session: AsyncSession, business_id: uuid.UUID) -> PricingConfig:
+    return PricingConfig.from_row(await ensure_pricing_settings(session, business_id))

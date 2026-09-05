@@ -756,3 +756,25 @@ class CashMovement(Base):
     expense_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("expenses.id"))
     occurred_at: Mapped[datetime] = _now()
     created_at: Mapped[datetime] = _now()
+
+
+class PricingSettings(Base):
+    """How a bill is built for one business (migration 0019, roadmap M7-T4):
+    tax, service charge, rupiah rounding and the discount gate. Defaults are
+    the plain warung — nothing added, and a manager PIN before any discount."""
+
+    __tablename__ = "pricing_settings"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    tax_rate: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, server_default="0")
+    tax_inclusive: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    service_charge_rate: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, server_default="0")
+    service_before_tax: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    rounding_unit: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    rounding_mode: Mapped[str] = mapped_column(Text, nullable=False, server_default="nearest")
+    discount_requires_pin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()

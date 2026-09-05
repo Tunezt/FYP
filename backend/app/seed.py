@@ -29,6 +29,7 @@ from app.services.catalog import (
 )
 from app.services.accounts import ensure_standard_chart
 from app.services.posting_rules import ensure_standard_rules
+from app.services.pricing import ensure_pricing_settings
 from app.services.shifts import post_variance
 from app.services.stock import record_movement
 from app.services.suppliers import create_supplier
@@ -134,6 +135,7 @@ async def seed() -> None:
         uoms = await ensure_standard_uoms(session, business_id)
         await ensure_standard_chart(session, business_id)  # M6-T1
         await ensure_standard_rules(session, business_id)  # M6-T3
+        await ensure_pricing_settings(session, business_id)  # M7-T4
         for sname, sphone, saddress in SUPPLIERS:  # M5-T1
             await create_supplier(session, business_id, name=sname, phone=sphone, address=saddress)
 

@@ -24,8 +24,11 @@ MONEY_OR_QUANTITY = re.compile(
     r"amount|price|total|cost|stock|quantity|qty|threshold|discount|charge|rounding|debit|credit|float|cash|variance"
 )
 # Columns that merely *name* a money thing without holding a number (`debit_code`
-# on posting rules, `unit_price_written` flags) — never numeric by design.
-NOT_A_NUMBER = re.compile(r"_(code|id|type|written|at|name|key|text)$")
+# on posting rules, `unit_price_written` flags, `rounding_mode` and
+# `discount_requires_pin` on pricing settings) — never numeric by design. The
+# invariant is unchanged: everything that does hold rupiah still has to be
+# numeric, and KNOWN_MONEY_COLUMNS below proves the pattern still catches them.
+NOT_A_NUMBER = re.compile(r"_(code|id|type|written|at|name|key|text|mode|pin)$")
 
 
 def _is_money_column(column: str) -> bool:
@@ -79,6 +82,8 @@ KNOWN_MONEY_COLUMNS = {
     ("goods_receipt_lines", "line_total"),
     ("journal_lines", "debit"),
     ("journal_lines", "credit"),
+    ("pricing_settings", "service_charge_rate"),
+    ("pricing_settings", "rounding_unit"),
 }
 
 # pg_catalog rather than information_schema: the latter only lists columns the

@@ -21,6 +21,7 @@ from app.models.models import (  # noqa: F401
     PendingConfirmation,
     PoLine,
     PostingRule,
+    PricingSettings,
     Shift,
     CashMovement,
     PurchaseOrder,
