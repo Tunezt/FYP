@@ -234,5 +234,11 @@ raised anything:
 ### Still to do
 
 - Live-classify questions 16–30 (the out-of-scope half) — one command, one day's quota.
+  **Retried 2026-09-06 05:39 UTC and still blocked**: `gemini-2.5-flash` answered question 16
+  (*"harga beli terakhir susu uht brp"* → `get_supplier_prices`, correct) and then returned
+  429 RESOURCE_EXHAUSTED on question 17, so the day's free-tier allowance was already spent by
+  the earlier run. The stub run block that attempt appended is removed — one question is not a
+  run. Re-run `python -m app.eval --mode live --offset 15 --systems tools` on a fresh day, or
+  on a key with a paid tier, to classify the ten out-of-scope questions live.
 - Run the baseline on a Postgres with tzdata (or Supabase, roadmap M12) so its accuracy is
   measured fairly and its silent-error rate is a ceiling rather than a floor.

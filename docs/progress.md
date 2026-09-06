@@ -1148,3 +1148,20 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Two things the tests caught, both fixed in the code, neither by weakening a test.** The money-column guard (`test_no_float_money`) rejected `service_charge_order_types text[]`: a column whose name says "charge" must hold rupiah. The guard is right, so the column is named `service_applies_to` — for what it holds, not for the charge it governs. And the kitchen board's line order was luck: `order_lines.created_at` defaults to `now()`, which in Postgres is transaction time and therefore identical for every line of one sale, so ordering by `(created_at, id)` was ordering by a random uuid. The board now sorts by item name, so the same ticket reads the same way twice.
 **Deviation:** none. Schema change is additive (two columns on `pricing_settings`, two on `orders`, one account and two posting rules backfilled).
 **Next:** tag `checkpoint/M11`. M0–M11 are complete. M12 (live integration: Supabase, Meta, Railway, Vercel) is human-blocked by design — credentials are a stop condition (roadmap §3), so it is not started. The open non-blocking item stays: live-evaluate questions 16–30 (`python -m app.eval --mode live --offset 15`) when the Gemini free-tier daily quota allows, and re-run the text-to-SQL baseline on a Postgres with tzdata. Canary due after 3 more tasks (last after M11-T1: M11-T2, M11-T3 = 2).
+
+### [M12] Live integration — NEEDS HUMAN, not started
+**Date:** 2026-09-06
+**Status:** NEEDS HUMAN (roadmap §3: a task needs credentials that do not exist)
+**Changed:** docs/evaluation.md (the quota retry recorded; the stub run block it appended removed)
+**Gates:** n/a — nothing was built. The tree at this point is `checkpoint/M11`: pytest 388 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok.
+**Notes:**
+- **M0 through M11 are complete and tagged.** Every task in the roadmap that can be done without an external account is done, one task per commit, with all four gates green before each. The last canary (roadmap §0.3) ran after M11-T1: `git stash list` empty, `alembic downgrade base && upgrade head`, seed, 374 passed; the schema was rebuilt from base again during M11-T3 and re-seeded.
+- **M12 is where the build stops by design.** All four of its tasks need credentials that do not exist in this repository and that I must not invent (roadmap §1 "Never invent credentials", §3):
+  - **M12-T1** a new Supabase project (URL, anon key, service key, database password), then the restore sequence in `PROJECT-STATUS.md` §5.
+  - **M12-T2** a Meta app: WhatsApp Business account, phone number ID, permanent access token, webhook verify token, and the **two message templates submitted first** — review takes 24h or more, so this is the long pole. Nothing here can be stubbed and reported as working.
+  - **M12-T3** a real handset on the allow-list to receive one live nightly alert.
+  - **M12-T4** Railway (API + cron) and Vercel (frontend) accounts and their deploy tokens.
+- **What I need to continue:** the accounts created and their secrets placed in `backend/.env` (Supabase, Meta) and in the Railway/Vercel dashboards. Then M12-T1 through M12-T4 can run in order; M12-T2's template submission should go first because of the review wait.
+- **The other open item, non-blocking and unchanged:** the live evaluation of questions 16–30 and the text-to-SQL baseline on a Postgres with tzdata. Retried today at 05:39 UTC: question 16 classified correctly, then 429 RESOURCE_EXHAUSTED — the free tier's daily allowance was already spent by the earlier run. The command and what it would settle are in `docs/evaluation.md` under "Still to do". This does not block anything in the build; the tools-versus-baseline evidence that exists (15 questions, 0% silent error against 13%) already stands on its own.
+**Deviation:** none. No work was started on M12.
+**Next:** nothing, until a human supplies the M12 credentials. The build is at `checkpoint/M11`.
