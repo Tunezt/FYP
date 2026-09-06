@@ -683,3 +683,47 @@ class PromoOut(BaseModel):
     conditions: list[PromoConditionOut]
     applications: int = 0
     given_away: Decimal = Decimal(0)
+
+
+# ── Vouchers (M8-T4) ────────────────────────────────────────────────────────
+
+
+class VoucherCreateIn(BaseModel):
+    """One code (`code`) or a batch (`count` > 1, generated with `prefix`)."""
+
+    kind: Literal["percent_off", "amount_off"]
+    value: Decimal = Field(gt=0)
+    code: str | None = Field(default=None, min_length=3, max_length=32)
+    count: int = Field(default=1, ge=1, le=1000)
+    prefix: str = Field(default="", max_length=8)
+    batch_name: str | None = Field(default=None, max_length=120)
+    max_discount: Decimal | None = Field(default=None, gt=0)
+    min_spend: Decimal = Field(default=Decimal(0), ge=0)
+    starts_at: datetime | None = None
+    expires_at: datetime | None = None
+    max_uses: int = Field(default=1, ge=1, le=1000000)
+
+
+class VoucherUpdateIn(BaseModel):
+    is_active: bool | None = None
+    expires_at: datetime | None = None
+    max_uses: int | None = Field(default=None, ge=1)
+
+
+class VoucherOut(BaseModel):
+    id: uuid.UUID
+    code: str
+    kind: str
+    value: Decimal
+    max_discount: Decimal | None
+    min_spend: Decimal
+    starts_at: datetime | None
+    expires_at: datetime | None
+    max_uses: int
+    uses: int
+    batch_id: uuid.UUID | None
+    batch_name: str | None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

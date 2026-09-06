@@ -52,6 +52,8 @@ type Receipt = {
   discount_total: string;
   promo_total: string;
   promo_names: string[];
+  voucher_total: string;
+  voucher_code: string | null;
   service_charge: string;
   tax_total: string;
   tax_inclusive: boolean;
@@ -77,6 +79,9 @@ type Quote = {
   discount_total: string;
   promo_total: string;
   promos: { promo_id: string; name: string; amount: string; bonus_quantity: string }[];
+  voucher_total: string;
+  voucher_code: string | null;
+  voucher_error: string | null;
   lines: { item_id: string; quantity: string; is_bonus: boolean; promo_name: string | null; promo_discount: string }[];
   service_charge: string;
   tax_total: string;
@@ -371,6 +376,7 @@ function SellScreen({
   const [payMode, setPayMode] = useState<PayMode>("cash");
   // Discounts and the priced bill (M7-T4b).
   const [billDiscount, setBillDiscount] = useState("");
+  const [voucherCode, setVoucherCode] = useState("");
   const [managerPin, setManagerPin] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [lineDiscountFor, setLineDiscountFor] = useState<string | null>(null);
@@ -564,6 +570,7 @@ function SellScreen({
             line_discount: l.discount,
           })),
           bill_discount: Number(billDiscount || 0),
+          voucher_code: voucherCode.trim() || null,
         },
       })
         .then((q) => {
@@ -576,7 +583,7 @@ function SellScreen({
         });
     }, 150);
     return () => clearTimeout(handle);
-  }, [cart, billDiscount, token]);
+  }, [cart, billDiscount, voucherCode, token]);
 
   const stockCap = (item: Item) => (item.made_to_order ? 999 : Number(item.current_stock));
 
@@ -686,11 +693,13 @@ function SellScreen({
           bill_discount: Number(billDiscount || 0),
           manager_pin: needsPin ? managerPin || null : null,
           customer_id: customer?.id ?? null,
+          voucher_code: quote?.voucher_code ?? null,
         },
       });
       setFlash(res);
       setCart([]);
       setBillDiscount("");
+      setVoucherCode("");
       setManagerPin("");
       setQuote(null);
       setCustomer(null);
@@ -1271,6 +1280,12 @@ function SellScreen({
                     <dd className="tabular-nums">− {formatRupiah(quote.discount_total)}</dd>
                   </div>
                 )}
+                {Number(quote.voucher_total) > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="ink-soft">Voucher {quote.voucher_code}</dt>
+                    <dd className="tabular-nums">− {formatRupiah(quote.voucher_total)}</dd>
+                  </div>
+                )}
                 {quote.promos.map((p, i) => (
                   <div key={`${p.promo_id}-${i}`} className="flex justify-between">
                     <dt className="ink-soft truncate">
@@ -1393,7 +1408,19 @@ function SellScreen({
                 </div>
               )}
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            <label className="mt-3 block">
+              <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">Kode voucher</span>
+              <input
+                value={voucherCode}
+                onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                className="glass-card mt-1 w-full rounded-2xl px-3 py-2 font-mono text-sm"
+                placeholder="mis. HEMAT5"
+              />
+              {quote?.voucher_error && voucherCode.trim() && (
+                <span className="mt-1 block text-xs text-red-600">{quote.voucher_error}</span>
+              )}
+            </label>
+            <div className="mt-3 grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">Diskon struk (Rp)</span>
                 <input
@@ -1578,6 +1605,7 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
         <hr className="my-3 border-dashed border-black" />
         {(Number(receipt.discount_total) > 0 ||
           Number(receipt.promo_total) > 0 ||
+          Number(receipt.voucher_total) > 0 ||
           Number(receipt.service_charge) > 0 ||
           Number(receipt.tax_total) > 0 ||
           Number(receipt.rounding) !== 0) && (
@@ -1596,6 +1624,12 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
               <div className="flex justify-between">
                 <span>Promo{receipt.promo_names.length ? ` (${receipt.promo_names.join(", ")})` : ""}</span>
                 <span>-{formatRupiah(receipt.promo_total)}</span>
+              </div>
+            )}
+            {Number(receipt.voucher_total) > 0 && (
+              <div className="flex justify-between">
+                <span>Voucher {receipt.voucher_code ?? ""}</span>
+                <span>-{formatRupiah(receipt.voucher_total)}</span>
               </div>
             )}
             {Number(receipt.service_charge) > 0 && (

@@ -67,6 +67,7 @@ from app.services.orders import (
     void_order,
 )
 from app.services.customers import CustomerInvalid
+from app.services.vouchers import VoucherInvalid
 from app.services.points import InsufficientPoints, PointsInvalid
 from app.services.pricing import PricingInvalid
 from app.services.sales import InsufficientStock, ItemNotFound, record_sale
@@ -278,8 +279,20 @@ async def pos_quote(payload: QuoteIn, ctx: PosCtx):
         LineInput(unit_price=i.unit_price, quantity=i.quantity, line_discount=i.line_discount, promo_discount=d)
         for i, d in zip(inputs, promo.line_discounts)
     ] + bonus_inputs
+    # A voucher code (M8-T4): validated here so the cashier sees why it fails; the use is only taken by the sale.
+    from app.services.vouchers import check_voucher, normalize_code, voucher_by_code
+
+    voucher_amount, voucher_error = Decimal(0), None
+    if payload.voucher_code:
+        try:
+            before = price_order(all_inputs, config, bill_discount=payload.bill_discount, promo_bill_discount=promo.bill_discount)
+            voucher_amount = check_voucher(await voucher_by_code(ctx.session, payload.voucher_code), base=before.net, at=datetime.now(_tz.utc)).amount
+        except VoucherInvalid as exc:
+            voucher_error = _voucher_message(exc)
+        except PricingInvalid as exc:
+            raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
     try:
-        bill = price_order(all_inputs, config, bill_discount=payload.bill_discount, promo_bill_discount=promo.bill_discount)
+        bill = price_order(all_inputs, config, bill_discount=payload.bill_discount, promo_bill_discount=promo.bill_discount, voucher_discount=voucher_amount)
     except PricingInvalid as exc:
         raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
     item_ids = [l.item_id for l in payload.lines] + [b.item_id for b in promo.bonus_lines]
@@ -287,6 +300,8 @@ async def pos_quote(payload: QuoteIn, ctx: PosCtx):
     return QuoteOut(
         subtotal=bill.subtotal, discount_total=bill.discount_total, promo_total=bill.promo_total,
         promos=[QuotePromoOut(promo_id=a.promo_id, name=a.promo_name, amount=a.amount, bonus_quantity=a.bonus_quantity) for a in promo.applications],
+        voucher_total=bill.voucher_total, voucher_code=normalize_code(payload.voucher_code) if payload.voucher_code and not voucher_error else None,
+        voucher_error=voucher_error,
         service_charge=bill.service_charge,
         tax_total=bill.tax_total, tax_inclusive=bill.tax_inclusive, rounding=bill.rounding, total=bill.total,
         discount_requires_pin=config.discount_requires_pin,
@@ -320,7 +335,10 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             bill_discount=payload.bill_discount,
             manager_pin=payload.manager_pin,
             customer_id=payload.customer_id,
+            voucher_code=payload.voucher_code,
         )
+    except VoucherInvalid as exc:
+        raise HTTPException(status_code=409 if exc.code == "used_up" else 422, detail=_voucher_message(exc))
     except CustomerInvalid:
         raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan atau sudah tidak aktif")
     except InsufficientPoints as exc:
@@ -386,6 +404,7 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         subtotal=order.subtotal,
         discount_total=order.discount_total,
         promo_total=order.promo_total,
+        voucher_total=order.voucher_total,
         service_charge=order.service_charge,
         tax_total=order.tax_total,
         rounding=order.rounding,
@@ -424,6 +443,14 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
     from app.models import Promo
     from app.services.promos import applications_of_order
 
+    from app.models import Voucher
+    from app.services.vouchers import redemptions_of_order
+
+    voucher_code = None
+    for red in await redemptions_of_order(ctx.session, order.id):
+        if red.amount > 0:
+            v = await ctx.session.get(Voucher, red.voucher_id)
+            voucher_code = v.code if v else None
     promo_names: list[str] = []
     for app_ in await applications_of_order(ctx.session, order.id):
         pr = await ctx.session.get(Promo, app_.promo_id)
@@ -453,6 +480,8 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
         discount_total=order.discount_total,
         promo_total=order.promo_total,
         promo_names=promo_names,
+        voucher_total=order.voucher_total,
+        voucher_code=voucher_code,
         service_charge=order.service_charge,
         tax_total=order.tax_total,
         tax_inclusive=config.tax_inclusive,
@@ -530,6 +559,24 @@ _CUSTOMER_ERRORS = {
     "duplicate_phone": (409, "Nomor HP ini sudah terdaftar atas pelanggan lain"),
     "not_found": (404, "Pelanggan tidak ditemukan atau sudah tidak aktif"),
 }
+_VOUCHER_ERRORS = {
+    "not_found": "Kode voucher tidak dikenali",
+    "inactive": "Voucher ini sudah dinonaktifkan",
+    "not_started": "Voucher ini belum berlaku",
+    "expired": "Voucher ini sudah kedaluwarsa",
+    "used_up": "Voucher ini sudah terpakai",
+    "min_spend_not_met": "Voucher ini berlaku untuk belanja minimal Rp {}",
+}
+
+
+def _voucher_message(exc) -> str:
+    template = _VOUCHER_ERRORS.get(exc.code, "Voucher tidak bisa dipakai")
+    try:
+        return template.format(f"{Decimal(exc.detail):,.0f}".replace(",", ".")) if exc.detail else template
+    except Exception:
+        return template
+
+
 _POINTS_ERRORS = {
     "inactive": "Program poin belum aktif — nyalakan di dashboard",
     "customer": "Bayar pakai poin perlu pelanggan terdaftar",

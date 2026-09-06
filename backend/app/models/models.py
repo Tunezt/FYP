@@ -71,6 +71,9 @@ points_reason = Enum(
 promo_kind = Enum(
     "percent_off", "amount_off", "bonus_item", name="promo_kind", create_type=False
 )
+voucher_kind = Enum(
+    "percent_off", "amount_off", name="voucher_kind", create_type=False
+)
 promo_condition_kind = Enum(
     "date_range", "day_of_week", "time_window", "min_spend", "multiples", name="promo_condition_kind", create_type=False
 )
@@ -345,6 +348,7 @@ class Order(Base):
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     discount_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     promo_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")  # M8-T3, migration 0023
+    voucher_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")  # M8-T4, migration 0024
     tax_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     service_charge: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     rounding: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
@@ -911,4 +915,48 @@ class PromoApplication(Base):
     order_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("order_lines.id"))
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     bonus_quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, server_default="0")
+    created_at: Mapped[datetime] = _now()
+
+
+class Voucher(Base):
+    """A code with an expiry and a use count (migration 0024, roadmap M8-T4).
+    `uses` is the guard: taken with an atomic conditional UPDATE."""
+
+    __tablename__ = "vouchers"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(voucher_kind, nullable=False)
+    value: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    max_discount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    min_spend: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    max_uses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    uses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    batch_name: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class VoucherRedemption(Base):
+    """Append-only: one row per redemption, a negative row when a refund or
+    void gives the use back (migration 0024)."""
+
+    __tablename__ = "voucher_redemptions"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    voucher_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("vouchers.id"), nullable=False)
+    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    reversal_of: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("voucher_redemptions.id"))
     created_at: Mapped[datetime] = _now()

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
-import type { InventoryItem, PromoCondition, PromoRow } from "@/lib/types";
+import type { InventoryItem, PromoCondition, PromoRow, VoucherRow } from "@/lib/types";
 import { EmptyState, ErrorState, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
@@ -51,8 +51,74 @@ function describeConditions(conds: PromoCondition[]): string[] {
   return out.length ? out : ["selalu berlaku"];
 }
 
+type VoucherDraft = {
+  mode: "single" | "batch";
+  code: string;
+  count: string;
+  prefix: string;
+  batch_name: string;
+  kind: VoucherRow["kind"];
+  value: string;
+  max_discount: string;
+  min_spend: string;
+  expires_at: string;
+  max_uses: string;
+};
+const EMPTY_VOUCHER: VoucherDraft = {
+  mode: "single", code: "", count: "10", prefix: "", batch_name: "", kind: "amount_off", value: "", max_discount: "",
+  min_spend: "", expires_at: "", max_uses: "1",
+};
+
 export default function PromosPage() {
   const promos = useOwnerData<PromoRow[]>("/api/promos?include_inactive=true");
+  const [voucherQuery, setVoucherQuery] = useState("");
+  const vouchers = useOwnerData<VoucherRow[]>(`/api/vouchers?q=${encodeURIComponent(voucherQuery)}&include_inactive=true&limit=200`);
+  const [voucherSheet, setVoucherSheet] = useState(false);
+  const [vdraft, setVdraft] = useState<VoucherDraft>(EMPTY_VOUCHER);
+  const [vbusy, setVbusy] = useState(false);
+  const [verror, setVerror] = useState<string | null>(null);
+  const [made, setMade] = useState<VoucherRow[] | null>(null);
+
+  async function saveVoucher() {
+    if (!(Number(vdraft.value) > 0)) {
+      setVerror(vdraft.kind === "percent_off" ? "Isi persen potongan (1–100)." : "Isi potongan rupiah.");
+      return;
+    }
+    if (vdraft.mode === "single" && vdraft.code.trim().length < 3) {
+      setVerror("Kode minimal 3 karakter.");
+      return;
+    }
+    setVbusy(true);
+    setVerror(null);
+    try {
+      const rows = await mutate<VoucherRow[]>("/api/vouchers", {
+        kind: vdraft.kind,
+        value: vdraft.kind === "percent_off" ? (Number(vdraft.value) / 100).toFixed(4) : Number(vdraft.value).toFixed(2),
+        code: vdraft.mode === "single" ? vdraft.code.trim() : null,
+        count: vdraft.mode === "batch" ? Math.max(1, Number(vdraft.count || 1)) : 1,
+        prefix: vdraft.mode === "batch" ? vdraft.prefix.trim() : "",
+        batch_name: vdraft.mode === "batch" ? vdraft.batch_name.trim() || null : null,
+        max_discount: vdraft.kind === "percent_off" && Number(vdraft.max_discount) > 0 ? Number(vdraft.max_discount).toFixed(2) : null,
+        min_spend: Number(vdraft.min_spend || 0).toFixed(2),
+        expires_at: vdraft.expires_at ? new Date(vdraft.expires_at + "T00:00:00").toISOString() : null,
+        max_uses: Math.max(1, Number(vdraft.max_uses || 1)),
+      });
+      setMade(Array.isArray(rows) ? rows : null);
+      setVoucherSheet(false);
+      setVdraft(EMPTY_VOUCHER);
+      vouchers.reload();
+    } catch (e: unknown) {
+      setVerror(e instanceof Error && "detail" in e ? String((e as { detail: string }).detail) : "Gagal menyimpan — coba lagi.");
+    } finally {
+      setVbusy(false);
+    }
+  }
+
+  async function toggleVoucher(v: VoucherRow) {
+    await mutate(`/api/vouchers/${v.id}`, { is_active: !v.is_active }, "PATCH");
+    vouchers.reload();
+  }
+
   const items = useOwnerData<InventoryItem[]>("/api/items");
   const mutate = useOwnerMutation();
   const [editing, setEditing] = useState<PromoRow | "new" | null>(null);
@@ -220,6 +286,148 @@ export default function PromosPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Vouchers (M8-T4) */}
+      <section className="space-y-3 pt-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-base font-bold">
+            Voucher
+            <HelpTip title="Voucher">
+              Kode yang diketik kasir saat bayar. Satu kode bisa sekali pakai atau berkali-kali, punya masa
+              berlaku dan minimal belanja. Dua kasir yang memakai kode sekali-pakai bersamaan: hanya satu yang
+              berhasil.
+            </HelpTip>
+          </h2>
+          <div className="flex items-center gap-2">
+            <input className="field max-w-[12rem]" placeholder="Cari kode" value={voucherQuery} onChange={(e) => setVoucherQuery(e.target.value)} />
+            <button onClick={() => { setVerror(null); setVoucherSheet(true); }} className="btn-quiet flex items-center gap-2 px-3 py-2 text-sm">
+              <IconPlus className="h-4 w-4" /> Buat voucher
+            </button>
+          </div>
+        </div>
+        {made && made.length > 0 && (
+          <Plate className="px-5 py-4">
+            <p className="text-sm font-semibold">{made.length} kode dibuat{made[0].batch_name ? ` — ${made[0].batch_name}` : ""}</p>
+            <p className="mt-1 break-words font-mono text-xs">{made.map((m) => m.code).join("  ")}</p>
+            <button onClick={() => setMade(null)} className="ink-soft mt-2 text-xs">tutup</button>
+          </Plate>
+        )}
+        {vouchers.loading ? (
+          <Skeleton className="h-32" />
+        ) : !vouchers.data || vouchers.data.length === 0 ? (
+          <Plate>
+            <EmptyState emoji="🎟️" title="Belum ada voucher">Buat satu kode, atau sekaligus banyak untuk dibagikan.</EmptyState>
+          </Plate>
+        ) : (
+          <Plate className="overflow-x-auto px-0 py-0">
+            <table className="w-full text-sm">
+              <thead className="ink-faint text-left text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-2">Kode</th>
+                  <th className="px-4 py-2">Potongan</th>
+                  <th className="px-4 py-2">Dipakai</th>
+                  <th className="px-4 py-2">Berlaku sampai</th>
+                  <th className="px-4 py-2">Batch</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {vouchers.data.map((v) => {
+                  const spent = v.uses >= v.max_uses;
+                  const expired = v.expires_at ? new Date(v.expires_at) <= new Date() : false;
+                  return (
+                    <tr key={v.id} className={`hairline-t ${!v.is_active || spent || expired ? "opacity-60" : ""}`}>
+                      <td className="px-4 py-2 font-mono font-semibold">{v.code}</td>
+                      <td className="px-4 py-2 tabular-nums">
+                        {v.kind === "percent_off" ? `${Math.round(Number(v.value) * 10000) / 100}%` : formatRupiah(v.value)}
+                        {v.max_discount ? ` (maks ${formatRupiah(v.max_discount)})` : ""}
+                        {Number(v.min_spend) > 0 ? ` · min ${formatRupiah(v.min_spend)}` : ""}
+                      </td>
+                      <td className="px-4 py-2 tabular-nums">{v.uses} / {v.max_uses}</td>
+                      <td className="px-4 py-2">{v.expires_at ? new Date(v.expires_at).toLocaleDateString("id-ID") : "—"}{expired ? " · kedaluwarsa" : ""}</td>
+                      <td className="ink-soft px-4 py-2">{v.batch_name ?? "—"}</td>
+                      <td className="px-4 py-2 text-right">
+                        <button onClick={() => toggleVoucher(v)} className="btn-quiet px-2.5 py-1 text-xs">{v.is_active ? "Matikan" : "Nyalakan"}</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Plate>
+        )}
+      </section>
+
+      {voucherSheet && (
+        <Sheet open title="Buat voucher" onClose={() => !vbusy && setVoucherSheet(false)}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {(["single", "batch"] as const).map((m) => (
+                <button key={m} type="button" onClick={() => setVdraft({ ...vdraft, mode: m })}
+                  className={`rounded-xl py-2 text-sm font-medium ${vdraft.mode === m ? "bg-accent-gradient text-white" : "glass-card"}`}>
+                  {m === "single" ? "Satu kode" : "Banyak kode (batch)"}
+                </button>
+              ))}
+            </div>
+            {vdraft.mode === "single" ? (
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Kode</span>
+                <input className="field font-mono" placeholder="HEMAT5" value={vdraft.code} onChange={(e) => setVdraft({ ...vdraft, code: e.target.value.toUpperCase() })} autoFocus />
+              </label>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                <label className="block">
+                  <span className="ink-soft mb-1.5 block text-xs font-medium">Jumlah kode</span>
+                  <input className="field" inputMode="numeric" value={vdraft.count} onChange={(e) => setVdraft({ ...vdraft, count: e.target.value.replace(/[^0-9]/g, "") })} />
+                </label>
+                <label className="block">
+                  <span className="ink-soft mb-1.5 block text-xs font-medium">Awalan</span>
+                  <input className="field font-mono" placeholder="SENJA" value={vdraft.prefix} onChange={(e) => setVdraft({ ...vdraft, prefix: e.target.value.toUpperCase() })} />
+                </label>
+                <label className="block">
+                  <span className="ink-soft mb-1.5 block text-xs font-medium">Nama batch</span>
+                  <input className="field" placeholder="Flyer September" value={vdraft.batch_name} onChange={(e) => setVdraft({ ...vdraft, batch_name: e.target.value })} />
+                </label>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Jenis</span>
+                <select className="field" value={vdraft.kind} onChange={(e) => setVdraft({ ...vdraft, kind: e.target.value as VoucherRow["kind"] })}>
+                  <option value="amount_off">Potongan rupiah</option>
+                  <option value="percent_off">Diskon persen</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">{vdraft.kind === "percent_off" ? "Diskon (%)" : "Potongan (Rp)"}</span>
+                <input className="field" inputMode="decimal" value={vdraft.value} onChange={(e) => setVdraft({ ...vdraft, value: e.target.value.replace(/[^0-9.]/g, "") })} />
+              </label>
+              {vdraft.kind === "percent_off" && (
+                <label className="block">
+                  <span className="ink-soft mb-1.5 block text-xs font-medium">Maksimal potongan (Rp)</span>
+                  <input className="field" inputMode="numeric" value={vdraft.max_discount} onChange={(e) => setVdraft({ ...vdraft, max_discount: e.target.value.replace(/[^0-9]/g, "") })} />
+                </label>
+              )}
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Minimal belanja (Rp)</span>
+                <input className="field" inputMode="numeric" value={vdraft.min_spend} onChange={(e) => setVdraft({ ...vdraft, min_spend: e.target.value.replace(/[^0-9]/g, "") })} />
+              </label>
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Berlaku sampai</span>
+                <input className="field" type="date" value={vdraft.expires_at} onChange={(e) => setVdraft({ ...vdraft, expires_at: e.target.value })} />
+              </label>
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Pemakaian per kode</span>
+                <input className="field" inputMode="numeric" value={vdraft.max_uses} onChange={(e) => setVdraft({ ...vdraft, max_uses: e.target.value.replace(/[^0-9]/g, "") })} />
+              </label>
+            </div>
+            {verror && <p className="text-sm text-red-600">{verror}</p>}
+            <button onClick={saveVoucher} disabled={vbusy} className="btn-accent px-5 py-2.5 text-sm">
+              {vbusy ? "Membuat…" : vdraft.mode === "batch" ? `Buat ${vdraft.count || 1} kode` : "Buat kode"}
+            </button>
+          </div>
+        </Sheet>
       )}
 
       {editing && (

@@ -36,6 +36,9 @@ from app.schemas.dashboard import (
     PromoCreateIn,
     PromoOut,
     PromoUpdateIn,
+    VoucherCreateIn,
+    VoucherOut,
+    VoucherUpdateIn,
     PricingSettingsOut,
     PricingSettingsPatch,
     ExpensesPage,
@@ -1361,6 +1364,63 @@ async def edit_promo(promo_id: uuid.UUID, payload: PromoUpdateIn, ctx: OwnerCtx)
         status, detail = _PROMO_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
     return await _promo_out(ctx.session, promo)
+
+
+# ── Vouchers (M8-T4) ────────────────────────────────────────────────────────
+
+_VOUCHER_ERRORS = {
+    "code": (422, "Kode voucher minimal 3 karakter (huruf, angka, tanda minus)"),
+    "kind": (422, "Jenis voucher tidak dikenali"),
+    "value": (422, "Nilai voucher tidak valid (persen 0–100, rupiah lebih dari nol)"),
+    "max_discount": (422, "Batas potongan harus lebih dari nol"),
+    "min_spend": (422, "Minimal belanja tidak boleh negatif"),
+    "dates": (422, "Tanggal kedaluwarsa harus setelah tanggal mulai"),
+    "max_uses": (422, "Jumlah pemakaian harus lebih dari nol dan tidak kurang dari yang sudah terpakai"),
+    "count": (422, "Jumlah kode harus 1–1000 (satu kode tertentu hanya bisa dibuat satu)"),
+    "duplicate": (409, "Kode voucher ini sudah ada"),
+    "not_found": (404, "Voucher tidak ditemukan"),
+}
+
+
+@router.get("/vouchers", response_model=list[VoucherOut])
+async def list_vouchers_endpoint(
+    ctx: OwnerCtx, q: str = Query(default="", max_length=40), batch_id: uuid.UUID | None = None,
+    include_inactive: bool = Query(default=True), limit: int = Query(default=200, ge=1, le=1000),
+):
+    from app.services.vouchers import list_vouchers
+
+    rows = await list_vouchers(ctx.session, q_text=q or None, batch_id=batch_id, include_inactive=include_inactive, limit=limit)
+    return [VoucherOut.model_validate(v) for v in rows]
+
+
+@router.post("/vouchers", response_model=list[VoucherOut], status_code=201)
+async def add_vouchers(payload: VoucherCreateIn, ctx: OwnerCtx):
+    """One code or a batch of generated codes (M8-T4). Returns every code made."""
+    from app.services.vouchers import VoucherInvalid, create_vouchers
+
+    try:
+        rows = await create_vouchers(ctx.session, ctx.business_id, **payload.model_dump())
+    except VoucherInvalid as exc:
+        status, detail = _VOUCHER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return [VoucherOut.model_validate(v) for v in rows]
+
+
+@router.patch("/vouchers/{voucher_id}", response_model=VoucherOut)
+async def edit_voucher(voucher_id: uuid.UUID, payload: VoucherUpdateIn, ctx: OwnerCtx):
+    from app.models import Voucher
+    from app.services.vouchers import VoucherInvalid, update_voucher
+
+    row = await ctx.session.get(Voucher, voucher_id)
+    if row is None:
+        status, detail = _VOUCHER_ERRORS["not_found"]
+        raise HTTPException(status_code=status, detail=detail)
+    try:
+        row = await update_voucher(ctx.session, row, **payload.model_dump(exclude_unset=True))
+    except VoucherInvalid as exc:
+        status, detail = _VOUCHER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return VoucherOut.model_validate(row)
 
 
 @router.get("/pricing-settings", response_model=PricingSettingsOut)

@@ -127,6 +127,7 @@ class OrderIn(BaseModel):
     bill_discount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))  # M7-T4b
     manager_pin: str | None = Field(default=None, min_length=4, max_length=6)  # required for a discount when the settings say so
     customer_id: uuid.UUID | None = None  # M8-T1: attach the customer
+    voucher_code: str | None = Field(default=None, max_length=40)  # M8-T4
 
 
 # ── Customers at the till (M8-T1) ───────────────────────────────────────────
@@ -161,6 +162,7 @@ class QuoteIn(BaseModel):
 
     lines: list[OrderLineIn] = Field(min_length=1, max_length=50)
     bill_discount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))
+    voucher_code: str | None = Field(default=None, max_length=40)  # M8-T4
 
 
 class QuoteLineOut(BaseModel):
@@ -187,6 +189,9 @@ class QuoteOut(BaseModel):
     discount_total: Decimal
     promo_total: Decimal = Decimal(0)
     promos: list[QuotePromoOut] = []
+    voucher_total: Decimal = Decimal(0)
+    voucher_code: str | None = None
+    voucher_error: str | None = None     # the code was given but cannot be used: why, in Indonesian
     service_charge: Decimal
     tax_total: Decimal
     tax_inclusive: bool
@@ -225,6 +230,7 @@ class OrderOut(BaseModel):
     subtotal: Decimal
     discount_total: Decimal = Decimal(0)
     promo_total: Decimal = Decimal(0)
+    voucher_total: Decimal = Decimal(0)
     service_charge: Decimal = Decimal(0)
     tax_total: Decimal = Decimal(0)
     rounding: Decimal = Decimal(0)
@@ -260,6 +266,8 @@ class ReceiptOut(BaseModel):
     discount_total: Decimal = Decimal(0)
     promo_total: Decimal = Decimal(0)
     promo_names: list[str] = []
+    voucher_total: Decimal = Decimal(0)
+    voucher_code: str | None = None
     service_charge: Decimal = Decimal(0)
     tax_total: Decimal = Decimal(0)
     tax_inclusive: bool = True        # true → tax_total is contained in the prices ("termasuk pajak")

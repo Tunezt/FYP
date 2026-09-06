@@ -33,6 +33,7 @@ from app.services.points import award_points_for_order, ensure_loyalty_settings
 from app.services.pricing import ensure_pricing_settings
 from app.services.customers import create_customer
 from app.services.promos import create_promo
+from app.services.vouchers import create_vouchers
 from app.services.shifts import post_variance
 from app.services.stock import record_movement
 from app.services.suppliers import create_supplier
@@ -308,6 +309,12 @@ async def seed() -> None:
             session, business_id, name="Jumat Nasi Goreng 10%", kind="percent_off", value=Decimal("0.10"), item_id=nasgor.id,
             conditions=[{"kind": "day_of_week", "days_of_week": [4]}],
         )
+
+        # Vouchers (M8-T4): one named welcome code and a batch of ten single-use 20% codes.
+        await create_vouchers(session, business_id, kind="amount_off", value=Decimal(5000), code="SELAMAT-DATANG",
+                              min_spend=Decimal(25000), max_uses=100, expires_at=now + timedelta(days=60))
+        await create_vouchers(session, business_id, kind="percent_off", value=Decimal("0.20"), count=10, prefix="SENJA",
+                              batch_name="Flyer September", max_discount=Decimal(15000), expires_at=now + timedelta(days=30))
 
         # Books (M6-T4/M6-T5): the opening stock is capitalised as owner's
         # capital and the history's sales post through the engine, one summary

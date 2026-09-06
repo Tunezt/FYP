@@ -90,6 +90,9 @@ KNOWN_MONEY_COLUMNS = {
     ("promo_applications", "amount"),
     ("promo_applications", "bonus_quantity"),
     ("promos", "bonus_quantity"),
+    ("orders", "voucher_total"),
+    ("vouchers", "max_discount"),
+    ("voucher_redemptions", "amount"),
 }
 
 # pg_catalog rather than information_schema: the latter only lists columns the

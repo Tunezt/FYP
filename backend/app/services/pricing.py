@@ -21,8 +21,8 @@ The four knobs and what they mean:
 The identity every result satisfies, and which `test_pricing` asserts on all
 twelve combinations:
 
-  exclusive tax:  total = subtotal − discount − promo + service_charge + tax + rounding
-  inclusive tax:  total = subtotal − discount − promo + service_charge + rounding
+  exclusive tax:  total = subtotal − discount − promo − voucher + service_charge + tax + rounding
+  inclusive tax:  total = subtotal − discount − promo − voucher + service_charge + rounding
                   (tax_total is the tax *contained* in those figures, and is
                   reported so the ledger can move it out of revenue)
 
@@ -53,7 +53,7 @@ def q(amount: Decimal) -> Decimal:
 
 
 class PricingInvalid(Exception):
-    """`code`: quantity, price, discount, line_discount, promo, mode, rate, unit."""
+    """`code`: quantity, price, discount, line_discount, promo, voucher, mode, rate, unit."""
 
     def __init__(self, code: str):
         self.code = code
@@ -118,11 +118,12 @@ class PricedOrder:
     lines: tuple[PricedLine, ...]
     service_tax: Decimal = Decimal("0.00")   # the part of service_charge that is tax (inclusive + taxed only)
     promo_total: Decimal = Decimal("0.00")   # what promos gave away (M8-T3), kept apart from discount_total
+    voucher_total: Decimal = Decimal("0.00") # what a voucher code took off (M8-T4)
 
     @property
     def net(self) -> Decimal:
-        """What the goods cost after discounts and promos, at menu prices."""
-        return q(self.subtotal - self.discount_total - self.promo_total)
+        """What the goods cost after discounts, promos and the voucher, at menu prices."""
+        return q(self.subtotal - self.discount_total - self.promo_total - self.voucher_total)
 
     def fiscal_components(self) -> dict[str, Decimal]:
         """What the sale reclassifies out of revenue, for the posting engine
@@ -135,6 +136,7 @@ class PricedOrder:
         return {
             "discount": self.discount_total,
             "promo": self.promo_total,
+            "voucher": self.voucher_total,
             "tax": self.tax_total,
             "service_charge": q(self.service_charge - self.service_tax),
             "rounding_up": self.rounding if self.rounding > 0 else Decimal("0.00"),
@@ -167,6 +169,7 @@ def price_order(
     *,
     bill_discount: Decimal = Decimal(0),
     promo_bill_discount: Decimal = Decimal(0),
+    voucher_discount: Decimal = Decimal(0),
 ) -> PricedOrder:
     """Price one bill. Raises rather than silently clamping: a discount larger
     than the bill, a negative quantity or an unknown rounding mode is a bug in
@@ -210,8 +213,11 @@ def price_order(
     promo_total = q(promo_lines + promo_bill_discount)
     if discount_total + promo_total > subtotal:
         raise PricingInvalid("promo")
+    voucher_total = q(voucher_discount or 0)
+    if voucher_total < 0 or discount_total + promo_total + voucher_total > subtotal:
+        raise PricingInvalid("voucher")
 
-    net = q(subtotal - discount_total - promo_total)
+    net = q(subtotal - discount_total - promo_total - voucher_total)
     tax_rate, sc_rate = Decimal(config.tax_rate), Decimal(config.service_charge_rate)
 
     service_tax = Decimal("0.00")
@@ -253,6 +259,7 @@ def price_order(
         lines=tuple(priced),
         service_tax=service_tax,
         promo_total=promo_total,
+        voucher_total=voucher_total,
     )
 
 

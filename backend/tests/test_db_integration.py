@@ -686,3 +686,28 @@ async def test_rls_isolates_promos(session_factory, two_tenants):
         session.add(Promo(business_id=b.id, name="smuggled", kind="amount_off", value=_D(1)))
         with pytest.raises(Exception):
             await session.commit()
+
+
+async def test_rls_isolates_vouchers(session_factory, two_tenants):
+    """M8-T4 / roadmap §2: codes are per business — B may reuse A's code."""
+    from decimal import Decimal as _D
+
+    from app.models import Voucher
+
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        row = Voucher(business_id=a.id, code="HEMAT5", kind="amount_off", value=_D(5000))
+        session.add(row)
+        await session.commit()
+        row_id = row.id
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert await session.get(Voucher, row_id) is None
+        session.add(Voucher(business_id=b.id, code="HEMAT5", kind="amount_off", value=_D(1000)))
+        await session.commit()
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(Voucher(business_id=b.id, code="SMUGGLED", kind="amount_off", value=_D(1)))
+        with pytest.raises(Exception):
+            await session.commit()

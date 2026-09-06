@@ -37,6 +37,7 @@ from app.services.points import (
 )
 from app.services.pricing import LineInput, price_order, pricing_config
 from app.services.promos import CartLine, apply_promos, load_rules
+from app.services.vouchers import check_voucher, redeem as redeem_voucher, reverse_for_order as reverse_voucher, voucher_by_code
 from app.services.sales import ATOMIC_DECREMENT, InsufficientStock, ItemNotFound
 from app.services.stock import record_movement
 from app.services.units import convert_quantity, to_ledger_precision
@@ -170,6 +171,7 @@ async def create_order(
     bill_discount: Decimal = Decimal(0),
     manager_pin: str | None = None,
     customer_id: uuid.UUID | None = None,
+    voucher_code: str | None = None,
 ) -> CreatedOrder:
     if not lines:
         raise EmptyOrder()
@@ -271,13 +273,21 @@ async def create_order(
     # Promo discount per priced line: the engine's figure for the cashier's lines,
     # the whole line for a bonus line (it is free).
     promo_per_line = list(promo_result.line_discounts) + [priced[i][6] for i in range(n_cart, len(priced))]
+    line_inputs = [
+        LineInput(unit_price=p[4], quantity=Decimal(p[0].quantity), line_discount=Decimal(p[0].line_discount or 0),
+                  promo_discount=promo_per_line[i])
+        for i, p in enumerate(priced)
+    ]
+    # A voucher (M8-T4) comes off what is left after discounts and promos. Its
+    # validity is checked here; the use itself is taken after the order row
+    # exists, with the atomic guard — a refused use rolls the whole sale back.
+    voucher_quote = None
+    if voucher_code:
+        before_voucher = price_order(line_inputs, config, bill_discount=bill_discount, promo_bill_discount=promo_result.bill_discount)
+        voucher_quote = check_voucher(await voucher_by_code(session, voucher_code), base=before_voucher.net, at=sold_at)
     bill = price_order(
-        [
-            LineInput(unit_price=p[4], quantity=Decimal(p[0].quantity), line_discount=Decimal(p[0].line_discount or 0),
-                      promo_discount=promo_per_line[i])
-            for i, p in enumerate(priced)
-        ],
-        config, bill_discount=bill_discount, promo_bill_discount=promo_result.bill_discount,
+        line_inputs, config, bill_discount=bill_discount, promo_bill_discount=promo_result.bill_discount,
+        voucher_discount=voucher_quote.amount if voucher_quote is not None else Decimal(0),
     )
     subtotal, total = bill.subtotal, bill.total
 
@@ -297,6 +307,7 @@ async def create_order(
         subtotal=subtotal,
         discount_total=bill.discount_total,
         promo_total=bill.promo_total,
+        voucher_total=bill.voucher_total,
         tax_total=bill.tax_total,
         service_charge=bill.service_charge,
         rounding=bill.rounding,
@@ -354,6 +365,12 @@ async def create_order(
         ]
         session.add_all(snapshots)
         created.lines.append(CreatedLine(line=line, item_name=item.name, remaining_stock=remaining, modifiers=snapshots))
+
+    if voucher_quote is not None:
+        await redeem_voucher(
+            session, business_id, voucher_quote.voucher, order_id=order.id, amount=voucher_quote.amount, at=sold_at,
+            customer_id=customer.id if customer is not None else None,
+        )
 
     # What each promo gave, by line (M8-T3): the receipt, the reversal and the
     # campaign report read these rows.
@@ -582,6 +599,8 @@ async def _reverse(
     await session.flush()
     # Points (M8-T2): what this order earned is taken back, what it spent returns.
     await reverse_points_for_order(session, business_id, order_id, staff_id=staff_id, created_at=now, memo=tag)
+    # Vouchers (M8-T4): the use goes back to the code.
+    await reverse_voucher(session, business_id, order_id)
 
     # The books (M6-T4): a void flips the sale's entry; a refund posts returns
     # per method (and inventory back when restocked). Same transaction.
@@ -613,7 +632,7 @@ async def _reverse(
     return reversal
 
 
-FISCAL_COMPONENTS = ("discount", "promo", "tax", "service_charge", "rounding_up", "rounding_down")
+FISCAL_COMPONENTS = ("discount", "promo", "voucher", "tax", "service_charge", "rounding_up", "rounding_down")
 
 
 async def _evaluate_promos(session: AsyncSession, business_id: uuid.UUID, priced: list[tuple], sold_at: datetime, bill_discount: Decimal):

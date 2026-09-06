@@ -41,4 +41,6 @@ from app.models.models import (  # noqa: F401
     Supplier,
     Uom,
     UomConversion,
+    Voucher,
+    VoucherRedemption,
 )

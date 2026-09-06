@@ -196,3 +196,21 @@ export type PromoRow = {
   applications: number;
   given_away: string;
 };
+
+// Vouchers (M8-T4).
+export type VoucherRow = {
+  id: string;
+  code: string;
+  kind: "percent_off" | "amount_off";
+  value: string;
+  max_discount: string | null;
+  min_spend: string;
+  starts_at: string | null;
+  expires_at: string | null;
+  max_uses: number;
+  uses: number;
+  batch_id: string | null;
+  batch_name: string | null;
+  is_active: boolean;
+  created_at: string;
+};

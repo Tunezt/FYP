@@ -24,6 +24,7 @@ import type {
   PnlMonth,
   PricingSettings,
   PromoRow,
+  VoucherRow,
   ReceiptRow,
   SaleRow,
   ShiftRow,
@@ -510,6 +511,12 @@ const PROMOS: PromoRow[] = [
   },
 ];
 
+const VOUCHERS: VoucherRow[] = [
+  { id: "demo-v-1", code: "SELAMAT-DATANG", kind: "amount_off", value: "5000.0000", max_discount: null, min_spend: "25000.00", starts_at: null, expires_at: jktIso(-60, 0), max_uses: 100, uses: 23, batch_id: null, batch_name: null, is_active: true, created_at: jktIso(30, 9) },
+  { id: "demo-v-2", code: "SENJA-7KQ2MN4P", kind: "percent_off", value: "0.2000", max_discount: "15000.00", min_spend: "0.00", starts_at: null, expires_at: jktIso(-30, 0), max_uses: 1, uses: 1, batch_id: "demo-batch-1", batch_name: "Flyer September", is_active: true, created_at: jktIso(10, 9) },
+  { id: "demo-v-3", code: "SENJA-B3XW9RTD", kind: "percent_off", value: "0.2000", max_discount: "15000.00", min_spend: "0.00", starts_at: null, expires_at: jktIso(-30, 0), max_uses: 1, uses: 0, batch_id: "demo-batch-1", batch_name: "Flyer September", is_active: true, created_at: jktIso(10, 9) },
+];
+
 function paginate<T>(rows: T[], page: number, pageSize: number, inflateTotal = 0): Page<T> {
   const start = (page - 1) * pageSize;
   return {
@@ -545,6 +552,10 @@ export function demoData(path: string): unknown {
   if (pathname === "/api/pricing-settings") return PRICING;
   if (pathname === "/api/loyalty-settings") return LOYALTY;
   if (pathname === "/api/promos") return PROMOS;
+  if (pathname === "/api/vouchers") {
+    const q = (params.get("q") ?? "").toUpperCase();
+    return VOUCHERS.filter((v) => !q || v.code.includes(q));
+  }
   if (/^\/api\/customers\/[^/]+\/points$/.test(pathname)) return [];
   if (pathname === "/api/customers") {
     const q = (params.get("q") ?? "").toLowerCase();
