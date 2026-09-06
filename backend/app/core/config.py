@@ -70,6 +70,26 @@ def get_settings() -> Settings:
     return Settings()
 
 
+class ProductionRefusal(RuntimeError):
+    """A development-only entrypoint was pointed at a production database.
+
+    `app.seed` builds a fictional cafe with a month of invented sales and
+    deletes and recreates it on every run. Against the real cafe's database
+    that is either destruction or, worse, fake takings mixed into real books
+    that nobody notices until the P&L is wrong. `app.bootstrap` is the
+    production one (roadmap M15-T3).
+    """
+
+
+def refuse_in_production(entrypoint: str) -> None:
+    if get_settings().environment == "production":
+        raise ProductionRefusal(
+            f"{entrypoint} refuses to run with ENVIRONMENT=production. It creates demo "
+            "data and deletes what it created last time. Use `python -m app.bootstrap` "
+            "to set up a real business."
+        )
+
+
 _PLACEHOLDER_VALUES = {"placeholder", "CHANGE_ME"}
 
 

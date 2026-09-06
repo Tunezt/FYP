@@ -9,18 +9,26 @@ Creates **Kopi Kenangan Senja** (fictional, Jakarta) with:
 
 Idempotent: re-running deletes and recreates the demo business (cascade).
 
+**Development only.** It refuses to run with ENVIRONMENT=production, and asks
+before touching any database that is not on this machine, because deleting and
+recreating a business is not something to do to a cafe that is trading. The
+production entrypoint is `python -m app.bootstrap` (roadmap M15-T3).
+
 Demo credentials:
   owner phone  +62 812-000-1111  (OTP arrives via WhatsApp; in dev the code is logged)
   owner PIN    1234   | staff Sari PIN 2345 | staff Budi PIN 3456
 """
 import asyncio
 import random
+import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, select
 
+from app.core.config import ProductionRefusal, get_settings, refuse_in_production
 from app.core.db import plain_session, tenant_session
 from app.core.security import hash_pin
 from app.models import Business, Item, Order, OrderLine, Payment, Shift, Staff
@@ -101,7 +109,24 @@ EXPENSES = [
 ]
 
 
-async def seed() -> None:
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def guard_demo_data(confirm: bool = False) -> None:
+    """Two gates in front of a destructive demo. The first is absolute; the
+    second exists because ENVIRONMENT is a self-declared flag and a real cafe's
+    database is remote long before anyone remembers to set it."""
+    refuse_in_production("app.seed")
+    host = urlsplit(get_settings().database_url).hostname
+    if host not in LOCAL_HOSTS and not confirm:
+        raise ProductionRefusal(
+            f"app.seed deletes and recreates the demo business, and {host} is not this "
+            "machine. Re-run with --yes if that database really is a throwaway."
+        )
+
+
+async def seed(confirm: bool = False) -> None:
+    guard_demo_data(confirm)
     rng = random.Random(42)
     now = datetime.now(timezone.utc)
 
@@ -354,4 +379,7 @@ async def seed() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    try:
+        asyncio.run(seed(confirm="--yes" in sys.argv))
+    except ProductionRefusal as exc:
+        raise SystemExit(f"Refused: {exc}")

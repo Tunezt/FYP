@@ -2,10 +2,34 @@
 
 **For the person on shift, not for a developer.** Find your situation, do what it says.
 
-This file grows as the go-live tasks land. Today it covers backups and restoring one
-(roadmap M15-T1 and M15-T2). The rest — internet down, tablet dead, printer stuck, API
-down, a sale rung up wrong, stock looks wrong, closing the day, who pays for what — arrives
-with **M15-T9**, and the empty headings at the bottom say so rather than pretending.
+This file grows as the go-live tasks land. Today it covers first-time setup, backups and
+restoring one (roadmap M15-T1 to M15-T3). The rest — internet down, tablet dead, printer
+stuck, API down, a sale rung up wrong, stock looks wrong, closing the day, who pays for
+what — arrives with **M15-T9**, and the empty headings at the bottom say so rather than
+pretending.
+
+---
+
+## Setting up the real cafe, once
+
+```bash
+cd backend && ./.venv/Scripts/python.exe -m app.bootstrap --name "Kopi Senja" --owner "Ibu Ratna" --phone 081200011112
+```
+
+It asks for the owner's PIN twice rather than taking it on the command line, so
+it does not sit in shell history. Out comes one business with the owner's login,
+the standard units, the chart of accounts, the posting rules, pricing and loyalty
+settings — and no products, no sales, no customers. Add the menu from the
+dashboard, or photograph it.
+
+Run it twice with the same number and it refuses: bootstrap makes a new business,
+it does not reset an existing one.
+
+**`python -m app.seed` is the demo cafe, not this.** It invents a month of sales
+and deletes and recreates what it made last time. It refuses to run with
+`ENVIRONMENT=production`, and asks before touching any database that is not on
+the machine you are typing on. If you ever see it offer to run against the real
+cafe, stop.
 
 ---
 
