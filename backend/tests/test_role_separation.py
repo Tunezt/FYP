@@ -24,11 +24,13 @@ OWNER_ROUTES = [
     ("GET", "/api/alerts"),
     ("GET", "/auth/staff"),
     ("POST", "/auth/pos-pairing"),
+    ("POST", "/auth/menu-link"),
 ]
 
 POS_ROUTES = [
     ("GET", "/pos/items"),
     ("POST", "/pos/sales"),
+    ("GET", "/pos/tickets"),
 ]
 
 

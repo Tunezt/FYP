@@ -145,9 +145,9 @@ async def customer_summaries(session: AsyncSession, customer_ids: list[uuid.UUID
         await session.execute(
             select(
                 Order.customer_id,
-                func.count(Order.id).filter(Order.status != "voided"),
+                func.count(Order.id).filter(Order.status.not_in(("voided", "open"))),
                 func.coalesce(func.sum(case((Order.status == "completed", Order.total), else_=0)), 0),
-                func.max(Order.sold_at).filter(Order.status != "voided"),
+                func.max(Order.sold_at).filter(Order.status.not_in(("voided", "open"))),
             )
             .where(Order.customer_id.in_(customer_ids))
             .group_by(Order.customer_id)

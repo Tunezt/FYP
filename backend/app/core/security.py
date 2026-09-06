@@ -92,6 +92,19 @@ def create_registration_token(phone: str) -> str:
     )
 
 
+def create_menu_token(business_id: str) -> str:
+    """Long-lived token baked into the QR code on the table (M11-T1). Grants
+    only: read the menu, place a ticket, watch that ticket — for one business.
+    Stateless like the pairing token; a new QR replaces an old one."""
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {"business_id": business_id, "scope": "menu", "iat": now, "exp": now + timedelta(days=365)},
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
 def create_pairing_token(business_id: str) -> str:
     """Long-lived token baked into the POS kiosk URL. Grants only the ability
     to list staff names and attempt PIN logins for one business — never data

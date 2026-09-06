@@ -113,6 +113,22 @@ type SupplierLite = { id: string; name: string };
 // Customers at the till (M8-T1).
 type CustomerLite = { id: string; name: string; phone: string | null; visits: number; points_balance: number; points_value: string };
 type Loyalty = { is_active: boolean; rupiah_per_point: string; point_value: string; min_redeem_points: number };
+// A guest's order from the QR e-menu (M11-T1): an open row in this till's own
+// order table. Settling it is the ordinary sale, on that row.
+type Ticket = {
+  id: string;
+  code: string;
+  status: string;
+  order_type: string;
+  table_label: string | null;
+  guest_name: string | null;
+  guest_phone: string | null;
+  note: string | null;
+  placed_at: string;
+  lines: { name: string; modifiers: string[]; quantity: string; unit_price: string; line_total: string; notes: string | null }[];
+  total: string;
+  is_estimate: boolean;
+};
 
 const lineKey = (itemId: string, variant: Variant | null, modifiers: Modifier[]) =>
   `${itemId}:${variant?.id ?? "default"}:${modifiers.map((m) => m.id).sort().join(",")}`;
@@ -422,6 +438,61 @@ function SellScreen({
   const [suppliers, setSuppliers] = useState<SupplierLite[]>([]);
   const [cashError, setCashError] = useState<string | null>(null);
   const [cashDone, setCashDone] = useState<string | null>(null);
+  // The e-menu queue (M11-T1): polled, never pushed — a till on a warung's
+  // wifi cannot hold a socket open all day.
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [ticketSheet, setTicketSheet] = useState(false);
+  const [ticketBusy, setTicketBusy] = useState<string | null>(null);
+  const [ticketError, setTicketError] = useState<string | null>(null);
+  const [cancelFor, setCancelFor] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const loadTickets = useCallback(() => {
+    api<Ticket[]>("/pos/tickets", { token }).then(setTickets).catch(() => undefined);
+  }, [token]);
+  useEffect(() => {
+    loadTickets();
+    const id = setInterval(loadTickets, 15000);
+    return () => clearInterval(id);
+  }, [loadTickets]);
+  async function settleTicket(t: Ticket, method: "cash" | "qris") {
+    if (ticketBusy) return;
+    setTicketBusy(t.id);
+    setTicketError(null);
+    try {
+      const res = await api<OrderResult>(`/pos/tickets/${t.id}/settle`, {
+        token,
+        body: { payments: [{ method, amount: Number(t.total) }] },
+      });
+      setFlash(res);
+      setTimeout(() => setFlash(null), 2600);
+      loadItems();
+      loadShift();
+      loadTickets();
+      if (tickets.length <= 1) setTicketSheet(false);
+    } catch (e: unknown) {
+      setTicketError(e instanceof ApiError ? e.detail : "Gagal memproses pesanan — coba lagi.");
+      loadTickets();
+    } finally {
+      setTicketBusy(null);
+    }
+  }
+  async function cancelTicket(t: Ticket) {
+    if (ticketBusy) return;
+    setTicketBusy(t.id);
+    setTicketError(null);
+    try {
+      await api<Ticket>(`/pos/tickets/${t.id}/cancel`, { token, body: { reason: cancelReason.trim() || null } });
+      setCancelFor(null);
+      setCancelReason("");
+      loadTickets();
+    } catch (e: unknown) {
+      setTicketError(e instanceof ApiError ? e.detail : "Gagal membatalkan — coba lagi.");
+      loadTickets();
+    } finally {
+      setTicketBusy(null);
+    }
+  }
+  const waitingMinutes = (iso: string) => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   function openCashSheet() {
     setCashError(null);
     setCashSheet(true);
@@ -751,6 +822,22 @@ function SellScreen({
               <p className="text-sm font-semibold tabular-nums">{formatRupiah(shift.expected_cash ?? shift.opening_float)}</p>
             </button>
           )}
+          <button
+            onClick={() => {
+              setTicketError(null);
+              setTicketSheet(true);
+              loadTickets();
+            }}
+            className={`relative px-4 py-2 text-sm ${tickets.length > 0 ? "btn-accent" : "btn-quiet"}`}
+            title="Pesanan dari menu QR"
+          >
+            Pesanan
+            {tickets.length > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-accent-700 shadow-pop">
+                {tickets.length}
+              </span>
+            )}
+          </button>
           <button onClick={openCashSheet} className="btn-quiet px-4 py-2 text-sm" title="Kas masuk / keluar">
             Kas
           </button>
@@ -987,6 +1074,102 @@ function SellScreen({
                 Catat
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* The e-menu queue (M11-T1): pay a guest's ticket here, or cancel it */}
+      {ticketSheet && (
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          onClick={() => !ticketBusy && setTicketSheet(false)}
+        >
+          <div
+            className="glass-card glass-strong max-h-[90vh] w-full max-w-lg animate-fade-up overflow-y-auto rounded-b-none rounded-t-4xl px-6 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xl font-bold">Pesanan dari menu QR</p>
+                <p className="ink-soft text-sm">Tamu memesan dari meja; bayar di sini, stok dan pembukuan ikut saat dibayar.</p>
+              </div>
+              <button onClick={() => setTicketSheet(false)} className="ink-soft rounded-full px-3 py-1 text-sm">
+                tutup
+              </button>
+            </div>
+            {ticketError && <p className="mt-3 text-sm text-red-600">{ticketError}</p>}
+            {tickets.length === 0 ? (
+              <p className="glass-card mt-4 px-4 py-6 text-center text-sm">Belum ada pesanan yang menunggu.</p>
+            ) : (
+              <ul className="mt-4 space-y-3">
+                {tickets.map((t) => {
+                  const busyHere = ticketBusy === t.id;
+                  return (
+                    <li key={t.id} className="glass-card px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-black tracking-tight">{t.code}</p>
+                          <p className="ink-soft text-xs">
+                            {t.order_type === "dine_in" ? t.table_label || "Makan di sini" : "Bawa pulang"}
+                            {t.guest_name ? ` · ${t.guest_name}` : ""} · {waitingMinutes(t.placed_at)} mnt lalu
+                          </p>
+                        </div>
+                        <p className="text-lg font-bold tabular-nums">{formatRupiah(t.total)}</p>
+                      </div>
+                      <ul className="mt-2 space-y-0.5 text-sm">
+                        {t.lines.map((l, i) => (
+                          <li key={i} className="flex justify-between gap-3">
+                            <span className="min-w-0 truncate">
+                              {l.quantity}× {l.name}
+                              {l.modifiers.length > 0 ? <span className="ink-faint"> ({l.modifiers.join(", ")})</span> : null}
+                              {l.notes ? <span className="ink-faint"> — {l.notes}</span> : null}
+                            </span>
+                            <span className="shrink-0 tabular-nums">{formatRupiah(l.line_total)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {t.note && <p className="ink-soft mt-1 text-xs">Catatan: {t.note}</p>}
+                      {cancelFor === t.id ? (
+                        <div className="mt-3 flex gap-2">
+                          <input
+                            autoFocus
+                            value={cancelReason}
+                            onChange={(e) => setCancelReason(e.target.value.slice(0, 200))}
+                            className="glass-card flex-1 rounded-2xl px-3 py-2 text-sm"
+                            placeholder="Alasan (mis. bahan habis)"
+                          />
+                          <button onClick={() => setCancelFor(null)} className="btn-quiet px-3 py-2 text-sm">
+                            Kembali
+                          </button>
+                          <button onClick={() => cancelTicket(t)} disabled={busyHere} className="rounded-2xl px-3 py-2 text-sm font-semibold text-red-600">
+                            Batalkan
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-3 flex gap-2">
+                          <button onClick={() => settleTicket(t, "cash")} disabled={busyHere} className="btn-accent flex-1 py-2.5 text-sm">
+                            {busyHere ? "…" : "Bayar tunai"}
+                          </button>
+                          <button onClick={() => settleTicket(t, "qris")} disabled={busyHere} className="btn-accent flex-1 py-2.5 text-sm">
+                            QRIS
+                          </button>
+                          <button
+                            onClick={() => {
+                              setCancelFor(t.id);
+                              setCancelReason("");
+                            }}
+                            disabled={busyHere}
+                            className="btn-quiet px-3 py-2.5 text-sm"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </div>
       )}

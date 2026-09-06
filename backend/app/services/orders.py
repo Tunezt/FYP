@@ -121,6 +121,13 @@ class EmptyOrder(Exception):
     pass
 
 
+class TicketNotOpen(Exception):
+    """The ticket was settled or cancelled already — by this till or another."""
+
+    def __init__(self, status: str = "unknown"):
+        self.status = status
+
+
 class DiscountNeedsManager(Exception):
     """The settings require a manager PIN before any discount and none was given."""
 
@@ -172,12 +179,25 @@ async def create_order(
     manager_pin: str | None = None,
     customer_id: uuid.UUID | None = None,
     voucher_code: str | None = None,
+    ticket: Order | None = None,
 ) -> CreatedOrder:
+    """`ticket` (M11-T1): an open e-menu row to fulfil. The sale is written on
+    that row — its status flips open → completed under an atomic claim, so two
+    tills cannot settle one ticket — and everything else is exactly a sale."""
     if not lines:
         raise EmptyOrder()
     if not payments:
         raise PaymentMismatch(Decimal(0), Decimal(0))
     sold_at = sold_at or datetime.now(timezone.utc)
+    if ticket is not None:
+        from sqlalchemy import text as _text
+
+        claimed = await session.execute(
+            _text("update orders set status = 'completed' where id = :id and business_id = :bid and status = 'open'"),
+            {"id": ticket.id, "bid": business_id},
+        )
+        if claimed.rowcount != 1:
+            raise TicketNotOpen(ticket.status)
     shift_id = await open_shift_id(session, staff_id)  # the cashier's open till, if any (M7-T1)
     customer = await require_customer(session, customer_id)  # must be this business's, and active (M8-T1)
 
@@ -296,25 +316,37 @@ async def create_order(
     if paid != total:
         raise PaymentMismatch(total, paid)
 
-    # 3. Write the order, its lines, payments and ledger rows.
-    order = Order(
-        shift_id=shift_id,
-        business_id=business_id,
-        staff_id=staff_id,
-        order_type=order_type,
-        status="completed",
-        customer_id=customer.id if customer is not None else None,
-        subtotal=subtotal,
-        discount_total=bill.discount_total,
-        promo_total=bill.promo_total,
-        voucher_total=bill.voucher_total,
-        tax_total=bill.tax_total,
-        service_charge=bill.service_charge,
-        rounding=bill.rounding,
-        total=total,
-        sold_at=sold_at,
-    )
-    session.add(order)
+    # 3. Write the order, its lines, payments and ledger rows. A ticket's own
+    #    row becomes the sale: the estimate it carried gives way to the figures
+    #    the till actually charged, and the moment of sale is now.
+    if ticket is not None:
+        order = ticket
+        order.shift_id, order.staff_id, order.order_type = shift_id, staff_id, order_type
+        order.status = "completed"
+        order.customer_id = customer.id if customer is not None else None
+        order.subtotal, order.discount_total = subtotal, bill.discount_total
+        order.promo_total, order.voucher_total = bill.promo_total, bill.voucher_total
+        order.tax_total, order.service_charge, order.rounding = bill.tax_total, bill.service_charge, bill.rounding
+        order.total, order.sold_at = total, sold_at
+    else:
+        order = Order(
+            shift_id=shift_id,
+            business_id=business_id,
+            staff_id=staff_id,
+            order_type=order_type,
+            status="completed",
+            customer_id=customer.id if customer is not None else None,
+            subtotal=subtotal,
+            discount_total=bill.discount_total,
+            promo_total=bill.promo_total,
+            voucher_total=bill.voucher_total,
+            tax_total=bill.tax_total,
+            service_charge=bill.service_charge,
+            rounding=bill.rounding,
+            total=total,
+            sold_at=sold_at,
+        )
+        session.add(order)
     await session.flush()
 
     created = CreatedOrder(order=order)

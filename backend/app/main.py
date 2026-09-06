@@ -96,11 +96,13 @@ def _include_routers() -> None:
     from app.api.auth import router as auth_router
     from app.api.pos import router as pos_router
     from app.api.dashboard import router as dashboard_router
+    from app.api.menu import router as menu_router
     from app.whatsapp.webhook import router as webhook_router
 
     app.include_router(auth_router)
     app.include_router(pos_router)
     app.include_router(dashboard_router)
+    app.include_router(menu_router)
     app.include_router(webhook_router)
 
 

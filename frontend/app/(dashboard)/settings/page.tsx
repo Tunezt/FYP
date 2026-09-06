@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import QRCode from "qrcode";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import type { Business, LoyaltySettings, PricingSettings, StaffMember } from "@/lib/types";
 import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
@@ -61,6 +62,10 @@ export default function SettingsPage() {
   const [staffError, setStaffError] = useState<string | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
   const [pairingBusy, setPairingBusy] = useState(false);
+  // The QR e-menu (M11-T1): one link for every table, rendered as a QR to print.
+  const [menuLink, setMenuLink] = useState<string | null>(null);
+  const [menuQr, setMenuQr] = useState<string | null>(null);
+  const [menuBusy, setMenuBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importResult, setImportResult] = useState<{ ok: boolean; message: string } | null>(null);
   // Pricing (M7-T4): the form edits percentages and whole rupiah; the API speaks fractions.
@@ -187,6 +192,18 @@ export default function SettingsPage() {
       setStaffError(e instanceof Error ? e.message : "Gagal menambah staf — coba lagi ya.");
     } finally {
       setStaffBusy(false);
+    }
+  }
+
+  async function generateMenuLink() {
+    setMenuBusy(true);
+    try {
+      const res = await mutate<{ menu_path: string }>("/auth/menu-link");
+      const url = `${window.location.origin}${res.menu_path}`;
+      setMenuLink(url);
+      setMenuQr(await QRCode.toDataURL(url, { width: 640, margin: 1, errorCorrectionLevel: "M" }));
+    } finally {
+      setMenuBusy(false);
     }
   }
 
@@ -492,6 +509,41 @@ export default function SettingsPage() {
           ) : (
             <button onClick={generatePairing} disabled={pairingBusy} className="btn-accent px-5 py-2.5 text-sm">
               {pairingBusy ? "Membuat…" : "Buat tautan kasir"}
+            </button>
+          )}
+        </Plate>
+      </section>
+
+      {/* QR e-menu (M11-T1) */}
+      <section>
+        <h2 className="mb-2 flex items-center gap-2 text-base font-bold">
+          Menu QR untuk meja
+          <HelpTip title="Menu QR">
+            Cetak kode QR ini dan tempel di tiap meja. Tamu memindai, memilih pesanan, lalu mendapat
+            kode singkat untuk dibayar di kasir. Pesanan langsung muncul di layar kasir sebagai
+            antrean — stok dan pembukuan baru bergerak saat kasir menerima pembayaran.
+          </HelpTip>
+        </h2>
+        <Plate className="space-y-3 px-6 py-5">
+          <p className="ink-soft text-sm">
+            Satu tautan untuk semua meja, berlaku setahun. Tautan ini hanya membuka menu dan
+            mengirim pesanan — tidak bisa melihat stok, harga modal, atau dashboard.
+          </p>
+          {menuLink ? (
+            <div className="space-y-3">
+              <CopyField value={menuLink} />
+              {menuQr && (
+                <div className="flex flex-wrap items-center gap-4">
+                  <img src={menuQr} alt="Kode QR menu" className="h-40 w-40 rounded-2xl bg-white p-2" />
+                  <a href={menuQr} download="menu-qr.png" className="btn-quiet px-4 py-2 text-sm">
+                    Unduh QR (PNG)
+                  </a>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button onClick={generateMenuLink} disabled={menuBusy} className="btn-accent px-5 py-2.5 text-sm">
+              {menuBusy ? "Membuat…" : "Buat tautan menu QR"}
             </button>
           )}
         </Plate>

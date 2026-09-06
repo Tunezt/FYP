@@ -358,6 +358,13 @@ class Order(Base):
     sold_at: Mapped[datetime] = _now()
     created_at: Mapped[datetime] = _now()
     shift_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("shifts.id"))  # M7-T1
+    # E-menu tickets (M11-T1, migration 0026): where the order came from, who
+    # and where the guest is, and their cart verbatim while the row is `open`.
+    source: Mapped[str] = mapped_column(Text, nullable=False, server_default="pos")  # 'pos' | 'menu' (check constraint)
+    table_label: Mapped[str | None] = mapped_column(Text)
+    guest_name: Mapped[str | None] = mapped_column(Text)
+    guest_phone: Mapped[str | None] = mapped_column(Text)
+    cart: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class OrderLine(Base):

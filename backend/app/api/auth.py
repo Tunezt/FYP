@@ -15,8 +15,10 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.db import plain_session, tenant_session
 from app.core.db_errors import raise_if_db_unreachable
+from app.schemas.menu import MenuLinkOut
 from app.core.deps import OwnerCtx
 from app.core.security import (
+    create_menu_token,
     create_pairing_token,
     create_registration_token,
     create_token,
@@ -235,3 +237,10 @@ async def deactivate_staff(staff_id: str, ctx: OwnerCtx):
 async def create_pos_pairing(ctx: OwnerCtx):
     token = create_pairing_token(str(ctx.business_id))
     return PairingOut(pairing_token=token, pos_path=f"/pos/{token}")
+
+
+@router.post("/menu-link", response_model=MenuLinkOut)
+async def create_menu_link(ctx: OwnerCtx):
+    """The QR e-menu link (M11-T1): print it as a QR code on every table."""
+    token = create_menu_token(str(ctx.business_id))
+    return MenuLinkOut(menu_token=token, menu_path=f"/menu/{token}")

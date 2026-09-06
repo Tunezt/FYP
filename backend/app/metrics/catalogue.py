@@ -70,7 +70,7 @@ async def _cogs(session: AsyncSession, ctx: MetricContext) -> tuple[Decimal, int
 
 async def _transactions(session: AsyncSession, ctx: MetricContext) -> int:
     return int((await session.execute(
-        select(func.count(Order.id)).where(Order.sold_at >= ctx.since, Order.sold_at < ctx.until, Order.status != "voided")
+        select(func.count(Order.id)).where(Order.sold_at >= ctx.since, Order.sold_at < ctx.until, Order.status.not_in(("voided", "open")))
     )).scalar_one())
 
 
@@ -191,7 +191,7 @@ async def peak_hour(session: AsyncSession, ctx: MetricContext) -> MetricResult:
 
 async def _order_sum(session: AsyncSession, ctx: MetricContext, expr) -> Decimal:
     return _money((await session.execute(
-        select(func.coalesce(func.sum(expr), 0)).where(Order.sold_at >= ctx.since, Order.sold_at < ctx.until, Order.status != "voided")
+        select(func.coalesce(func.sum(expr), 0)).where(Order.sold_at >= ctx.since, Order.sold_at < ctx.until, Order.status.not_in(("voided", "open")))
     )).scalar_one())
 
 
@@ -324,14 +324,14 @@ async def new_customers(session: AsyncSession, ctx: MetricContext) -> MetricResu
         description_en="Of customers who bought in the period, the share who had bought before", unit="pct")
 async def repeat_rate(session: AsyncSession, ctx: MetricContext) -> MetricResult:
     buyers = (await session.execute(
-        select(Order.customer_id).where(Order.customer_id.is_not(None), Order.status != "voided",
+        select(Order.customer_id).where(Order.customer_id.is_not(None), Order.status.not_in(("voided", "open")),
                                         Order.sold_at >= ctx.since, Order.sold_at < ctx.until).distinct()
     )).scalars().all()
     if not buyers:
         return MetricResult(name="repeat_rate", unit="pct", value=None, rows=[{"buyers": 0, "repeat": 0}])
     repeat = (await session.execute(
         select(func.count(func.distinct(Order.customer_id))).where(
-            Order.customer_id.in_(buyers), Order.status != "voided", Order.sold_at < ctx.since,
+            Order.customer_id.in_(buyers), Order.status.not_in(("voided", "open")), Order.sold_at < ctx.since,
         )
     )).scalar_one()
     value = (Decimal(repeat) / Decimal(len(buyers)) * 100).quantize(PCT, rounding=ROUND_HALF_UP)
@@ -467,7 +467,7 @@ async def customer_summary(session: AsyncSession, ctx: MetricContext) -> MetricR
         v = await customer_view(session, cust)
         period_spend, period_visits = (await session.execute(
             select(func.coalesce(func.sum(case((Order.status == "completed", Order.total), else_=0)), 0), func.count(Order.id))
-            .where(Order.customer_id == cust.id, Order.status != "voided", Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
+            .where(Order.customer_id == cust.id, Order.status.not_in(("voided", "open")), Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
         )).one()
         row = {**v, "period_spend": float(_money(period_spend)), "period_visits": int(period_visits)}
         return MetricResult(name="customer_summary", unit="list", value=_money(v["total_spent"]), rows=[row])
@@ -475,7 +475,7 @@ async def customer_summary(session: AsyncSession, ctx: MetricContext) -> MetricR
         select(Customer, func.coalesce(func.sum(case((Order.status == "completed", Order.total), else_=0)), 0).label("spend"),
                func.count(Order.id).label("visits"))
         .join(Order, Order.customer_id == Customer.id)
-        .where(Order.status != "voided", Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
+        .where(Order.status.not_in(("voided", "open")), Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
         .group_by(Customer.id).order_by(desc("spend")).limit(ctx.limit)
     )).all()
     views = await customer_views(session, [c for c, _s, _v in top])
@@ -492,7 +492,7 @@ async def promo_performance(session: AsyncSession, ctx: MetricContext) -> Metric
                func.count(func.distinct(PromoApplication.order_id)))
         .join(PromoApplication, PromoApplication.promo_id == Promo.id)
         .join(Order, Order.id == PromoApplication.order_id)
-        .where(Order.status != "voided", Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
+        .where(Order.status.not_in(("voided", "open")), Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
         .group_by(Promo.id).order_by(desc(func.coalesce(func.sum(PromoApplication.amount), 0)))
         .limit(max(ctx.limit, 20))
     )).all()
@@ -501,7 +501,7 @@ async def promo_performance(session: AsyncSession, ctx: MetricContext) -> Metric
         order_revenue = (await session.execute(
             select(func.coalesce(func.sum(Order.total), 0)).where(
                 Order.id.in_(select(PromoApplication.order_id).where(PromoApplication.promo_id == pid)),
-                Order.status != "voided", Order.sold_at >= ctx.since, Order.sold_at < ctx.until,
+                Order.status.not_in(("voided", "open")), Order.sold_at >= ctx.since, Order.sold_at < ctx.until,
             )
         )).scalar_one()
         out.append({"promo_id": pid, "name": name, "kind": kind, "is_active": active, "applications": int(n),

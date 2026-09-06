@@ -17,6 +17,7 @@ from sqlalchemy import select
 from app.core.db import tenant_session
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
+from app.schemas.menu import PosTicketOut, TicketCancelIn, TicketSettleIn
 from app.core.security import create_token, decode_token, verify_pin
 from app.models import Business, Item, ItemVariant, Modifier, RequestLog, Staff
 from app.schemas.pos import (
@@ -391,10 +392,14 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             status="ok",
         )
     )
+    return await _order_out(ctx.session, created)
+
+
+async def _order_out(session, created) -> OrderOut:
     order = created.order
     from app.services.points import points_of_order
 
-    earned, redeemed = await points_of_order(ctx.session, order.id)
+    earned, redeemed = await points_of_order(session, order.id)
     return OrderOut(
         id=order.id,
         order_type=order.order_type,
@@ -422,6 +427,96 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         ],
         payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in created.payments],
     )
+
+
+# ── The e-menu queue (M11-T1) ────────────────────────────────────────────────
+#
+# Tickets placed from the QR menu are open rows in this business's own orders
+# table. The till lists them, settles one by taking payment (the ordinary sale,
+# written on the ticket's row) or cancels one it cannot serve.
+
+
+@router.get("/tickets", response_model=list[PosTicketOut])
+async def pos_tickets(ctx: PosCtx):
+    from app.api.menu import ticket_out
+    from app.services.tickets import open_tickets
+
+    return [ticket_out(t, PosTicketOut) for t in await open_tickets(ctx.session)]
+
+
+@router.post("/tickets/{order_id}/settle", response_model=OrderOut)
+async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: PosCtx):
+    """Payment for a guest's ticket: exactly what `POST /pos/orders` does, on
+    the ticket's own row. All-or-nothing; a second till gets 409."""
+    from app.services.orders import TicketNotOpen
+    from app.services.tickets import TicketNotFound, get_ticket, settle_ticket
+
+    start = time.perf_counter()
+    try:
+        ticket = await get_ticket(ctx.session, order_id)
+        created = await settle_ticket(
+            ctx.session, business_id=ctx.business_id, ticket=ticket, staff_id=ctx.staff_id,
+            payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
+            bill_discount=payload.bill_discount, manager_pin=payload.manager_pin,
+            customer_id=payload.customer_id, voucher_code=payload.voucher_code,
+        )
+    except TicketNotFound:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    except TicketNotOpen as exc:
+        raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
+    except VoucherInvalid as exc:
+        raise HTTPException(status_code=409 if exc.code == "used_up" else 422, detail=_voucher_message(exc))
+    except CustomerInvalid:
+        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan atau sudah tidak aktif")
+    except InsufficientPoints as exc:
+        raise HTTPException(status_code=409, detail=f"Poin tidak cukup — butuh {exc.needed}, tersedia {exc.available}")
+    except PointsInvalid as exc:
+        raise HTTPException(status_code=422, detail=_POINTS_ERRORS.get(exc.code, "Pembayaran poin tidak valid").format(exc.detail))
+    except DiscountNeedsManager:
+        raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik memasukkan PIN-nya")
+    except ManagerPinRejected:
+        raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik untuk memasukkan PIN-nya")
+    except PricingInvalid as exc:
+        raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
+    except (ItemNotFound, VariantNotFound):
+        raise HTTPException(status_code=409, detail="Menu di pesanan ini sudah tidak ada — batalkan pesanan dan buat ulang di kasir")
+    except ModifierSelectionInvalid:
+        raise HTTPException(status_code=409, detail="Pilihan tambahan di pesanan ini sudah tidak berlaku — batalkan dan buat ulang di kasir")
+    except InsufficientStock as exc:
+        raise HTTPException(status_code=409, detail=f"Stok tidak cukup — {exc.item_name} tersisa {exc.available}")
+    except PaymentMismatch as exc:
+        raise HTTPException(status_code=422, detail=f"Pembayaran {_rp(exc.paid)} tidak sama dengan total {_rp(exc.total)}")
+
+    for cl in created.lines:
+        await check_low_stock_for_item(ctx.session, ctx.business_id, cl.line.item_id)
+    ctx.session.add(RequestLog(
+        business_id=ctx.business_id, channel="pos", path="/pos/tickets/settle",
+        latency_ms=int((time.perf_counter() - start) * 1000), status="ok",
+    ))
+    return await _order_out(ctx.session, created)
+
+
+_TICKET_CLOSED = {
+    "completed": "Pesanan ini sudah dibayar di kasir lain",
+    "voided": "Pesanan ini sudah dibatalkan",
+    "refunded": "Pesanan ini sudah dibayar dan dikembalikan",
+}
+
+
+@router.post("/tickets/{order_id}/cancel", response_model=PosTicketOut)
+async def pos_cancel_ticket(order_id: uuid.UUID, payload: TicketCancelIn, ctx: PosCtx):
+    from app.api.menu import ticket_out
+    from app.services.orders import TicketNotOpen
+    from app.services.tickets import TicketNotFound, cancel_ticket, get_ticket
+
+    try:
+        ticket = await get_ticket(ctx.session, order_id)
+        ticket = await cancel_ticket(ctx.session, ticket=ticket, reason=payload.reason, staff_id=ctx.staff_id)
+    except TicketNotFound:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    except TicketNotOpen as exc:
+        raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
+    return ticket_out(ticket, PosTicketOut)
 
 
 @router.get("/orders/{order_id}/receipt", response_model=ReceiptOut)
