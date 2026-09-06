@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     frontend_origin: str = "http://localhost:3000"
     low_stock_days_threshold: float = 3.0
+    # Evaluation only (roadmap M9-T6): lets app.eval run the naive text-to-SQL
+    # baseline for comparison. Never read by the WhatsApp path.
+    eval_text_to_sql: bool = False
 
 
 @lru_cache
