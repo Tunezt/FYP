@@ -370,6 +370,10 @@ class Order(Base):
     # E-menu tickets (M11-T1, migration 0026): where the order came from, who
     # and where the guest is, and their cart verbatim while the row is `open`.
     source: Mapped[str] = mapped_column(Text, nullable=False, server_default="pos")  # 'pos' | 'menu' (check constraint)
+    # M15-T10, migration 0033. `source` is the channel the customer used;
+    # `entry_source` is how it was keyed in — 'live' as it happened, or
+    # 'manual_backdated' typed afterwards from paper with a chosen timestamp.
+    entry_source: Mapped[str] = mapped_column(Text, nullable=False, server_default="live")
     table_label: Mapped[str | None] = mapped_column(Text)
     guest_name: Mapped[str | None] = mapped_column(Text)
     guest_phone: Mapped[str | None] = mapped_column(Text)

@@ -307,6 +307,7 @@ class OrderSummaryOut(BaseModel):
     staff_name: str | None = None
     customer_name: str | None = None
     table_label: str | None = None
+    entry_source: str = "live"        # M15-T10: 'manual_backdated' was typed from paper
 
 
 class OrdersPage(BaseModel):

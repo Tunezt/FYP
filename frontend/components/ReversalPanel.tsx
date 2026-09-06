@@ -153,6 +153,9 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                         {row.line_count} item
                         {row.staff_name ? ` · ${row.staff_name}` : ""}
                         {row.customer_name ? ` · ${row.customer_name}` : ""}
+                        {/* M15-T10: a slip somebody typed in reads differently
+                            from one the till timestamped itself. */}
+                        {row.entry_source === "manual_backdated" && " · dari nota kertas"}
                       </p>
                     </div>
                     <span className="shrink-0 text-sm font-semibold tabular-nums">

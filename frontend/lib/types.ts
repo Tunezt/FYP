@@ -143,6 +143,8 @@ export type OrderRow = {
   staff_name: string | null;
   customer_name: string | null;
   table_label: string | null;
+  /** M15-T10: "manual_backdated" was typed in afterwards from a paper slip. */
+  entry_source: "live" | "manual_backdated";
 };
 
 export type OrdersPage = { total: number; rows: OrderRow[] };

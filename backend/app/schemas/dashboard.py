@@ -779,3 +779,25 @@ class ApprovalRow(BaseModel):
     amount: Decimal | None
     note: str | None
     created_at: datetime
+
+
+# ── Backdated sale entry (M15-T10) ──────────────────────────────────────────
+
+
+class BackdatedLineIn(BaseModel):
+    item_id: uuid.UUID
+    variant_id: uuid.UUID | None = None
+    quantity: Decimal = Field(gt=0, le=Decimal("9999"))
+
+
+class BackdatedSaleIn(BaseModel):
+    """A sale that happened on paper, entered afterwards at the time it actually
+    happened. Everything else is an ordinary sale: it prices, moves stock, posts
+    to the ledger and earns points exactly as the till would have."""
+
+    sold_at: datetime
+    staff_id: uuid.UUID                       # who actually took the money
+    lines: list[BackdatedLineIn] = Field(min_length=1, max_length=50)
+    payment_method: Literal["cash", "qris", "transfer", "card", "ewallet", "other"] = "cash"
+    customer_id: uuid.UUID | None = None
+    note: str | None = Field(default=None, max_length=200)

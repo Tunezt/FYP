@@ -14,6 +14,7 @@ have to read the rest.
 | Someone forgot their PIN | [Locked out](#locked-out-a-lost-tablet-a-lost-link-a-forgotten-pin) |
 | The tablet is lost or stolen | [Locked out](#locked-out-a-lost-tablet-a-lost-link-a-forgotten-pin) |
 | Something has to be cancelled and the owner is away | [When the owner is not there](#when-the-owner-is-not-there-and-something-has-to-be-cancelled) |
+| There are paper slips to type in | [Catat nota](#the-internet-is-down) |
 | It is closing time | [Closing the day](#closing-the-day) |
 | The database is gone | [Restoring from a backup](#restoring-from-a-backup) |
 
@@ -40,11 +41,14 @@ when the connection drops the kiosk stops accepting sales.
    the staff can reach without you.
 3. **If neither works, go to paper.** One line per customer: what they bought, how many, what they
    paid, cash or QRIS, and the time. Keep the sheet — it is the only record that exists.
-4. **When the connection comes back**, ring the paper sales up on the till, oldest first. They will
-   be timestamped as of now, not when they happened, so if it crossed a day boundary write a note
-   on the sheet and keep it. (Entering them at their real time is M15-T10, not built yet.)
+4. **When the connection comes back, enter the paper sales at their real times.** Dashboard →
+   Penjualan → **Catat nota**. One slip at a time: the date and hour from the sheet, who served,
+   what they bought, how it was paid. Each one goes into the books dated when it actually happened,
+   so the day's takings and the shift are right, and it is tagged "dari nota kertas" in the
+   transaction list so you can see later which rows were typed rather than rung up.
 5. **Stock will be wrong until you do step 4**, because nothing came off the shelf in the system.
-   Do not "fix" the stock number by hand as well or you will subtract it twice.
+   Do not "fix" the stock number by hand as well or you will subtract it twice — entering the
+   slips moves the stock for you.
 
 ### The tablet died mid-service
 
@@ -57,7 +61,9 @@ that costs.
    but it is a working one.
 3. If the link is not to hand and the old tablet is unrecoverable, see
    [Locked out: a lost tablet](#the-tablet-is-lost-stolen-or-sold) below.
-4. **Enter the paper sales** on whatever device is now the till, oldest first, as in step 4 above.
+4. **Enter the paper sales** from the dashboard when service is over — Penjualan → **Catat nota**,
+   at the times on the sheet, as in step 4 above. Do it the same day if you can; the entry screen
+   refuses anything older than 60 days, and a slip nobody can date is a slip nobody can trust.
 
 ### The printer will not print
 
@@ -236,7 +242,6 @@ Honest list, so nobody discovers these at 8am. Each one is a task that exists an
 | Gap | What it means in the shop | Task |
 |---|---|---|
 | No offline till | the internet going down stops sales; paper and re-entry | M14 |
-| No backdated entry | paper sales are entered at today's time, not theirs | M15-T10 |
 | No uptime alert | you find out the API is down by trying to use it | M15-T5 |
 | No tested printer | receipt printing has not been proven on real hardware | M15-T6 |
 

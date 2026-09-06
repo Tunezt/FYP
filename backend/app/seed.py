@@ -145,6 +145,11 @@ async def seed(confirm: bool = False) -> None:
             timezone="Asia/Jakarta",
             onboarding_completed_at=now - timedelta(days=31),
         )
+        # The demo café has 30 days of invented history, so its row has to be at
+        # least that old or the story does not hold together: M15-T10 refuses a
+        # paper sale dated before the business existed, and a business created
+        # "now" would make every one of its own seeded sales unenterable.
+        business.created_at = now - timedelta(days=31)
         session.add(business)
         await session.flush()
         business_id = business.id

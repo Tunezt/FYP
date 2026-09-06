@@ -130,16 +130,16 @@ const STAFF: StaffMember[] = [
 const ORDERS: OrderRow[] = [
   { id: "demo-order-1", number: "A1B2C3D4", sold_at: jktIso(0, 15), status: "voided",
     order_type: "takeaway", total: "48000.00", line_count: 3, staff_name: "Sari",
-    customer_name: null, table_label: null },
+    customer_name: null, table_label: null, entry_source: "live" },
   { id: "demo-order-2", number: "E5F6A7B8", sold_at: jktIso(0, 12), status: "completed",
     order_type: "dine_in", total: "62000.00", line_count: 4, staff_name: "Sari",
-    customer_name: "Andi", table_label: "3" },
+    customer_name: "Andi", table_label: "3", entry_source: "live" },
   { id: "demo-order-3", number: "C9D0E1F2", sold_at: jktIso(1, 16), status: "refunded",
     order_type: "takeaway", total: "22000.00", line_count: 1, staff_name: "Budi",
-    customer_name: null, table_label: null },
+    customer_name: null, table_label: null, entry_source: "live" },
   { id: "demo-order-4", number: "1A2B3C4D", sold_at: jktIso(1, 9), status: "completed",
     order_type: "takeaway", total: "35000.00", line_count: 2, staff_name: "Budi",
-    customer_name: null, table_label: null },
+    customer_name: null, table_label: null, entry_source: "manual_backdated" },
 ];
 
 const DEMO_RECEIPT_LINES: Record<string, { name: string; quantity: string; line_total: string }[]> = {

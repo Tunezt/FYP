@@ -192,6 +192,7 @@ async def create_order(
     delivery_address: str | None = None,
     guest_name: str | None = None,
     guest_phone: str | None = None,
+    entry_source: str = "live",
 ) -> CreatedOrder:
     """`ticket` (M11-T1): an open e-menu row to fulfil. The sale is written on
     that row — its status flips open → completed under an atomic claim, so two
@@ -210,7 +211,12 @@ async def create_order(
         )
         if claimed.rowcount != 1:
             raise TicketNotOpen(ticket.status)
-    shift_id = await open_shift_id(session, staff_id)  # the cashier's open till, if any (M7-T1)
+    # The cashier's open till, if any (M7-T1) — but a backdated sale never
+    # passed through one (M15-T10). Stamping it with whatever shift happens to
+    # be open now would inflate today's expected cash by money that was taken
+    # two days ago and is not in the drawer, so the cashier's count comes up
+    # short by exactly the amount somebody typed in to be helpful.
+    shift_id = await open_shift_id(session, staff_id) if entry_source == "live" else None
     customer = await require_customer(session, customer_id)  # must be this business's, and active (M8-T1)
 
     # Routing by order type (M11-T3): what the type demands is checked before
@@ -363,6 +369,7 @@ async def create_order(
         order.delivery_fee = bill.delivery_fee
         order.table_label, order.delivery_address = table_label, delivery_address
         order.guest_name, order.guest_phone = guest_name, guest_phone
+        order.entry_source = entry_source
     else:
         order = Order(
             shift_id=shift_id,
@@ -385,6 +392,7 @@ async def create_order(
             delivery_address=delivery_address,
             guest_name=guest_name,
             guest_phone=guest_phone,
+            entry_source=entry_source,
         )
         session.add(order)
     await session.flush()
@@ -864,6 +872,7 @@ class OrderSummary:
     staff_name: str | None
     customer_name: str | None
     table_label: str | None
+    entry_source: str
 
 
 def order_number(order_id: uuid.UUID) -> str:
@@ -920,6 +929,7 @@ async def list_orders(
             id=o.id, number=order_number(o.id), sold_at=o.sold_at, status=o.status,
             order_type=o.order_type, total=Decimal(o.total), line_count=int(n),
             staff_name=staff_name, customer_name=customer_name, table_label=o.table_label,
+            entry_source=o.entry_source,
         )
         for o, staff_name, customer_name, n in rows
     ], int(total)

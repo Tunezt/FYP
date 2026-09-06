@@ -24,9 +24,10 @@ from app.models import (
     Account, Alert, Approval, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PostingRule,
     PurchaseOrder, Receipt, RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
 )
-from app.schemas.pos import OrdersPage, ReceiptOut, RefundIn, ReversalIn, ReversalOut
+from app.schemas.pos import OrderSummaryOut, OrdersPage, ReceiptOut, RefundIn, ReversalIn, ReversalOut
 from app.schemas.dashboard import (
     ApprovalRow,
+    BackdatedSaleIn,
     BalanceSheetOut,
     ProfitAndLossOut,
     StatementLineOut,
@@ -1602,6 +1603,123 @@ async def owner_refund_order(order_id: uuid.UUID, payload: RefundIn, ctx: OwnerC
         ctx, order_id, refund_order, "/api/orders/{id}/refund", channel="dashboard",
         manager_pin=payload.manager_pin, note=payload.note, restock=payload.restock,
     )
+
+
+# ── Backdated sale entry (M15-T10) ──────────────────────────────────────────
+
+_BACKDATED_ERRORS = {
+    "future": (422, "Tanggal penjualan tidak boleh di masa depan"),
+    "too_old": (422, "Penjualan lebih dari 60 hari lalu tidak bisa dicatat di sini — hubungi pengembang"),
+    "before_business": (422, "Tanggal ini sebelum usaha ini terdaftar"),
+    "staff": (422, "Kasir tidak dikenali atau sudah tidak aktif"),
+}
+
+BACKDATE_MAX_DAYS = 60
+
+
+@router.post("/backdated-sales", response_model=OrderSummaryOut, status_code=201)
+async def record_backdated_sale(payload: BackdatedSaleIn, ctx: OwnerCtx):
+    """Enter a sale that happened on paper (M15-T10).
+
+    The offline queue (M14) covers a lost connection. It does not cover a lost
+    *device*: one tablet is one point of failure, and when it dies mid-service
+    the staff keep selling on paper. Those sales still have to reach the books,
+    at the time they actually happened — otherwise the day's takings are wrong,
+    the shift reconciliation is wrong, and the stock is wrong by however many
+    cups were poured.
+
+    It posts through the ordinary engine. Nothing here is a special case: the
+    same pricing, the same atomic stock guard, the same journal entry, the same
+    points. The single difference is `entry_source = 'manual_backdated'`, which
+    says a human chose the timestamp rather than the clock — visible in the
+    audit trail, and available to anything that wants to treat it differently.
+
+    Owner-only, because choosing a sale's timestamp is exactly the power that
+    would let someone move takings between days."""
+    from app.services.customers import CustomerInvalid
+    from app.services.orders import EmptyOrder, OrderLineSpec, PaymentSpec, create_order
+    from app.services.sales import InsufficientStock, ItemNotFound
+
+    business = await _business(ctx)
+    now = datetime.now(timezone.utc)
+    sold_at = payload.sold_at
+    if sold_at.tzinfo is None:
+        sold_at = sold_at.replace(tzinfo=timezone.utc)
+    if sold_at > now:
+        raise _backdated_error("future")
+    if (now - sold_at).days > BACKDATE_MAX_DAYS:
+        raise _backdated_error("too_old")
+    if sold_at < business.created_at:
+        raise _backdated_error("before_business")
+
+    staff = await ctx.session.get(Staff, payload.staff_id)
+    if staff is None or staff.business_id != ctx.business_id or not staff.is_active:
+        raise _backdated_error("staff")
+
+    # The note rides on the lines, which is the only free-text the order model
+    # has and which is where a reversal already writes its own explanation.
+    note = (payload.note or "").strip() or None
+    lines = [
+        OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, quantity=l.quantity, notes=note)
+        for l in payload.lines
+    ]
+    # Price it first so the payment matches to the rupiah: a paper sale has no
+    # keypad to disagree with, and a mismatch here would be an error the owner
+    # cannot act on.
+    quote = await _quote_total(ctx, lines)
+    try:
+        created = await create_order(
+            ctx.session, business_id=ctx.business_id, staff_id=staff.id, lines=lines,
+            payments=[PaymentSpec(method=payload.payment_method, amount=quote)],
+            sold_at=sold_at, customer_id=payload.customer_id, entry_source="manual_backdated",
+        )
+    except EmptyOrder:
+        raise HTTPException(status_code=422, detail="Penjualan harus punya minimal satu barang")
+    except InsufficientStock as exc:
+        # A sale from paper is not a licence to go below zero: the same atomic
+        # guard applies, and the whole entry rolls back rather than half-landing.
+        raise HTTPException(
+            status_code=409, detail=f"Stok tidak cukup — {exc.item_name} tersisa {exc.available}"
+        )
+    except ItemNotFound:
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+    except CustomerInvalid:
+        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan atau sudah tidak aktif")
+
+    order = created.order
+    from app.services.orders import order_number
+
+    return OrderSummaryOut(
+        id=order.id, number=order_number(order.id), sold_at=order.sold_at, status=order.status,
+        order_type=order.order_type, total=order.total, line_count=len(created.lines),
+        staff_name=staff.name, customer_name=None, table_label=None, entry_source=order.entry_source,
+    )
+
+
+def _backdated_error(code: str) -> HTTPException:
+    status, detail = _BACKDATED_ERRORS[code]
+    return HTTPException(status_code=status, detail=detail)
+
+
+async def _quote_total(ctx: OwnerCtx, lines) -> Decimal:
+    """What the till would have charged for these lines, priced by the one
+    pricing service (M7-T4b) so a paper sale and a rung-up sale agree."""
+    from app.services.catalog import default_variant
+    from app.services.pricing import LineInput, price_order, pricing_config
+
+    config = await pricing_config(ctx.session, ctx.business_id)
+    inputs = []
+    for spec in lines:
+        item = await ctx.session.get(Item, spec.item_id)
+        if item is None or item.business_id != ctx.business_id:
+            raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+        variant = (
+            await ctx.session.get(ItemVariant, spec.variant_id)
+            if spec.variant_id else await default_variant(ctx.session, item.id)
+        )
+        price = Decimal(variant.sell_price) if variant is not None else Decimal(item.sell_price)
+        inputs.append(LineInput(unit_price=price, quantity=Decimal(spec.quantity)))
+    return price_order(inputs, config, order_type="takeaway").total
 
 
 # ── Override audit trail (M15-T7) ───────────────────────────────────────────

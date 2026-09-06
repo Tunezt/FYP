@@ -8,6 +8,7 @@ import { daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
 import type { Business, Page, SaleRow, TrendPoint } from "@/lib/types";
 import { DayHeader, EmptyState, ErrorState, Glass, ItemIcon, Segmented, Skeleton } from "@/components/ui";
 import { ReversalPanel } from "@/components/ReversalPanel";
+import { BackdatedSaleForm } from "@/components/BackdatedSaleForm";
 
 const RANGES = [
   { value: "7", label: "7 hari" },
@@ -107,6 +108,14 @@ export default function SalesPage() {
           )}
         </div>
       </Glass>
+
+      {/* M15-T10 — a sale that happened on paper, entered afterwards */}
+      <BackdatedSaleForm
+        onRecorded={() => {
+          trend.reload();
+          sales.reload();
+        }}
+      />
 
       {/* M15-T11 — reverse a sale found after the shift closed */}
       <ReversalPanel tz={tz} dayStart={dayStart} />
