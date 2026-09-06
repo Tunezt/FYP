@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -57,10 +58,22 @@ class RegisterOut(BaseModel):
     business: BusinessOut
 
 
+# M15-T7: the owner may hand out `manager`, never `owner` — a second owner
+# would be a second business login, which is not what this role is for.
+AssignableRole = Literal["staff", "manager"]
+
+
 class StaffCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     pin: str = Field(min_length=4, max_length=6, pattern=r"^\d{4,6}$")
     phone: str | None = None
+    role: AssignableRole = "staff"
+
+
+class StaffUpdateIn(BaseModel):
+    """Promote a cashier to manager, or take it back. Nothing else moves."""
+
+    role: AssignableRole
 
 
 class StaffOut(BaseModel):

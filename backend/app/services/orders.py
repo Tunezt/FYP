@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 
 from app.models import (
-    Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier, Payment, RecipeLine,
+    Approval, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier, Payment, RecipeLine,
     StockMovement,
 )
 from app.services.catalog import default_variant
@@ -234,11 +234,13 @@ async def create_order(
     #    anything without the manager's PIN — checked before any stock moves.
     config = await pricing_config(session, business_id)
     bill_discount = Decimal(bill_discount or 0)
+    discount_approver: Staff | None = None
     if bill_discount > 0 or any(Decimal(l.line_discount or 0) > 0 for l in lines):
         if config.discount_requires_pin:
             if not manager_pin:
                 raise DiscountNeedsManager()
-            await verify_manager_pin(session, manager_pin)
+            # Held until the order exists, then written to the audit trail below.
+            discount_approver = await verify_manager_pin(session, manager_pin)
 
     # 1. Price every line and take its stock, atomically, before any row exists.
     #    Price and cost come from the variant (explicit, else the item's default);
@@ -386,6 +388,13 @@ async def create_order(
         )
         session.add(order)
     await session.flush()
+
+    if discount_approver is not None and bill.discount_total > 0:
+        await record_approval(
+            session, business_id, action="discount", approver=discount_approver,
+            requested_by=staff_id, order_id=order.id, amount=bill.discount_total,
+            note=f"diskon manual pada penjualan #{str(order.id)[-8:].upper()}", created_at=sold_at,
+        )
 
     created = CreatedOrder(order=order)
     for (spec, item, variant, modifiers, price, cost, _gross, remaining, consumed), pl in zip(priced, bill.lines):
@@ -548,16 +557,48 @@ RESTOCK = sql_text(
 )
 
 
+APPROVER_ROLES = ("owner", "manager")
+
+
 async def verify_manager_pin(session: AsyncSession, pin: str) -> Staff:
-    """The owner's PIN is the manager PIN (the schema has owner/staff roles
-    only). Any active owner-role staff of the pinned business may authorise."""
-    owners = (
-        await session.execute(select(Staff).where(Staff.role == "owner", Staff.is_active.is_(True)))
+    """Who may authorise an override: any **active** owner or manager of the
+    pinned business (M15-T7). Before M15-T7 only the owner could, which meant a
+    cashier with a mistake and no owner on site had no legitimate way to fix it.
+
+    A plain `staff` PIN is rejected, and so is a deactivated approver's — the
+    role is checked on the row, not on the token, so revoking access is one
+    flag and takes effect on the next authorisation."""
+    candidates = (
+        await session.execute(
+            select(Staff).where(Staff.role.in_(APPROVER_ROLES), Staff.is_active.is_(True))
+        )
     ).scalars().all()
-    for owner in owners:
-        if verify_pin(pin, owner.pin_hash):
-            return owner
+    for approver in candidates:
+        if verify_pin(pin, approver.pin_hash):
+            return approver
     raise ManagerPinRejected()
+
+
+async def record_approval(
+    session: AsyncSession, business_id: uuid.UUID, *, action: str, approver: Staff,
+    requested_by: uuid.UUID | None, order_id: uuid.UUID | None = None,
+    amount: Decimal | None = None, note: str | None = None,
+    created_at: datetime | None = None,
+) -> Approval:
+    """The audit trail an override leaves behind (M15-T7). Append-only, and
+    `approver_role` is a snapshot: a cashier promoted to manager next month
+    must not change what last month's trail says about who could approve."""
+    row = Approval(
+        business_id=business_id, order_id=order_id, action=action,
+        approved_by=approver.id, approver_role=approver.role, requested_by=requested_by,
+        amount=(Decimal(amount).quantize(TWO_PLACES) if amount is not None else None),
+        note=note,
+    )
+    if created_at is not None:
+        row.created_at = created_at
+    session.add(row)
+    await session.flush()
+    return row
 
 
 @dataclass
@@ -667,6 +708,11 @@ async def _reverse(
 
     order.status = "voided" if kind == "void" else "refunded"
     await session.flush()
+    # Who authorised this, structurally and not only in the memo prose (M15-T7).
+    await record_approval(
+        session, business_id, action=kind, approver=manager, requested_by=staff_id,
+        order_id=order_id, amount=Decimal(order.total or 0), note=note, created_at=now,
+    )
     # Points (M8-T2): what this order earned is taken back, what it spent returns.
     await reverse_points_for_order(session, business_id, order_id, staff_id=staff_id, created_at=now, memo=tag)
     # Vouchers (M8-T4): the use goes back to the code.

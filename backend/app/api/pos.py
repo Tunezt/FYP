@@ -360,9 +360,9 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
     except PointsInvalid as exc:
         raise HTTPException(status_code=422, detail=_POINTS_ERRORS.get(exc.code, "Pembayaran poin tidak valid").format(exc.detail))
     except DiscountNeedsManager:
-        raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik memasukkan PIN-nya")
+        raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik atau manajer memasukkan PIN-nya")
     except ManagerPinRejected:
-        raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik untuk memasukkan PIN-nya")
+        raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik atau manajer untuk memasukkan PIN-nya")
     except PricingInvalid as exc:
         raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
     except ItemNotFound:
@@ -491,9 +491,9 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
     except PointsInvalid as exc:
         raise HTTPException(status_code=422, detail=_POINTS_ERRORS.get(exc.code, "Pembayaran poin tidak valid").format(exc.detail))
     except DiscountNeedsManager:
-        raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik memasukkan PIN-nya")
+        raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik atau manajer memasukkan PIN-nya")
     except ManagerPinRejected:
-        raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik untuk memasukkan PIN-nya")
+        raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik atau manajer untuk memasukkan PIN-nya")
     except PricingInvalid as exc:
         raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
     except (ItemNotFound, VariantNotFound):
@@ -632,7 +632,7 @@ async def _run_reversal(ctx, order_id: uuid.UUID, fn, path: str, **kwargs) -> Re
     try:
         rev = await fn(ctx.session, business_id=ctx.business_id, order_id=order_id, staff_id=ctx.staff_id, **kwargs)
     except ManagerPinRejected:
-        raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik untuk memasukkan PIN-nya")
+        raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik atau manajer untuk memasukkan PIN-nya")
     except OrderNotFound:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
     except OrderNotReversible as exc:

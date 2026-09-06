@@ -6,6 +6,7 @@ import { useOwnerData } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import { dayLabel, daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
 import type {
+  ApprovalRow,
   Business,
   CashMovementRow,
   ExpenseRow,
@@ -34,6 +35,9 @@ const CASH_KIND_LABEL: Record<CashMovementRow["kind"], string> = {
   bank_drop: "Setor bank",
 };
 
+const APPROVAL_LABEL: Record<string, string> = { discount: "diskon", void: "batal", refund: "refund" };
+const ROLE_LABEL: Record<string, string> = { owner: "pemilik", manager: "manajer", staff: "staf" };
+
 export default function MoneyPage() {
   const [expensePage, setExpensePage] = useState(1);
   const pnl = useOwnerData<PnlMonth[]>("/api/pnl?months=6");
@@ -41,6 +45,7 @@ export default function MoneyPage() {
   const receipts = useOwnerData<Page<ReceiptRow>>("/api/receipts?page=1&page_size=6");
   const shifts = useOwnerData<ShiftRow[]>("/api/shifts?limit=12");
   const cash = useOwnerData<CashMovementRow[]>("/api/cash-movements?limit=200");
+  const approvals = useOwnerData<ApprovalRow[]>("/api/approvals?limit=30");
   const business = useOwnerData<Business>("/api/business");
   const tz = business.data?.timezone;
   const dayStart = business.data?.day_start_hour ?? 0;
@@ -258,6 +263,58 @@ export default function MoneyPage() {
               );
             })}
           </div>
+        )}
+      </section>
+
+      {/* Manager overrides (M15-T7) — who authorised what, and for how much */}
+      <section>
+        <h2 className="flex items-center gap-2 text-base font-bold">
+          Otorisasi manajer
+          <HelpTip title="Kenapa ini dicatat">
+            Batal transaksi, refund dan diskon perlu PIN pemilik atau manajer. Setiap persetujuan
+            dicatat di sini: siapa yang menyetujui, peran dia saat itu, siapa yang minta, dan berapa
+            nilainya. Kalau ada yang tidak kamu kenali, tanyakan hari itu juga.
+          </HelpTip>
+        </h2>
+        {approvals.loading ? (
+          <Skeleton className="mt-3 h-32" />
+        ) : (approvals.data ?? []).length === 0 ? (
+          <Plate className="mt-3">
+            <EmptyState emoji="🔐" title="Belum ada otorisasi">
+              Belum ada transaksi yang dibatalkan, direfund, atau didiskon dengan PIN. Kalau nanti
+              ada, semuanya muncul di sini.
+            </EmptyState>
+          </Plate>
+        ) : (
+          <ul className="mt-3">
+            {(approvals.data ?? []).map((a) => (
+              <li key={a.id} className="list-row">
+                <span
+                  className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold"
+                  style={{
+                    background: a.action === "discount" ? "var(--warn-bg)" : "var(--bad-bg)",
+                    color: a.action === "discount" ? "var(--warn)" : "var(--bad)",
+                  }}
+                >
+                  {APPROVAL_LABEL[a.action]}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">
+                    {a.approver_name}
+                    <span className="ink-faint font-normal"> ({ROLE_LABEL[a.approver_role] ?? a.approver_role})</span>
+                  </p>
+                  <p className="ink-faint truncate text-xs">
+                    {a.requested_by_name ? `diminta ${a.requested_by_name} · ` : ""}
+                    {dayLabel(new Date(a.created_at), tz, dayStart)} {timeLabel(new Date(a.created_at), tz)}
+                    {a.note ? ` · “${a.note}”` : ""}
+                  </p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold tabular-nums">
+                  {a.amount ? formatRupiah(a.amount) : "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 

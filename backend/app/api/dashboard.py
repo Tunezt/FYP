@@ -16,14 +16,16 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
+from sqlalchemy.orm import aliased
 
 from app.ai.periods import business_day
 from app.core.deps import OwnerCtx
 from app.models import (
-    Account, Alert, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PostingRule,
+    Account, Alert, Approval, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PostingRule,
     PurchaseOrder, Receipt, RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
 )
 from app.schemas.dashboard import (
+    ApprovalRow,
     BalanceSheetOut,
     ProfitAndLossOut,
     StatementLineOut,
@@ -1539,6 +1541,42 @@ async def list_shifts(ctx: OwnerCtx, limit: int = Query(default=30, ge=1, le=200
     from app.services.shifts import list_shifts as _list, shift_view
 
     return [ShiftOut(**await shift_view(ctx.session, sh)) for sh in await _list(ctx.session, limit=limit)]
+
+
+# ── Override audit trail (M15-T7) ───────────────────────────────────────────
+
+
+@router.get("/approvals", response_model=list[ApprovalRow])
+async def list_approvals(
+    ctx: OwnerCtx,
+    limit: int = Query(default=50, ge=1, le=200),
+    action: str | None = Query(default=None),
+):
+    """Every void, refund and manager-approved discount, newest first: who
+    approved it, what role they held at the time, who asked, and what it was
+    worth. An override the owner cannot read afterwards is not an audit trail."""
+    if action is not None and action not in ("discount", "void", "refund"):
+        raise HTTPException(status_code=422, detail="Jenis otorisasi tidak dikenali")
+    approver = aliased(Staff)
+    requester = aliased(Staff)
+    stmt = (
+        select(Approval, approver.name, requester.name)
+        .join(approver, approver.id == Approval.approved_by)
+        .outerjoin(requester, requester.id == Approval.requested_by)
+        .order_by(Approval.created_at.desc(), Approval.id)
+        .limit(limit)
+    )
+    if action is not None:
+        stmt = stmt.where(Approval.action == action)
+    return [
+        ApprovalRow(
+            id=a.id, order_id=a.order_id, action=a.action, approved_by=a.approved_by,
+            approver_name=approver_name, approver_role=a.approver_role,
+            requested_by=a.requested_by, requested_by_name=requester_name,
+            amount=a.amount, note=a.note, created_at=a.created_at,
+        )
+        for a, approver_name, requester_name in (await ctx.session.execute(stmt)).all()
+    ]
 
 
 @router.get("/cash-movements")

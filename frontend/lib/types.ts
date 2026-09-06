@@ -86,7 +86,9 @@ export type Business = {
 export type StaffMember = {
   id: string;
   name: string;
-  role: "owner" | "staff";
+  /** M15-T7: `manager` approves voids, refunds and discounts at the till
+   *  and nothing else — the dashboard needs owner scope. */
+  role: "owner" | "staff" | "manager";
   is_active: boolean;
   created_at: string;
 };
@@ -109,6 +111,22 @@ export type ShiftRow = {
   counted_cash: string | null;
   variance: string | null;
   notes: string | null;
+};
+
+/** One manager authorisation (M15-T7): a void, a refund, or a discount that
+ *  needed a PIN. `approver_role` is the role held when it was approved. */
+export type ApprovalRow = {
+  id: string;
+  order_id: string | null;
+  action: "discount" | "void" | "refund";
+  approved_by: string;
+  approver_name: string;
+  approver_role: string;
+  requested_by: string | null;
+  requested_by_name: string | null;
+  amount: string | null;
+  note: string | null;
+  created_at: string;
 };
 
 export type CashMovementRow = {

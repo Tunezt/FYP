@@ -165,6 +165,30 @@ the production database has real history — an estimate in a runbook is worth n
 
 ---
 
+## When the owner is not there and something has to be cancelled
+
+Batal transaksi, refund and a discount all need a **PIN pemilik atau manajer**. If you are the
+only person who can give one and you are not at the shop, the cashier's only remaining option
+is to do the sums in their head — which is exactly how the books stop matching the till.
+
+So appoint a manager before you need one. Dashboard → Pengaturan → Staf kasir → **jadikan
+manajer** on someone you trust, or pick "Manajer" when you add them. The same button takes it
+back. A manager can approve those three things at the kiosk and nothing else: reports and
+settings need the owner login, which is your phone number and your OTP, and no staff PIN can
+reach them.
+
+Every approval is recorded and you can read it: Keuangan → **Otorisasi manajer**. Each row says
+what was approved, who approved it, the role they held at the time, who asked, and how much it
+was worth. Look at it once a week. A manager approving large discounts late at night, or the
+same cashier asking for voids every day, is the pattern this list exists to make visible.
+
+If someone leaves: Pengaturan → Staf kasir → **nonaktifkan**. Their PIN stops working
+immediately, including for approvals — the check is on the account, not on a token they were
+given at the start of the shift. What they already approved stays in the trail, with the role
+they held then.
+
+---
+
 ## Still to be written (M15-T9)
 
 - The internet is down

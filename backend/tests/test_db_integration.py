@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.security import hash_pin
 from app.models import (
-    Account, Business, Item, ItemVariant, JournalEntry, JournalLine, Modifier, ModifierGroup, Order, OrderLine,
+    Account, Approval, Business, Item, ItemVariant, JournalEntry, JournalLine, Modifier, ModifierGroup, Order, OrderLine,
     OrderLineModifier, PostingRule,
     GoodsReceipt, GoodsReceiptLine, Payment, PoLine, PurchaseOrder, RecipeLine, Sale, Staff, StockMovement, Supplier,
     Uom, UomConversion,
@@ -340,6 +340,38 @@ async def test_rls_isolates_recipe_lines(session_factory, two_tenants):
     async with session_factory() as session:
         await _set_tenant(session, a.id)
         session.add(RecipeLine(business_id=b.id, variant_id=ids["variant"], component_item_id=ids["beans"], quantity=Decimal(1)))
+        with pytest.raises(Exception):
+            await session.commit()
+
+
+async def test_rls_isolates_approvals(session_factory, two_tenants):
+    """M15-T7 / roadmap §2. The override audit trail names who authorised a void
+    and what it was worth — a cross-tenant read here would leak another café's
+    staff and its takings."""
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        boss = Staff(business_id=a.id, name="Manajer A", role="manager", pin_hash=hash_pin("4321"))
+        session.add(boss)
+        await session.flush()
+        session.add(Approval(
+            business_id=a.id, action="void", approved_by=boss.id, approver_role="manager",
+            amount=Decimal("55000.00"), note="salah pesan",
+        ))
+        await session.commit()
+        ids = {"boss": boss.id}
+
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert (await session.execute(select(Approval).where(Approval.note == "salah pesan"))).scalars().all() == []
+
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        row = (await session.execute(select(Approval).where(Approval.note == "salah pesan"))).scalar_one()
+        assert row.approver_role == "manager" and row.amount == Decimal("55000.00")
+        session.add(Approval(
+            business_id=b.id, action="void", approved_by=ids["boss"], approver_role="manager", note="Smuggled",
+        ))
         with pytest.raises(Exception):
             await session.commit()
 

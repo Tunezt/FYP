@@ -763,7 +763,7 @@ function SellScreen({
       return;
     }
     if (needsPin && managerPin.length < 4) {
-      setError("Diskon perlu PIN pemilik — minta pemilik memasukkan PIN-nya.");
+      setError("Diskon perlu PIN manajer — minta pemilik atau manajer memasukkan PIN-nya.");
       return;
     }
     setBusy(true);
@@ -1703,7 +1703,7 @@ function SellScreen({
               </label>
               {needsPin && (
                 <label className="block">
-                  <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">PIN pemilik</span>
+                  <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">PIN pemilik / manajer</span>
                   <input
                     type="password"
                     inputMode="numeric"

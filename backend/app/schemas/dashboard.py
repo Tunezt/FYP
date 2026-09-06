@@ -759,3 +759,23 @@ class MetricValueOut(BaseModel):
     period: str | None
     period_label: str
     note: str | None
+
+
+# ── Override audit trail (M15-T7) ───────────────────────────────────────────
+
+
+class ApprovalRow(BaseModel):
+    """One manager authorisation, as the owner reads it back. `approver_role`
+    is the snapshot the row was written with, not the approver's role today."""
+
+    id: uuid.UUID
+    order_id: uuid.UUID | None
+    action: Literal["discount", "void", "refund"]
+    approved_by: uuid.UUID
+    approver_name: str
+    approver_role: str
+    requested_by: uuid.UUID | None
+    requested_by_name: str | None
+    amount: Decimal | None
+    note: str | None
+    created_at: datetime

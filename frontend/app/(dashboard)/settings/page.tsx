@@ -9,6 +9,12 @@ import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
 import { initials } from "@/lib/format";
 
+const ROLE_LABEL: Record<string, string> = {
+  owner: "pemilik",
+  manager: "manajer — bisa setujui batal, refund & diskon",
+  staff: "staf kasir",
+};
+
 type PricingForm = {
   tax_percent: string;
   tax_inclusive: boolean;
@@ -61,7 +67,11 @@ export default function SettingsPage() {
   const [profileDraft, setProfileDraft] = useState<{ name: string; business_type: string; day_start_hour: number } | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [staffSheet, setStaffSheet] = useState(false);
-  const [staffDraft, setStaffDraft] = useState({ name: "", pin: "" });
+  const [staffDraft, setStaffDraft] = useState<{ name: string; pin: string; role: "staff" | "manager" }>({
+    name: "",
+    pin: "",
+    role: "staff",
+  });
   const [staffBusy, setStaffBusy] = useState(false);
   const [staffError, setStaffError] = useState<string | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
@@ -194,9 +204,9 @@ export default function SettingsPage() {
     setStaffBusy(true);
     setStaffError(null);
     try {
-      await mutate("/auth/staff", { name: staffDraft.name.trim(), pin: staffDraft.pin });
+      await mutate("/auth/staff", { name: staffDraft.name.trim(), pin: staffDraft.pin, role: staffDraft.role });
       setStaffSheet(false);
-      setStaffDraft({ name: "", pin: "" });
+      setStaffDraft({ name: "", pin: "", role: "staff" });
       staff.reload();
     } catch (e) {
       setStaffError(e instanceof Error ? e.message : "Gagal menambah staf — coba lagi ya.");
@@ -441,9 +451,10 @@ export default function SettingsPage() {
                 onChange={(e) => setPricingDraft({ ...pricingForm, discount_requires_pin: e.target.checked })}
               />
               <span>
-                <span className="block text-sm font-medium">Diskon perlu PIN pemilik</span>
+                <span className="block text-sm font-medium">Diskon perlu PIN pemilik atau manajer</span>
                 <span className="ink-faint block text-xs">
-                  Kasir harus minta PIN kamu sebelum memberi diskon per barang atau per struk.
+                  Kasir harus minta PIN kamu — atau PIN manajer — sebelum memberi diskon per barang
+                  atau per struk. Setiap persetujuan tercatat di halaman Keuangan.
                 </span>
               </span>
             </label>
@@ -529,7 +540,15 @@ export default function SettingsPage() {
       {/* Staff */}
       <section>
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-base font-bold">Staf kasir</h2>
+          <h2 className="flex items-center gap-2 text-base font-bold">
+            Staf kasir
+            <HelpTip title="Manajer">
+              Batal transaksi, refund dan diskon perlu PIN manajer. Kalau kamu tidak selalu di
+              tempat, jadikan satu staf yang kamu percaya sebagai manajer — dia bisa menyetujui
+              ketiganya di kasir, tapi tidak bisa membuka laporan atau pengaturan. Setiap
+              persetujuan tercatat: siapa yang menyetujui, siapa yang minta, dan berapa nilainya.
+            </HelpTip>
+          </h2>
           <button onClick={() => setStaffSheet(true)} className="btn-quiet px-3 py-1.5 text-sm">
             <IconPlus className="h-4 w-4" /> Tambah staf
           </button>
@@ -546,20 +565,35 @@ export default function SettingsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{member.name}</p>
                   <p className="ink-faint text-xs">
-                    {member.role === "owner" ? "pemilik" : "staf"}
+                    {ROLE_LABEL[member.role] ?? member.role}
                     {!member.is_active && " · nonaktif"}
                   </p>
                 </div>
                 {member.role !== "owner" && member.is_active && (
-                  <button
-                    onClick={async () => {
-                      await mutate(`/auth/staff/${member.id}/deactivate`);
-                      staff.reload();
-                    }}
-                    className="ink-faint shrink-0 text-xs hover:text-[color:var(--bad)]"
-                  >
-                    nonaktifkan
-                  </button>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      onClick={async () => {
+                        await mutate(
+                          `/auth/staff/${member.id}`,
+                          { role: member.role === "manager" ? "staff" : "manager" },
+                          "PATCH",
+                        );
+                        staff.reload();
+                      }}
+                      className="ink-faint text-xs hover:text-[color:var(--ink)]"
+                    >
+                      {member.role === "manager" ? "cabut manajer" : "jadikan manajer"}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await mutate(`/auth/staff/${member.id}/deactivate`);
+                        staff.reload();
+                      }}
+                      className="ink-faint text-xs hover:text-[color:var(--bad)]"
+                    >
+                      nonaktifkan
+                    </button>
+                  </div>
                 )}
               </li>
             ))}
@@ -739,6 +773,17 @@ export default function SettingsPage() {
               onChange={(e) => setStaffDraft({ ...staffDraft, pin: e.target.value.replace(/\D/g, "") })}
               placeholder="••••"
             />
+          </label>
+          <label className="block">
+            <span className="ink-soft mb-1.5 block text-xs font-medium">Peran</span>
+            <select
+              className="field"
+              value={staffDraft.role}
+              onChange={(e) => setStaffDraft({ ...staffDraft, role: e.target.value as "staff" | "manager" })}
+            >
+              <option value="staff">Staf kasir — jual, tutup shift</option>
+              <option value="manager">Manajer — bisa setujui batal, refund &amp; diskon</option>
+            </select>
           </label>
           {staffError && (
             <p

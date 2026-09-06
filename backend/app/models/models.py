@@ -42,7 +42,7 @@ def _now() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
 
-staff_role = Enum("owner", "staff", name="staff_role", create_type=False)
+staff_role = Enum("owner", "staff", "manager", name="staff_role", create_type=False)  # M15-T7 adds manager, migration 0031
 expense_source = Enum("manual", "receipt", name="expense_source", create_type=False)
 alert_type = Enum("anomaly", "low_stock", "margin_drop", "stockout_risk", "void_rate", "supplier_price", "backup_failed", name="alert_type", create_type=False)  # M10-T1 adds four, M15-T1 one
 alert_severity = Enum("low", "medium", "high", name="alert_severity", create_type=False)
@@ -54,6 +54,7 @@ stock_movement_reason = Enum(
 order_type = Enum("dine_in", "takeaway", "delivery", "pickup", name="order_type", create_type=False)
 order_status = Enum("open", "completed", "voided", "refunded", name="order_status", create_type=False)
 kitchen_state = Enum("new", "preparing", "ready", "done", name="kitchen_state", create_type=False)  # M11-T2, migration 0027
+approval_action = Enum("discount", "void", "refund", name="approval_action", create_type=False)  # M15-T7, migration 0031
 payment_method = Enum(
     "cash", "qris", "transfer", "card", "ewallet", "points", "other",
     name="payment_method", create_type=False,
@@ -1001,4 +1002,31 @@ class KitchenEvent(Base):
     order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
     state: Mapped[str] = mapped_column(kitchen_state, nullable=False)
     staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    created_at: Mapped[datetime] = _now()
+
+
+class Approval(Base):
+    """One manager authorisation (M15-T7, migration 0031). Append-only: a void,
+    a refund or an over-threshold discount writes a row naming who approved it,
+    what role they held **at the time** (a snapshot, so a later promotion or
+    demotion cannot rewrite history), who asked, what it was worth and when.
+
+    `amount` is what was authorised — the discount given, or the order total
+    reversed — so the owner can sort the trail by size rather than read it all."""
+
+    __tablename__ = "approvals"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE")
+    )
+    action: Mapped[str] = mapped_column(approval_action, nullable=False)
+    approved_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"), nullable=False)
+    approver_role: Mapped[str] = mapped_column(staff_role, nullable=False)
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()

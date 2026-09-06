@@ -38,6 +38,7 @@ from app.schemas.auth import (
     RegisterOut,
     StaffCreateIn,
     StaffOut,
+    StaffUpdateIn,
 )
 from app.whatsapp.client import send_otp_template
 
@@ -210,14 +211,32 @@ async def list_staff(ctx: OwnerCtx):
 
 @router.post("/staff", response_model=StaffOut)
 async def create_staff(payload: StaffCreateIn, ctx: OwnerCtx):
+    """`role` is `staff` or `manager` (M15-T7). A manager can approve a void, a
+    refund or a discount at the till and nothing else — reports and settings
+    need owner scope, which is issued only to the phone that owns the business,
+    never from a staff row."""
     staff = Staff(
         business_id=ctx.business_id,
         name=payload.name,
-        role="staff",
+        role=payload.role,
         phone=payload.phone,
         pin_hash=hash_pin(payload.pin),
     )
     ctx.session.add(staff)
+    await ctx.session.flush()
+    return staff
+
+
+@router.patch("/staff/{staff_id}", response_model=StaffOut)
+async def update_staff_role(staff_id: str, payload: StaffUpdateIn, ctx: OwnerCtx):
+    """Promote a cashier to manager when the owner cannot always be on site, or
+    take it back. The owner's own row is not demotable: it is the login."""
+    staff = await ctx.session.get(Staff, staff_id)
+    if staff is None:
+        raise HTTPException(status_code=404, detail="Staf tidak ditemukan")
+    if staff.role == "owner":
+        raise HTTPException(status_code=400, detail="Peran pemilik tidak bisa diubah")
+    staff.role = payload.role
     await ctx.session.flush()
     return staff
 

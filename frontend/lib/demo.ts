@@ -13,6 +13,7 @@
 import { OWNER_TOKEN_KEY } from "@/lib/api";
 import type {
   AlertRow,
+  ApprovalRow,
   Business,
   CashMovementRow,
   CustomerRow,
@@ -121,7 +122,20 @@ const ITEM_SPECS: ItemSpec[] = [
 const STAFF: StaffMember[] = [
   { id: "demo-staff-1", name: "Ibu Ratna", role: "owner", is_active: true, created_at: jktIso(120, 9) },
   { id: "demo-staff-2", name: "Sari", role: "staff", is_active: true, created_at: jktIso(118, 10) },
-  { id: "demo-staff-3", name: "Budi", role: "staff", is_active: true, created_at: jktIso(96, 11) },
+  { id: "demo-staff-3", name: "Budi", role: "manager", is_active: true, created_at: jktIso(96, 11) },
+];
+
+// M15-T7: the override trail the owner reads back.
+const APPROVALS: ApprovalRow[] = [
+  { id: "demo-appr-1", order_id: "demo-order-1", action: "void", approved_by: "demo-staff-3",
+    approver_name: "Budi", approver_role: "manager", requested_by: "demo-staff-2",
+    requested_by_name: "Sari", amount: "48000.00", note: "salah pesan", created_at: jktIso(0, 15) },
+  { id: "demo-appr-2", order_id: "demo-order-2", action: "discount", approved_by: "demo-staff-3",
+    approver_name: "Budi", approver_role: "manager", requested_by: "demo-staff-2",
+    requested_by_name: "Sari", amount: "5000.00", note: null, created_at: jktIso(1, 11) },
+  { id: "demo-appr-3", order_id: "demo-order-3", action: "refund", approved_by: "demo-staff-1",
+    approver_name: "Ibu Ratna", approver_role: "owner", requested_by: "demo-staff-2",
+    requested_by_name: "Sari", amount: "22000.00", note: "kopi tumpah", created_at: jktIso(2, 16) },
 ];
 
 function buildItems(): InventoryItem[] {
@@ -567,5 +581,9 @@ export function demoData(path: string): unknown {
   }
   if (pathname === "/api/shifts") return SHIFTS.slice(0, num("limit", 30));
   if (pathname === "/api/cash-movements") return CASH_MOVEMENTS.slice(0, num("limit", 50));
+  if (pathname === "/api/approvals") {
+    const action = params.get("action");
+    return APPROVALS.filter((a) => !action || a.action === action).slice(0, num("limit", 50));
+  }
   return null;
 }
