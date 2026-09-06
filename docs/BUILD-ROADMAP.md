@@ -1,6 +1,7 @@
 # Warung Pintar — Autonomous Build Roadmap
 
-**Version 2** · 2 September 2026. Supersedes v1 entirely.
+**Version 4** · 6 September 2026. Adds M13 (table service), M14 (offline-first POS) and
+M15 (go-live hardening). This system is being deployed in a real café, not only submitted.
 **Target:** the core of majoo's SME operating system, plus the things majoo cannot do.
 
 v2 was written after reading the actual schema. Several v1 assumptions were wrong and one of them
@@ -304,6 +305,20 @@ Two rules fall out and they are the whole design:
 ---
 
 ## 5. Milestones
+
+### Build order — decided 6 September 2026, overrides task numbering
+
+The café goes live before the report is submitted, so the order is:
+
+1. **M15-T1 → M15-T4** — backups, restore drill, clean bootstrap, business day boundary
+2. **M12** — Supabase (paid tier, not free), Meta templates, Railway, Vercel
+3. **M15-T5 → M15-T9** — monitoring, printing, manager role, lockout recovery, runbook
+4. **M14-T1 → M14-T8, then T10** — the offline queue (T9 conditional, see its note)
+5. **M1-T3 part 2 and the remaining evaluation questions** — once Gemini billing is on
+6. **M13** — cut, counter service, do not build
+
+Work this order, not the numeric order. Everything else in this document still applies.
+
 
 Task IDs are stable. Never renumber.
 
@@ -681,6 +696,261 @@ the demo phone, one live round-trip.
 
 ---
 
+### M13 — Table service — **CUT, do not build**
+
+> **Decided 6 September 2026: the café is counter service.** Customers order and pay at the
+> counter, then sit down. There are no table sessions to manage, no bills to merge or split, and
+> nobody would ever open a floor view. Building this would be roughly a week of work on a feature
+> that would never be touched.
+>
+> Skip every M13 task. Mark them `not applicable` in `docs/progress.md` and move on. Revisit only
+> if the café starts taking orders at tables.
+
+*Front of house. majoo ships four cashier layouts because dine-in, retail and service are different
+jobs; this is the dine-in one, and it is the thing a café actually runs on.*
+
+**Sequencing note: M13 comes before M14 deliberately.** Offline sync has to cover whatever entities
+exist. Building sync first and adding tables second means building sync twice.
+
+**M13-T1 · Tables and zones** — `blocked_by: M11-T3`
+`table_zones` (name, sort order) and `tables` (`business_id`, `zone_id`, `name`, `seats`,
+`is_active`). RLS on both in the same migration.
+**Done when:** tables exist, policies exist, M0-T5 passes.
+
+**M13-T2 · Table sessions** — `blocked_by: M13-T1`
+`table_sessions`: `table_id`, `opened_at`, `closed_at`, `opened_by_staff_id`, `covers`.
+An order gains a nullable `table_session_id`. A session is open until its bill is settled.
+One open session per table; a second open attempt is a 409.
+**Done when:** a dine-in order binds to a table, the floor shows it occupied, settling frees it.
+
+**M13-T3 · Move, merge, split** — `blocked_by: M13-T2`
+`POST /pos/table-sessions/{id}/move` (to another free table),
+`/merge` (fold session B's orders into session A, one bill),
+`/split` (move named order lines to a new session and bill them separately).
+All three are append-only: nothing is deleted, the moved-from session closes with a reason.
+**Done when:** merging two sessions produces one bill whose total equals the sum of both, and the
+reconciliation and balance invariants both still hold.
+
+**M13-T4 · Floor view on the kiosk** — `blocked_by: M13-T3`
+A grid of tables by zone, colour-coded free / occupied / bill requested, with time-on-table.
+Tap a table to open or resume its order.
+**Done when:** a cashier can run a full dine-in service without typing a table number.
+
+**M13-T5 · Table metrics** — `blocked_by: M13-T4`
+Add to the M9 registry: `table_turn_time`, `covers_served`, `revenue_per_cover`,
+`table_utilisation`. Registry only, no bespoke queries.
+**Done when:** the four metrics answer through both `/api/metrics/{name}` and the assistant, and
+`test_thesis_agreement` covers at least one of them.
+
+---
+
+### M14 — Offline-first POS
+
+*The gap that matters. majoo's real edge in Indonesian F&B is that the till keeps working when the
+mobile data drops mid-service. Today this POS stops.*
+
+**M14-T1 · Write the conflict policy before writing any code** — `blocked_by: M13-T5`
+Create `docs/offline-policy.md`. It is a design document and it is also a Capstone artefact. It
+must state, per entity, what happens when a device has been offline:
+
+| Entity | Policy |
+|---|---|
+| `orders`, `order_lines`, `payments` | Append-only with a **client-generated UUID**. Replay is an idempotent insert. No conflict is possible. |
+| `stock_movements` | Derived server-side from the replayed order. **The client never sends movements.** |
+| `items.current_stock` | Server-authoritative, always. Never accepted from a client. |
+| Catalogue (items, variants, modifiers, prices, recipes) | Server-authoritative. The client holds a **pull-only cache** and can never write it. |
+| Vouchers, points redemption, promo `max_per_order` caps | **Online-only.** See M14-T5. |
+| `shifts` | One open shift per cashier. A second device opening the same cashier's shift is rejected at sync. |
+
+It must also name the two availability tiers:
+
+- **Tier 1, LAN up and internet down.** A local server on the outlet WiFi is the stock authority.
+  Oversell is impossible because one process still arbitrates.
+- **Tier 2, device alone.** The device queues locally and oversell becomes possible. M14-T8 handles
+  the consequence.
+
+**Done when:** the document exists and every later task in M14 cites the row it implements.
+
+**M14-T2 · Client-supplied idempotency keys** — `blocked_by: M14-T1`
+`POST /pos/orders` accepts a client-generated `order_id` (uuid) and a separate `idempotency_key`.
+Replaying the same key returns the original result with `200` and writes nothing.
+**Done when:** a test posts the same order body twice and asserts one order, one set of stock
+movements, one journal entry.
+
+**M14-T3 · Catalogue cache** — `blocked_by: M14-T2`
+`GET /pos/catalogue?since=` returns items, variants, modifiers, prices, recipes and pricing
+settings with a version stamp. The kiosk stores it in IndexedDB and refreshes on reconnect.
+**Done when:** the kiosk renders a full menu with the network disabled from a cold reload.
+
+**M14-T4 · Local write queue** — `blocked_by: M14-T3`
+Orders written offline persist to IndexedDB with their idempotency key and flush in order on
+reconnect. Optimistic UI: the till never blocks on the network. A visible connection indicator and
+a pending-count badge, because staff must be able to see the state.
+**Target device is an Android tablet running Chrome.** Install it as a PWA so it gets its own
+launcher icon and runs standalone, and call `navigator.storage.persist()` on first launch: Chrome
+grants persistent storage to installed PWAs, which means the offline queue is not evicted under
+storage pressure. Handle a refused grant gracefully rather than assuming it succeeded.
+**Also switch the tablet into Android screen pinning** so staff cannot navigate away from the till
+mid-service. Record how to turn that on in `docs/runbook.md`.
+**Done when:** with the network killed mid-service, ten sales are taken on the actual tablet, the
+app is backgrounded, the screen locked, and the app reopened, and all ten still flush correctly on
+reconnect.
+
+**M14-T5 · Online-only operation guard** — `blocked_by: M14-T4`
+Vouchers, points redemption and promo caps need global uniqueness or a live balance. Offline, they
+are **disabled with an explicit message in Indonesian**, not silently allowed.
+**Rationale to record:** a customer redeeming a single-use voucher twice, or spending points they
+do not have, is worse than a cashier being told "fitur ini perlu koneksi".
+**Done when:** each is unavailable offline with a clear message, and a test proves no offline path
+can reach them.
+
+**M14-T6 · Sync endpoint** — `blocked_by: M14-T5`
+`POST /pos/sync` takes a batch of queued orders, applies them in client order inside one
+transaction each, and returns a per-order result: accepted, duplicate, or rejected with a reason.
+Partial batch success is normal and must be handled.
+**Done when:** a mixed batch of new, duplicate and invalid orders returns the right verdict for
+each and leaves the database consistent.
+
+**M14-T7 · Clock skew** — `blocked_by: M14-T6`
+Keep `sold_at` (the client's time, what the business cares about) separate from
+`server_received_at`. Clamp `sold_at` into `[server_received_at - max_offline_window,
+server_received_at]` and flag anything clamped.
+**Done when:** an order from a device with a two-day-wrong clock lands on a sane date and is
+flagged, and a legitimately six-hours-old order is untouched.
+**Note:** late-arriving orders change a day's totals after that day was reported. The nightly job
+recomputes a 30-day rolling baseline rather than incrementing, so this self-heals. Confirm that and
+record it.
+
+**M14-T8 · Oversell reconciliation** — `blocked_by: M14-T7`
+**This is the hard one and it needs a structural change.**
+
+When a replayed offline order would take stock below zero, the sale already happened. The coffee
+was handed over and the money was taken. Refusing to record it is worse than recording negative
+stock, because it destroys the ledger's relationship to reality.
+
+So: **accept the order, let `current_stock` go negative, and raise a high-severity alert naming the
+item and the shortfall.** The owner resolves it with a stock opname, which is what they would have
+had to do anyway.
+
+That requires dropping `check (current_stock >= 0)` on `items`. **This is hereby the second and
+final authorised exception to §1.6**, on the same terms as M3-T2: one migration, a tested
+downgrade, and a replacement guard. The online path keeps its atomic conditional UPDATE, so an
+online sale still cannot oversell. Only replay can.
+**Done when:** an offline oversell lands, stock goes negative, an alert is raised, the
+reconciliation invariant still holds, and an online oversell attempt is still rejected with 409.
+
+**M14-T9 · Local server** — **CUT, do not build**
+
+> **Decided 6 September 2026: the café runs one Android tablet at the counter.** The local server exists only
+> to arbitrate stock between two or more devices. With a single device there is nothing to
+> arbitrate. Mark `not applicable` in `docs/progress.md` and go straight to M14-T10.
+
+**M14-T10 · Partition test** — `blocked_by: M14-T9`
+**The deliverable that matters for the report.** Simulate two tills, partition the network, sell
+from both, heal the partition, and assert: every order landed exactly once, the reconciliation
+invariant holds, the books balance, and any oversell produced exactly one alert.
+**Done when:** the test passes reliably and `docs/offline-policy.md` records what convergence was
+actually observed, including anything that surprised you.
+
+---
+
+### M15 — Go-live hardening
+
+*M0-M14 build the product. M15 is what stands between "it works on my laptop" and "my mother's
+café runs on this every day and I sleep at night." Nothing here is impressive. All of it is the
+difference between a demo and a business.*
+
+**Priority note: M15-T1 and M15-T2 outrank every remaining task in this document, including all of
+M13 and M14.** A café that loses a week of takings does not care that the till worked offline. This
+project has already lost a database once, on 16 July, to a free-tier project being reaped.
+
+**M15-T1 · Automated backup, off the primary host** — `blocked_by: M12-T1`
+A scheduled `pg_dump` (custom format) of the production database, written somewhere that is **not
+the same account as the database**. Daily at minimum. Keep 30 dailies and 6 monthlies. Log every
+run; a silent backup failure is the same as no backup.
+**Done when:** a dump exists off-host, the schedule is running, and a failed run raises an alert
+the owner actually sees.
+
+**M15-T2 · Restore drill** — `blocked_by: M15-T1`
+`scripts/restore-drill.py`: pull the latest dump into a scratch database, run the migrations check,
+run `test_invariants.py` against it, and report row counts per table against production.
+**A backup you have never restored is not a backup.**
+**Done when:** the drill runs green end to end and `docs/runbook.md` records how long a real restore
+takes, measured, not estimated.
+
+**M15-T3 · Clean production bootstrap** — `blocked_by: M12-T1`
+`python -m app.seed` creates the demo café "Kopi Kenangan Senja" with 30 days of invented sales.
+**That must never touch the real café's database.** Add `python -m app.bootstrap`: creates one
+business, one owner, the standard chart of accounts, the standard UOMs, and nothing else. Make
+`app.seed` refuse to run when `ENV=production`.
+**Done when:** bootstrap produces an empty, usable business, and seed raises rather than runs
+against production.
+
+**M15-T4 · Business day boundary** — `blocked_by: M12-T1`
+Add `day_start_hour` to `businesses`, default 0, and use it everywhere a "day" is computed:
+the metric layer, the dashboard, the nightly job, shift reports.
+**Why this matters in a real café:** if the shop closes at 23:30 and the last bill is settled at
+00:15, today's takings currently land on tomorrow. The owner's daily number is wrong, the shift
+reconciliation straddles two days, and the anomaly baseline learns from garbage. A 4am boundary
+fixes all of it.
+**Done when:** a sale at 00:15 with `day_start_hour = 4` reports under the previous day, in the
+metric layer and on the dashboard, with a test.
+
+**M15-T5 · Health monitoring** — `blocked_by: M12-T4`
+An external check hitting `/health/db` on a schedule, alerting the owner's phone when it fails
+twice in a row. Railway and Vercel both go down sometimes.
+**Done when:** killing the API produces an alert within five minutes, tested by actually killing it.
+
+**M15-T6 · Receipt printing on real hardware** — `blocked_by: M12-T4`
+The target is an Android tablet, which opens an option iOS does not have. In rough order of
+preference:
+
+1. **An Android POS terminal with a built-in printer** (Sunmi, iMin, Advan). This is what majoo
+   ships and it removes the pairing problem entirely. If hardware is still being bought, buy this.
+2. **A Bluetooth 58mm thermal printer driven by Web Bluetooth**, which Chrome on Android supports.
+   Send raw ESC/POS bytes: full control of layout, no print dialog, no OS print stack.
+3. **Browser print to a system printer.** Simplest, but a print dialog every sale is unusable in a
+   queue, so treat this as the fallback only.
+
+Whichever is used, test the real thing: paper width, how long item names with modifiers wrap, the
+paper cut, and printing with no dialog and no taps.
+**Done when:** a receipt prints correctly and unattended on the café's actual printer, and
+`docs/runbook.md` records the exact model, the connection method and the settings.
+
+**M15-T7 · Manager override when the owner is not there** — `blocked_by: M12-T4`
+Void and refund currently need the owner's PIN. In a real café the owner is not always on site,
+and a cashier who cannot void a mistake will start doing arithmetic in their head instead, which
+destroys the ledger's connection to reality.
+Add a `manager` role: can approve voids, refunds and discounts, cannot see reports or settings.
+Every override stays fully attributed in the audit trail.
+**Done when:** a manager can void without the owner present, the void records who approved it, and
+a plain staff PIN still cannot.
+
+**M15-T8 · Lockout recovery** — `blocked_by: M12-T4`
+What happens when the kiosk pairing token is lost, the tablet is wiped, or a PIN is forgotten
+mid-service. Owner can re-pair a device and reset a staff PIN from the dashboard in under a minute.
+**Done when:** a wiped kiosk is back to taking sales in under five minutes, timed.
+
+**M15-T10 · Backdated sale entry** — `blocked_by: M15-T7`
+The offline queue covers a lost connection. It does not cover a **lost device**. One tablet means one
+point of failure: if it dies, cracks or will not charge mid-service, staff fall back to pen and
+paper, and those sales still have to reach the books.
+Owner-only screen to enter a sale with a chosen date and time. It posts through the normal engine
+(stock, ledger, points all move) and is tagged `entry_source = manual_backdated` so it is visible
+in the audit trail and can be excluded from anomaly baselines.
+**Done when:** a paper sale from two days ago is entered, lands on the correct business day, moves
+stock and posts to the ledger, and the reconciliation invariant still holds.
+
+**M15-T9 · The runbook** — `blocked_by: M15-T8`
+`docs/runbook.md`, written for a stressed person at 8am, not for a developer:
+what to do when the internet is down, **when the tablet dies mid-service (pen and paper, then
+M15-T10)**, when the printer will not print, when the API is down, when a sale was rung up
+wrong, when stock looks wrong, how to close the day, how to restore a backup, and who pays for
+what each month.
+**Done when:** someone who is not Oscar can follow it.
+
+---
+
 ## 6. Progress entry format
 
 Append to `docs/progress.md`. Never rewrite history.
@@ -757,3 +1027,9 @@ M9 is the part that is not majoo: one definition of every number, an assistant t
 than reports, and a refusal instead of a confident wrong answer.
 
 M10 is the part worth paying for: it stays quiet until something is actually wrong.
+
+M13 and M14 close the two gaps against majoo that M0-M12 left open: table service, and a
+till that survives the WiFi.
+
+M15 is the one that decides whether a real café can depend on this. It is the least interesting
+milestone in this document and the only one whose absence can lose someone's money.
