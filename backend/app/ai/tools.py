@@ -9,6 +9,11 @@ here, nothing else.
 The declared function name doubles as the classified intent recorded in
 request_logs.classified_intent (with 'search_history' logged as the RAG path
 and 'clarify' as the fallback).
+
+Since M9-T2 the reading tools compute nothing themselves: every figure comes
+from the metric registry (app/metrics), the same implementation the dashboard
+reads, so the assistant and the dashboard cannot disagree. A static test keeps
+this file free of its own sums.
 """
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -16,12 +21,12 @@ from decimal import Decimal
 from typing import Any, Awaitable, Callable
 
 from google.genai import types
-from sqlalchemy import desc, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.periods import PERIODS, period_range
-from app.models import Business, Expense, Item, Sale
-from app.services.velocity import VELOCITY_WINDOW_DAYS
+from app.ai.periods import PERIODS
+from app.metrics import compute
+from app.models import Business, Item
 
 ToolExecutor = Callable[[AsyncSession, Business, dict], Awaitable[dict]]
 
@@ -75,33 +80,28 @@ async def _match_items(session: AsyncSession, name_query: str) -> list[Item]:
 )
 async def get_stock(session: AsyncSession, business: Business, args: dict) -> dict:
     name_query = (args.get("item_name") or "").strip()
+    stock = await compute(session, business, "stock_on_hand")   # every item, from the registry
+    rows = stock.rows
     if name_query:
-        items = await _match_items(session, name_query)
-        if not items:
-            all_names = (
-                (await session.execute(select(Item.name).order_by(Item.name))).scalars().all()
-            )
+        wanted = {i.id for i in await _match_items(session, name_query)}
+        rows = [r for r in rows if r["item_id"] in wanted]
+        if not rows:
             return {
                 "found": False,
                 "query": name_query,
-                "known_items": all_names[:25],
+                "known_items": [r["name"] for r in stock.rows][:25],
             }
-    else:
-        items = list(
-            (await session.execute(select(Item).order_by(Item.name))).scalars().all()
-        )
-
     return {
         "found": True,
         "items": [
             {
-                "name": i.name,
-                "current_stock": _num(i.current_stock),
-                "unit": i.unit,
-                "reorder_threshold": _num(i.reorder_threshold),
-                "below_reorder_threshold": i.current_stock <= i.reorder_threshold,
+                "name": r["name"],
+                "current_stock": r["stock"],
+                "unit": r["unit"],
+                "reorder_threshold": r["reorder_threshold"],
+                "below_reorder_threshold": r["below_reorder_threshold"],
             }
-            for i in items
+            for r in rows
         ],
     }
 
@@ -118,38 +118,22 @@ _PERIOD_PARAM = types.Schema(
 async def _sales_facts(
     session: AsyncSession, business: Business, period: str
 ) -> dict:
-    start, end, label = period_range(period, business.timezone)
-    revenue, tx_count, qty_sum = (
-        await session.execute(
-            select(
-                func.coalesce(func.sum(Sale.total_price), 0),
-                func.count(Sale.id),
-                func.coalesce(func.sum(Sale.quantity), 0),
-            ).where(Sale.sold_at >= start, Sale.sold_at < end)
-        )
-    ).one()
-    top = (
-        await session.execute(
-            select(
-                Item.name,
-                func.sum(Sale.quantity).label("qty"),
-                func.sum(Sale.total_price).label("amount"),
-            )
-            .join(Item, Item.id == Sale.item_id)
-            .where(Sale.sold_at >= start, Sale.sold_at < end)
-            .group_by(Item.name)
-            .order_by(desc("amount"))
-            .limit(5)
-        )
-    ).all()
+    """Revenue, order count, units and top items for a named period — each one
+    a registry metric (M9-T2). `transactions` counts orders (voids excluded),
+    which is what the word means; a one-line order reads exactly as before."""
+    period = period if period in PERIODS else "today"
+    revenue = await compute(session, business, "revenue", period=period)
+    orders = await compute(session, business, "transaction_count", period=period)
+    units = await compute(session, business, "item_units_sold", period=period)
+    top = await compute(session, business, "top_items_by_revenue", period=period, limit=5)
     return {
         "period": period,
-        "period_label": label,
-        "revenue": _num(revenue),
-        "transactions": int(tx_count),
-        "units_sold": _num(qty_sum),
+        "period_label": revenue.period_label,
+        "revenue": _num(revenue.value),
+        "transactions": int(orders.value or 0),
+        "units_sold": _num(units.value),
         "top_items": [
-            {"name": name, "quantity": _num(q), "revenue": _num(a)} for name, q, a in top
+            {"name": r["name"], "quantity": r["quantity"], "revenue": r["revenue"]} for r in top.rows
         ],
     }
 
@@ -211,43 +195,21 @@ async def compare_periods(session: AsyncSession, business: Business, args: dict)
 )
 async def get_profit(session: AsyncSession, business: Business, args: dict) -> dict:
     period = args.get("period", "this_month")
-    start, end, label = period_range(period, business.timezone)
-    # COGS comes from the cost snapshotted on each line at sale time (M4-T5),
-    # never from today's item cost — historical margin must not move when a
-    # purchase changes the moving average. Lines backfilled from the pre-order
-    # `sales` table have no snapshot (cost then is unknown) and fall back to the
-    # current cost, counted separately so the caller knows how much is estimated.
-    from app.models import OrderLine
-
-    revenue, cogs, unknown_lines = (
-        await session.execute(
-            select(
-                func.coalesce(func.sum(Sale.total_price), 0),
-                func.coalesce(
-                    func.sum(Sale.quantity * func.coalesce(OrderLine.unit_cost_at_sale, Item.cost_price)), 0
-                ),
-                func.count(Sale.id).filter(OrderLine.unit_cost_at_sale.is_(None)),
-            )
-            .join(OrderLine, OrderLine.id == Sale.id)
-            .join(Item, Item.id == Sale.item_id)
-            .where(Sale.sold_at >= start, Sale.sold_at < end)
-        )
-    ).one()
-    expenses = (
-        await session.execute(
-            select(func.coalesce(func.sum(Expense.amount), 0)).where(
-                Expense.occurred_at >= start, Expense.occurred_at < end
-            )
-        )
-    ).scalar_one()
-    revenue_f = _num(revenue) or 0.0
-    expenses_f = _num(expenses) or 0.0
+    period = period if period in PERIODS else "today"
+    # COGS is the registry's: the cost snapshotted on each line at sale time
+    # (M4-T5), with pre-order lines falling back to today's cost and counted so
+    # the caller knows how much is estimated.
+    revenue = await compute(session, business, "revenue", period=period)
+    cogs = await compute(session, business, "cogs", period=period)
+    expenses = await compute(session, business, "expense_total", period=period)
+    revenue_f = _num(revenue.value) or 0.0
+    expenses_f = _num(expenses.value) or 0.0
     return {
         "period": period,
-        "period_label": label,
+        "period_label": revenue.period_label,
         "revenue": revenue_f,
-        "cost_of_goods_estimate": _num(cogs),
-        "cost_of_goods_lines_without_snapshot": int(unknown_lines or 0),
+        "cost_of_goods_estimate": _num(cogs.value),
+        "cost_of_goods_lines_without_snapshot": int((cogs.rows[0]["lines_without_snapshot"]) if cogs.rows else 0),
         "recorded_expenses": expenses_f,
         "net_after_expenses": round(revenue_f - expenses_f, 2),
         "note": "net = revenue minus recorded expenses; COGS shown separately (expenses may already include ingredient purchases)",
@@ -324,37 +286,21 @@ async def correct_stock(session: AsyncSession, business: Business, args: dict) -
     )
 )
 async def get_low_stock(session: AsyncSession, business: Business, args: dict) -> dict:
-    items = (
-        (await session.execute(select(Item).order_by(Item.name))).scalars().all()
-    )
-    # Velocity for all items from ONE grouped query (mirrors /api/items) —
-    # a per-item loop here would be an N+1 on the WhatsApp hot path.
-    since = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
-    usage_rows = (
-        await session.execute(
-            select(Sale.item_id, func.sum(Sale.quantity))
-            .where(Sale.sold_at >= since)
-            .group_by(Sale.item_id)
-        )
-    ).all()
-    usage = {item_id: Decimal(qty) for item_id, qty in usage_rows}
-
+    # The registry's reorder list (one grouped query, the locked velocity
+    # formula); this tool only decides what "at risk" means: below the reorder
+    # threshold, or three days or less of stock at the current rate.
+    reading = await compute(session, business, "stock_days_remaining")
     risky = []
-    for item in items:
-        daily = usage.get(item.id, Decimal(0)) / VELOCITY_WINDOW_DAYS
-        days_remaining = (
-            (item.current_stock / daily).quantize(Decimal("0.1")) if daily > 0 else None
-        )
-        below_threshold = item.current_stock <= item.reorder_threshold
-        low_days = days_remaining is not None and days_remaining <= 3
-        if below_threshold or low_days:
+    for r in sorted(reading.rows, key=lambda x: x["name"]):
+        low_days = r["days_remaining"] is not None and r["days_remaining"] <= 3
+        if r["below_reorder_threshold"] or low_days:
             risky.append(
                 {
-                    "name": item.name,
-                    "current_stock": _num(item.current_stock),
-                    "unit": item.unit,
-                    "days_remaining": _num(days_remaining),
-                    "below_reorder_threshold": below_threshold,
+                    "name": r["name"],
+                    "current_stock": r["stock"],
+                    "unit": r["unit"],
+                    "days_remaining": r["days_remaining"],
+                    "below_reorder_threshold": r["below_reorder_threshold"],
                 }
             )
     return {"at_risk_items": risky, "all_clear": not risky}

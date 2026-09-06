@@ -26,7 +26,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.metrics.registry import MetricContext, MetricResult, metric
 from app.models import Customer, Expense, Item, Order, OrderLine, Sale, Shift, StockMovement
-from app.services.velocity import compute_item_velocity
 
 MONEY = Decimal("0.01")
 PCT = Decimal("0.1")
@@ -83,7 +82,7 @@ async def revenue(session: AsyncSession, ctx: MetricContext) -> MetricResult:
 async def cogs(session: AsyncSession, ctx: MetricContext) -> MetricResult:
     value, unknown = await _cogs(session, ctx)
     note = f"{unknown} baris tanpa catatan harga pokok memakai harga pokok hari ini" if unknown else None
-    return MetricResult(name="cogs", unit="rupiah", value=value, note=note)
+    return MetricResult(name="cogs", unit="rupiah", value=value, note=note, rows=[{"lines_without_snapshot": unknown}])
 
 
 @metric("gross_profit", description_id="Laba kotor: penjualan dikurangi harga pokok penjualan",
@@ -252,35 +251,56 @@ async def cash_variance(session: AsyncSession, ctx: MetricContext) -> MetricResu
 # ── stock (instant) ─────────────────────────────────────────────────────────
 
 
+def _stock_row(i: Item) -> dict:
+    return {
+        "item_id": i.id, "name": i.name, "unit": i.unit, "stock": float(i.current_stock),
+        "reorder_threshold": float(i.reorder_threshold) if i.reorder_threshold is not None else None,
+        "below_reorder_threshold": bool(i.reorder_threshold is not None and i.current_stock <= i.reorder_threshold),
+    }
+
+
 @metric("stock_on_hand", description_id="Stok saat ini (per barang, atau satu barang bila dipilih)",
         description_en="Current stock (per item, or one item when given)", unit="qty", grains=("instant",), dimensions=("item",))
 async def stock_on_hand(session: AsyncSession, ctx: MetricContext) -> MetricResult:
     if ctx.item_id is not None:
         item = await session.get(Item, ctx.item_id)
         return MetricResult(name="stock_on_hand", unit="qty", value=Decimal(item.current_stock) if item else None,
-                            rows=[{"item_id": item.id, "name": item.name, "unit": item.unit, "stock": float(item.current_stock)}] if item else [])
+                            rows=[_stock_row(item)] if item else [])
     items = (await session.execute(select(Item).order_by(Item.name))).scalars().all()
-    return MetricResult(name="stock_on_hand", unit="qty", value=None,
-                        rows=[{"item_id": i.id, "name": i.name, "unit": i.unit, "stock": float(i.current_stock)} for i in items])
+    return MetricResult(name="stock_on_hand", unit="qty", value=None, rows=[_stock_row(i) for i in items])
 
 
 @metric("stock_days_remaining", description_id="Perkiraan hari sampai stok habis pada laju penjualan 14 hari terakhir",
         description_en="Estimated days until stock runs out at the trailing 14-day sales rate", unit="days", grains=("instant",), dimensions=("item",))
 async def stock_days_remaining(session: AsyncSession, ctx: MetricContext) -> MetricResult:
+    """The locked velocity formula (services/velocity): trailing-window sales ÷
+    window days, stock ÷ that. One grouped query for every item — this runs on
+    the WhatsApp hot path, so no per-item round trips."""
+    from datetime import timedelta
+
+    from app.services.velocity import VELOCITY_WINDOW_DAYS
+
+    moment = ctx.now or datetime.now(timezone.utc)
+    since = moment - timedelta(days=VELOCITY_WINDOW_DAYS)
+    stmt = select(Item).order_by(Item.name)
     if ctx.item_id is not None:
-        item = await session.get(Item, ctx.item_id)
-        if item is None:
-            return MetricResult(name="stock_days_remaining", unit="days", value=None)
-        r = await compute_item_velocity(session, item)
-        return MetricResult(name="stock_days_remaining", unit="days", value=r.days_remaining,
-                            rows=[{"item_id": r.item_id, "name": r.item_name, "unit": r.unit, "stock": float(r.current_stock),
-                                   "daily_usage": float(r.average_daily_usage), "days_remaining": float(r.days_remaining) if r.days_remaining is not None else None}])
-    items = (await session.execute(select(Item).order_by(Item.name))).scalars().all()
+        stmt = stmt.where(Item.id == ctx.item_id)
+    items = (await session.execute(stmt)).scalars().all()
+    usage = {
+        item_id: Decimal(qty)
+        for item_id, qty in (await session.execute(
+            select(Sale.item_id, func.sum(Sale.quantity)).where(Sale.sold_at >= since).group_by(Sale.item_id)
+        )).all()
+    }
     rows = []
     for item in items:
-        r = await compute_item_velocity(session, item)
-        rows.append({"item_id": r.item_id, "name": r.item_name, "unit": r.unit, "stock": float(r.current_stock),
-                     "daily_usage": float(r.average_daily_usage), "days_remaining": float(r.days_remaining) if r.days_remaining is not None else None})
+        daily = usage.get(item.id, Decimal(0)) / VELOCITY_WINDOW_DAYS
+        days = (Decimal(item.current_stock) / daily).quantize(Decimal("0.1")) if daily > 0 else None
+        rows.append({**_stock_row(item), "daily_usage": float(daily.quantize(Decimal("0.001"))),
+                     "days_remaining": float(days) if days is not None else None})
+    if ctx.item_id is not None:
+        value = Decimal(str(rows[0]["days_remaining"])) if rows and rows[0]["days_remaining"] is not None else None
+        return MetricResult(name="stock_days_remaining", unit="days", value=value, rows=rows)
     rows.sort(key=lambda x: (x["days_remaining"] is None, x["days_remaining"] if x["days_remaining"] is not None else 0))
     return MetricResult(name="stock_days_remaining", unit="days", value=None, rows=rows)   # every item: this is the reorder list
 
