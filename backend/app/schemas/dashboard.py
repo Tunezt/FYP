@@ -727,3 +727,27 @@ class VoucherOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Metric layer (M9-T1) ────────────────────────────────────────────────────
+
+
+class MetricSpecOut(BaseModel):
+    name: str
+    description_id: str
+    description_en: str
+    unit: str
+    grains: list[str]
+    dimensions: list[str]
+
+
+class MetricValueOut(BaseModel):
+    name: str
+    unit: str
+    value: float | int | None
+    rows: list[dict]
+    since: datetime | None
+    until: datetime | None
+    period: str | None
+    period_label: str
+    note: str | None

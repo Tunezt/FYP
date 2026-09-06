@@ -30,6 +30,8 @@ from app.schemas.dashboard import (
     CustomersPage,
     CustomerUpdateIn,
     LoyaltySettingsOut,
+    MetricSpecOut,
+    MetricValueOut,
     LoyaltySettingsPatch,
     PointsAdjustIn,
     PointsMovementOut,
@@ -1421,6 +1423,44 @@ async def edit_voucher(voucher_id: uuid.UUID, payload: VoucherUpdateIn, ctx: Own
         status, detail = _VOUCHER_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
     return VoucherOut.model_validate(row)
+
+
+# ── Metric layer (M9-T1) ────────────────────────────────────────────────────
+#
+# The one place numbers come from. M9-T2 points the assistant's tools here and
+# M9-T3 the dashboard's widgets, so both read the same implementation.
+
+
+@router.get("/metrics", response_model=list[MetricSpecOut])
+async def metric_catalogue(ctx: OwnerCtx):
+    from app.metrics import list_metrics
+
+    return [MetricSpecOut(**m.describe()) for m in list_metrics()]
+
+
+@router.get("/metrics/{name}", response_model=MetricValueOut)
+async def metric_value(
+    name: str, ctx: OwnerCtx, period: str | None = Query(default=None), since: datetime | None = None,
+    until: datetime | None = None, item_id: uuid.UUID | None = None, limit: int = Query(default=5, ge=1, le=100),
+):
+    """One metric over a named period (in the business's timezone) or an
+    explicit [since, until). Instant metrics ignore the window."""
+    from app.metrics import MetricNotFound, compute
+    from app.metrics.registry import MetricArgumentInvalid
+
+    business = await _business(ctx)
+    try:
+        result = await compute(ctx.session, business, name, period=period, since=since, until=until, item_id=item_id, limit=limit)
+    except MetricNotFound:
+        raise HTTPException(status_code=404, detail=f"Metrik '{name}' tidak dikenali")
+    except MetricArgumentInvalid as exc:
+        messages = {
+            "period": "Periode tidak dikenali",
+            "range": "Rentang waktu tidak valid — isi since dan until, dengan until setelah since",
+            "dimension": "Metrik ini tidak bisa difilter per barang",
+        }
+        raise HTTPException(status_code=422, detail=messages.get(exc.code, "Permintaan metrik tidak valid"))
+    return MetricValueOut(**result.as_dict())
 
 
 @router.get("/pricing-settings", response_model=PricingSettingsOut)
