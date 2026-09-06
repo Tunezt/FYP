@@ -282,6 +282,16 @@ def toc_tables(listing: str) -> set[str]:
     return names
 
 
+def latest_dump(dest: Path, folder: str = DAILY) -> Path | None:
+    """The newest finished dump, or None. Filenames are zero-padded timestamps,
+    so newest is simply the last one in sort order. Used by the restore drill
+    (M15-T2), which is the other half of this task."""
+    candidates = sorted(
+        p for p in (dest / folder).glob(f"{DUMP_PREFIX}*{DUMP_SUFFIX}") if p.is_file()
+    )
+    return candidates[-1] if candidates else None
+
+
 def promote_monthly(dest: Path, dump_path: Path, now: datetime) -> Path | None:
     """The first successful dump of a calendar month is also kept as that
     month's copy. Returns it, or None when the month already has one."""
