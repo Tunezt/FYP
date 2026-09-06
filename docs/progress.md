@@ -1040,3 +1040,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - `shift_summary` reuses `shift_view` (the same expectation formula as the kiosk and the money page); `customer_summary` reuses `customer_view` plus the period's visits and spend, or ranks the period's top customers; `promo_performance` counts applications, orders and rupiah given away per promo and the revenue of the orders it applied to (the BOGO on both of Andi's orders: 2 applications, 44.000 given away on 66.000 of orders).
 **Deviation:** none.
 **Next:** canary (5 tasks since M8-T3: M8-T4, M9-T1, M9-T2, M9-T3, M9-T4), then M9-T5 (explicit refusal)
+
+### [M9-T5] Explicit refusal
+**Date:** 2026-09-06
+**Status:** done
+**Changed:** backend/app/ai/refusal.py (new), backend/app/ai/router.py (`out_of_scope` declaration, deterministic refusal path, figure guard on `clarify`), backend/tests/test_refusal.py (new, 14 tests)
+**Gates:** pytest 347 passed 0 skipped · migrations round-trip ok (no migration) · frontend build ok · seed ok
+**Notes:**
+- A second escape hatch beside `clarify`: **`out_of_scope`**. The classifier is told to choose it for a question the business data does not hold — a forecast, tax law, the weather, a competitor's price, staff attendance, anything needing a guess or outside knowledge — and never to answer such a question with a number. Its only argument is the `topic` in the owner's words (no numbers); its handling calls no model at all. The reply is *assembled* from a phrase table: "Maaf, data usaha yang saya pegang tidak mencakup {topic} … Yang bisa saya jawab: {menu}." — in Indonesian, Malay or English, chosen from the message's own marker words with the business's preference breaking ties.
+- **Zero fabricated figures is a property of the code, not the prompt.** Two mechanisms: the refusal text cannot contain a figure because nothing generated it (a `topic` that smuggles a number is dropped rather than echoed); and the `clarify` path — the one place the model writes a reply with no facts behind it — is checked by `looks_like_a_figure` (Rp / RM, thousands separators, "ribu" / "juta" / "rb" / "k", percentages) and replaced with the refusal when a figure is found, logged as `refuse`. "Penjualan hari ini sekitar Rp 500.000 ya!" from the classifier never reaches the owner; "Halo! Mau cek apa hari ini?" still does.
+- **The menu cannot fall behind the tool set**: `CAPABILITIES` has a phrase per declared tool per language, and `test_every_tool_is_offered_in_every_language…` fails the moment a tool is added to `tools.py` without one. All fifteen tools have phrases; the refusal lists the first eight in declaration order.
+- The done-when, in `test_out_of_scope_questions_are_refused_with_zero_fabricated_figures`: ten out-of-scope questions in code-switched Indonesian, Malay and English with real typos ("brp", "sy", "kat kedai sebelah") each produce `intent == "refuse"`, a reply with **no digit at all**, the topic named, the capability menu offered, and the opener in the right language — with the composer asserted never awaited.
+- `request_logs.classified_intent` gains the value `refuse`; M9-T6's harness will read the refusal rate from it. Language detection uses only words that belong to one language (shared words like *berapa*, *stok*, *harga* are deliberately excluded), which is what made "baki stok gula berapa banyak?" resolve to Malay.
+**Deviation:** none.
+**Next:** M9-T6 (evaluation harness). Canary due after 5 tasks (last at M9-T4: M9-T5 = 1 so far).
