@@ -33,7 +33,7 @@ from app.models import Business
 
 UNITS = ("rupiah", "count", "pct", "qty", "days", "hour", "list")
 GRAINS = ("period", "instant")
-DIMENSIONS = ("item",)
+DIMENSIONS = ("item", "supplier", "customer")
 
 
 class MetricNotFound(Exception):
@@ -59,6 +59,8 @@ class MetricContext:
     period: str | None = None          # the named period, when one was used
     period_label: str = ""
     item_id: uuid.UUID | None = None   # the `item` dimension
+    supplier_id: uuid.UUID | None = None
+    customer_id: uuid.UUID | None = None
     limit: int = 5
     now: datetime | None = None
 
@@ -209,20 +211,22 @@ async def series(
 async def compute(
     session: AsyncSession, business: Business, name: str, *, period: str | None = None,
     since: datetime | None = None, until: datetime | None = None, item_id: uuid.UUID | None = None,
+    supplier_id: uuid.UUID | None = None, customer_id: uuid.UUID | None = None,
     limit: int = 5, now: datetime | None = None,
 ) -> MetricResult:
     """The one entry point. Instant metrics ignore the window (and accept none)."""
     spec = get_metric(name)
-    if item_id is not None and "item" not in spec.dimensions:
-        raise MetricArgumentInvalid("dimension", f"{name} has no item dimension")
+    for dim, given in (("item", item_id), ("supplier", supplier_id), ("customer", customer_id)):
+        if given is not None and dim not in spec.dimensions:
+            raise MetricArgumentInvalid("dimension", f"{name} has no {dim} dimension")
+    dims = dict(item_id=item_id, supplier_id=supplier_id, customer_id=customer_id, limit=limit)
     if spec.is_instant:
         moment = now or datetime.now(timezone.utc)
         ctx = MetricContext(business=business, since=moment, until=moment, period=None, period_label="sekarang",
-                            item_id=item_id, limit=limit, now=moment)
+                            now=moment, **dims)
     else:
         start, end, named, label = resolve_window(business, period=period, since=since, until=until, now=now)
-        ctx = MetricContext(business=business, since=start, until=end, period=named, period_label=label,
-                            item_id=item_id, limit=limit, now=now)
+        ctx = MetricContext(business=business, since=start, until=end, period=named, period_label=label, now=now, **dims)
     result = await spec.implementation(session, ctx)  # type: ignore[misc]
     result.name = spec.name
     result.unit = spec.unit

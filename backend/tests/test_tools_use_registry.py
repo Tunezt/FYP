@@ -54,6 +54,9 @@ def test_the_tools_file_contains_no_arithmetic_of_its_own():
     assert set(TOOL_EXECUTORS) == {
         "get_stock", "get_sales_summary", "compare_periods", "get_profit", "correct_stock", "get_low_stock",
         "record_expense", "search_history",
+        # M9-T4: grown over the registry, still fixed signatures
+        "get_purchase_history", "get_supplier_prices", "get_recipe_cost", "get_shift_summary",
+        "get_customer_summary", "get_promo_performance", "draft_purchase_order",
     }
 
 

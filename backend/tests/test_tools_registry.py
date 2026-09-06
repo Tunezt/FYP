@@ -9,6 +9,14 @@ EXPECTED_TOOLS = {
     "correct_stock",
     "get_low_stock",
     "record_expense",
+    # M9-T4
+    "get_purchase_history",
+    "get_supplier_prices",
+    "get_recipe_cost",
+    "get_shift_summary",
+    "get_customer_summary",
+    "get_promo_performance",
+    "draft_purchase_order",
 }
 
 

@@ -393,3 +393,306 @@ async def search_history(session: AsyncSession, business: Business, args: dict) 
             for d in documents
         ]
     }
+
+
+# ── M9-T4: the tool set grows, over the registry ─────────────────────────────
+#
+# Seven more fixed signatures. Every figure below is a registry metric; the
+# tools resolve names the owner typed (a supplier, an item, a customer) into
+# ids, call `compute`, and shape the answer. Still no free-form SQL.
+
+
+async def _match_supplier(session: AsyncSession, name_query: str):
+    from app.models import Supplier
+
+    pattern = f"%{name_query.strip()}%"
+    rows = (await session.execute(select(Supplier).where(Supplier.name.ilike(pattern), Supplier.is_active.is_(True)).order_by(Supplier.name))).scalars().all()
+    return list(rows)
+
+
+async def _supplier_names(session: AsyncSession) -> list[str]:
+    from app.models import Supplier
+
+    return list((await session.execute(select(Supplier.name).where(Supplier.is_active.is_(True)).order_by(Supplier.name))).scalars().all())
+
+
+def _period(args: dict, default: str) -> str:
+    period = args.get("period") or default
+    return period if period in PERIODS else default
+
+
+@tool(
+    types.FunctionDeclaration(
+        name="get_purchase_history",
+        description=(
+            "Goods received from suppliers in a period, optionally one supplier: dates, "
+            "values, line counts. Use for 'belanja ke supplier X berapa', 'riwayat pembelian', "
+            "'kapan terakhir kirim'."
+        ),
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "supplier_name": types.Schema(type=types.Type.STRING, description="Supplier as the owner named it. Omit for all suppliers."),
+                "period": _PERIOD_PARAM,
+            },
+        ),
+    )
+)
+async def get_purchase_history(session: AsyncSession, business: Business, args: dict) -> dict:
+    period = _period(args, "last_30_days")
+    name_query = (args.get("supplier_name") or "").strip()
+    supplier_id = None
+    if name_query:
+        matches = await _match_supplier(session, name_query)
+        if not matches:
+            return {"found": False, "query": name_query, "known_suppliers": (await _supplier_names(session))[:25]}
+        supplier_id = matches[0].id
+    result = await compute(session, business, "purchase_history", period=period, supplier_id=supplier_id, limit=20)
+    return {
+        "found": True, "period": period, "period_label": result.period_label,
+        "supplier": matches[0].name if name_query else None,
+        "total_received": _num(result.value),
+        "receipts": [
+            {"number": r["number"], "received_at": r["received_at"].isoformat(), "supplier": r["supplier"],
+             "total": r["total"], "lines": r["lines"]}
+            for r in result.rows
+        ],
+    }
+
+
+@tool(
+    types.FunctionDeclaration(
+        name="get_supplier_prices",
+        description=(
+            "Last purchase price per item per supplier, with the previous price and the change. "
+            "Use for 'harga gula di supplier mana paling murah', 'harga beli terakhir', 'naik ga harganya'."
+        ),
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "item_name": types.Schema(type=types.Type.STRING, description="Item to look at. Omit for every item."),
+                "supplier_name": types.Schema(type=types.Type.STRING, description="Supplier to look at. Omit for every supplier."),
+            },
+        ),
+    )
+)
+async def get_supplier_prices(session: AsyncSession, business: Business, args: dict) -> dict:
+    item_query = (args.get("item_name") or "").strip()
+    supplier_query = (args.get("supplier_name") or "").strip()
+    item_id = supplier_id = None
+    if item_query:
+        items = await _match_items(session, item_query)
+        if not items:
+            return {"found": False, "query": item_query, "known_items": [i.name for i in await _match_items(session, "")][:25]}
+        item_id = items[0].id
+    if supplier_query:
+        suppliers = await _match_supplier(session, supplier_query)
+        if not suppliers:
+            return {"found": False, "query": supplier_query, "known_suppliers": (await _supplier_names(session))[:25]}
+        supplier_id = suppliers[0].id
+    result = await compute(session, business, "supplier_prices", item_id=item_id, supplier_id=supplier_id)
+    return {
+        "found": True,
+        "prices": [
+            {"item": r["item"], "unit": r["unit"], "supplier": r["supplier"], "last_price": r["last_price"],
+             "last_bought_at": r["last_bought_at"].isoformat(), "previous_price": r["previous_price"], "change_pct": r["change_pct"]}
+            for r in result.rows
+        ],
+    }
+
+
+@tool(
+    types.FunctionDeclaration(
+        name="get_recipe_cost",
+        description=(
+            "Ingredient cost of one unit of a menu item from its recipe, at current component "
+            "costs, with the selling price and margin. Use for 'modal es kopi susu berapa', "
+            "'HPP per porsi', 'untung per gelas'."
+        ),
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={"item_name": types.Schema(type=types.Type.STRING)},
+            required=["item_name"],
+        ),
+    )
+)
+async def get_recipe_cost(session: AsyncSession, business: Business, args: dict) -> dict:
+    name_query = (args.get("item_name") or "").strip()
+    items = await _match_items(session, name_query) if name_query else []
+    if not items:
+        return {"found": False, "query": name_query, "known_items": [i.name for i in await _match_items(session, "")][:25]}
+    item = items[0]
+    result = await compute(session, business, "recipe_cost", item_id=item.id)
+    return {
+        "found": True, "item": item.name, "cost_per_unit": _num(result.value), "note": result.note,
+        "components": [
+            {"component": r["component"], "quantity": r["quantity"], "unit": r["unit"], "unit_cost": r["unit_cost"], "cost": r["cost"]}
+            for r in result.rows
+        ],
+    }
+
+
+@tool(
+    types.FunctionDeclaration(
+        name="get_shift_summary",
+        description=(
+            "Till shifts closed in a period: who, float, cash taken, expected, counted, variance. "
+            "Use for 'kas kemarin kurang ga', 'shift siapa yang selisih', 'tutup kasir'."
+        ),
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={"period": _PERIOD_PARAM},
+            required=["period"],
+        ),
+    )
+)
+async def get_shift_summary(session: AsyncSession, business: Business, args: dict) -> dict:
+    period = _period(args, "today")
+    result = await compute(session, business, "shift_summary", period=period, limit=20)
+    return {
+        "period": period, "period_label": result.period_label, "total_variance": _num(result.value),
+        "shifts": [
+            {"staff": r["staff"], "closed_at": r["closed_at"].isoformat() if r["closed_at"] else None,
+             "opening_float": r["opening_float"], "cash_sales": r["cash_sales"], "cash_in": r["cash_in"], "cash_out": r["cash_out"],
+             "expected_cash": r["expected_cash"], "counted_cash": r["counted_cash"], "variance": r["variance"], "notes": r["notes"]}
+            for r in result.rows
+        ],
+    }
+
+
+@tool(
+    types.FunctionDeclaration(
+        name="get_customer_summary",
+        description=(
+            "One customer's visits, spend, last visit and points — by name or phone — or the top "
+            "customers of a period when no name is given. Use for 'si Andi udah belanja berapa', "
+            "'pelanggan paling sering', 'poin bu Rina'."
+        ),
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "customer": types.Schema(type=types.Type.STRING, description="Name or phone number as the owner typed it. Omit for the top customers."),
+                "period": _PERIOD_PARAM,
+            },
+        ),
+    )
+)
+async def get_customer_summary(session: AsyncSession, business: Business, args: dict) -> dict:
+    from app.services.customers import search_customers
+
+    period = _period(args, "this_month")
+    query = (args.get("customer") or "").strip()
+    customer_id = None
+    if query:
+        matches = await search_customers(session, query, limit=5)
+        if not matches:
+            return {"found": False, "query": query}
+        customer_id = matches[0].id
+    result = await compute(session, business, "customer_summary", period=period, customer_id=customer_id, limit=5)
+    return {
+        "found": True, "period": period, "period_label": result.period_label,
+        "customers": [
+            {"name": r["name"], "phone": r["phone"], "visits": r["visits"], "total_spent": _num(r["total_spent"]),
+             "last_visit": r["last_visit"].isoformat() if r["last_visit"] else None, "points_balance": r["points_balance"],
+             "period_visits": r["period_visits"], "period_spend": r["period_spend"]}
+            for r in result.rows
+        ],
+    }
+
+
+@tool(
+    types.FunctionDeclaration(
+        name="get_promo_performance",
+        description=(
+            "How each promo did in a period: times applied, cost, and the revenue of the orders it "
+            "applied to. Use for 'promo BOGO laku ga', 'promo mana yang jalan', 'biaya promo bulan ini'."
+        ),
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={"period": _PERIOD_PARAM},
+            required=["period"],
+        ),
+    )
+)
+async def get_promo_performance(session: AsyncSession, business: Business, args: dict) -> dict:
+    period = _period(args, "this_month")
+    result = await compute(session, business, "promo_performance", period=period, limit=20)
+    return {
+        "period": period, "period_label": result.period_label, "total_cost": _num(result.value),
+        "promos": [
+            {"name": r["name"], "kind": r["kind"], "is_active": r["is_active"], "applications": r["applications"],
+             "orders": r["orders"], "given_away": r["given_away"], "order_revenue": r["order_revenue"]}
+            for r in result.rows
+        ],
+    }
+
+
+@tool(
+    types.FunctionDeclaration(
+        name="draft_purchase_order",
+        description=(
+            "Draft a purchase order to a supplier for the items and quantities the owner states "
+            "('pesan ke Toko Jaya: gula 10 kg, kopi 5 kg'). Prices default to the last price paid to "
+            "that supplier. It is a DRAFT the owner confirms on the dashboard — nothing is sent."
+        ),
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "supplier_name": types.Schema(type=types.Type.STRING),
+                "lines": types.Schema(
+                    type=types.Type.ARRAY,
+                    items=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "item_name": types.Schema(type=types.Type.STRING),
+                            "quantity": types.Schema(type=types.Type.NUMBER, description="In the item's own unit."),
+                        },
+                        required=["item_name", "quantity"],
+                    ),
+                ),
+            },
+            required=["supplier_name", "lines"],
+        ),
+    )
+)
+async def draft_purchase_order(session: AsyncSession, business: Business, args: dict) -> dict:
+    from app.services.purchasing import PoLineSpec, PurchaseOrderInvalid, create_purchase_order, lines_of
+
+    supplier_query = (args.get("supplier_name") or "").strip()
+    suppliers = await _match_supplier(session, supplier_query) if supplier_query else []
+    if not suppliers:
+        return {"drafted": False, "reason": "supplier_not_found", "query": supplier_query,
+                "known_suppliers": (await _supplier_names(session))[:25]}
+    supplier = suppliers[0]
+    prices = {r["item_id"]: r["last_price"] for r in (await compute(session, business, "supplier_prices", supplier_id=supplier.id)).rows}
+    specs, unknown, resolved = [], [], []
+    for raw in args.get("lines") or []:
+        name = (raw.get("item_name") or "").strip()
+        try:
+            qty = Decimal(str(raw.get("quantity") or 0))
+        except Exception:
+            qty = Decimal(0)
+        matches = await _match_items(session, name) if name else []
+        if not matches or qty <= 0:
+            unknown.append(name or "?")
+            continue
+        item = matches[0]
+        unit_cost = Decimal(str(prices.get(item.id, 0) or 0))
+        specs.append(PoLineSpec(item_id=item.id, quantity=qty, unit_cost=unit_cost))
+        resolved.append({"item": item.name, "quantity": _num(qty), "unit": item.unit, "unit_cost": _num(unit_cost),
+                         "price_known": item.id in prices})
+    if not specs:
+        return {"drafted": False, "reason": "no_valid_lines", "unknown_items": unknown,
+                "known_items": [i.name for i in await _match_items(session, "")][:25]}
+    try:
+        po = await create_purchase_order(session, business.id, supplier_id=supplier.id, lines=specs,
+                                         notes="dibuat dari asisten WhatsApp")
+    except PurchaseOrderInvalid as exc:
+        return {"drafted": False, "reason": exc.code}
+    lines = await lines_of(session, po.id)
+    return {
+        "drafted": True, "po_number": po.number, "status": po.status, "supplier": supplier.name,
+        "subtotal": _num(sum((Decimal(l.line_total) for l in lines), Decimal(0))),
+        "lines": resolved, "unknown_items": unknown,
+        "note": "Draft — konfirmasi dan kirim dari dashboard (Stok › Pesanan pembelian).",
+    }

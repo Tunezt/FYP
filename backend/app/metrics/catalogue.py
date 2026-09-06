@@ -25,7 +25,10 @@ from sqlalchemy import case, desc, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.metrics.registry import MetricContext, MetricResult, metric
-from app.models import Customer, Expense, Item, Order, OrderLine, Sale, Shift, StockMovement
+from app.models import (
+    Customer, Expense, GoodsReceipt, GoodsReceiptLine, Item, ItemVariant, Order, OrderLine, Promo, PromoApplication, Sale, Shift,
+    StockMovement, Supplier,
+)
 
 MONEY = Decimal("0.01")
 PCT = Decimal("0.1")
@@ -333,6 +336,178 @@ async def repeat_rate(session: AsyncSession, ctx: MetricContext) -> MetricResult
     )).scalar_one()
     value = (Decimal(repeat) / Decimal(len(buyers)) * 100).quantize(PCT, rounding=ROUND_HALF_UP)
     return MetricResult(name="repeat_rate", unit="pct", value=value, rows=[{"buyers": len(buyers), "repeat": int(repeat)}])
+
+
+# ── purchasing ──────────────────────────────────────────────────────────────
+
+
+@metric("purchase_history", description_id="Penerimaan barang dalam periode (per pemasok bila dipilih): tanggal, pemasok, nilai, jumlah baris",
+        description_en="Goods received in the period (for one supplier when given): date, supplier, value, line count",
+        unit="list", dimensions=("supplier",))
+async def purchase_history(session: AsyncSession, ctx: MetricContext) -> MetricResult:
+    stmt = (
+        select(GoodsReceipt, Supplier.name, func.count(GoodsReceiptLine.id))
+        .outerjoin(Supplier, Supplier.id == GoodsReceipt.supplier_id)
+        .outerjoin(GoodsReceiptLine, GoodsReceiptLine.receipt_id == GoodsReceipt.id)
+        .where(GoodsReceipt.received_at >= ctx.since, GoodsReceipt.received_at < ctx.until)
+        .group_by(GoodsReceipt.id, Supplier.name)
+        .order_by(GoodsReceipt.received_at.desc())
+        .limit(max(ctx.limit, 20))
+    )
+    if ctx.supplier_id is not None:
+        stmt = stmt.where(GoodsReceipt.supplier_id == ctx.supplier_id)
+    rows = (await session.execute(stmt)).all()
+    total = sum((Decimal(g.subtotal) for g, _n, _c in rows), Decimal(0))
+    return MetricResult(name="purchase_history", unit="list", value=_money(total), rows=[
+        {"receipt_id": g.id, "number": g.number, "received_at": g.received_at, "supplier_id": g.supplier_id,
+         "supplier": name, "total": float(_money(g.subtotal)), "lines": int(c)}
+        for g, name, c in rows
+    ])
+
+
+@metric("supplier_prices", description_id="Harga beli terakhir per barang per pemasok (per satuan barang), dengan harga sebelumnya",
+        description_en="Last purchase price per item per supplier (in the item's unit), with the previous price",
+        unit="list", grains=("instant",), dimensions=("item", "supplier"))
+async def supplier_prices(session: AsyncSession, ctx: MetricContext) -> MetricResult:
+    stmt = (
+        select(GoodsReceiptLine.item_id, Item.name, Item.unit, GoodsReceipt.supplier_id, Supplier.name,
+               GoodsReceiptLine.unit_cost_item_unit, GoodsReceipt.received_at)
+        .join(GoodsReceipt, GoodsReceipt.id == GoodsReceiptLine.receipt_id)
+        .join(Item, Item.id == GoodsReceiptLine.item_id)
+        .outerjoin(Supplier, Supplier.id == GoodsReceipt.supplier_id)
+        .order_by(GoodsReceipt.received_at.desc())
+    )
+    if ctx.item_id is not None:
+        stmt = stmt.where(GoodsReceiptLine.item_id == ctx.item_id)
+    if ctx.supplier_id is not None:
+        stmt = stmt.where(GoodsReceipt.supplier_id == ctx.supplier_id)
+    latest: dict[tuple, dict] = {}
+    for item_id, item_name, unit, supplier_id, supplier_name, cost, when in (await session.execute(stmt)).all():
+        key = (item_id, supplier_id)
+        if key not in latest:
+            latest[key] = {"item_id": item_id, "item": item_name, "unit": unit, "supplier_id": supplier_id,
+                           "supplier": supplier_name, "last_price": float(_money(cost)), "last_bought_at": when,
+                           "previous_price": None, "change_pct": None}
+        elif latest[key]["previous_price"] is None:
+            prev = float(_money(cost))
+            latest[key]["previous_price"] = prev
+            latest[key]["change_pct"] = round((latest[key]["last_price"] - prev) / prev * 100, 1) if prev else None
+    rows = sorted(latest.values(), key=lambda r: (r["item"], r["supplier"] or ""))
+    return MetricResult(name="supplier_prices", unit="list", rows=rows)
+
+
+@metric("recipe_cost", description_id="Biaya bahan satu porsi menurut resep, pada harga pokok bahan saat ini",
+        description_en="Ingredient cost of one unit from its recipe, at the components' current cost",
+        unit="rupiah", grains=("instant",), dimensions=("item",))
+async def recipe_cost(session: AsyncSession, ctx: MetricContext) -> MetricResult:
+    from app.services.catalog import default_variant, recipe_lines_for
+    from app.services.units import convert_quantity
+
+    if ctx.item_id is None:
+        return MetricResult(name="recipe_cost", unit="rupiah", value=None, note="pilih satu barang")
+    item = await session.get(Item, ctx.item_id)
+    if item is None:
+        return MetricResult(name="recipe_cost", unit="rupiah", value=None)
+    variant = await default_variant(session, item.id)
+    lines = await recipe_lines_for(session, variant.id, active_only=True) if variant is not None else []
+    if not lines:
+        cost = Decimal(variant.cost_price) if variant is not None else Decimal(item.cost_price)
+        return MetricResult(name="recipe_cost", unit="rupiah", value=_money(cost),
+                            rows=[], note="tidak ada resep: memakai harga pokok yang tercatat")
+    rows, total = [], Decimal(0)
+    for rl in lines:
+        comp = await session.get(Item, rl.component_item_id)
+        qty = Decimal(rl.quantity)
+        if rl.uom_id is not None and comp.uom_id is not None and rl.uom_id != comp.uom_id:
+            qty = await convert_quantity(session, qty, rl.uom_id, comp.uom_id)
+        line_cost = _money(qty * Decimal(comp.cost_price))
+        total += line_cost
+        rows.append({"component_id": comp.id, "component": comp.name, "quantity": float(qty), "unit": comp.unit,
+                     "unit_cost": float(_money(comp.cost_price)), "cost": float(line_cost)})
+    sell = Decimal(variant.sell_price) if variant is not None else Decimal(item.sell_price)
+    margin = ((sell - total) / sell * 100).quantize(PCT, rounding=ROUND_HALF_UP) if sell else None
+    return MetricResult(name="recipe_cost", unit="rupiah", value=_money(total), rows=rows,
+                        note=f"harga jual {sell:.0f}, margin kotor {margin}%" if margin is not None else None)
+
+
+# ── till, customers, promos ─────────────────────────────────────────────────
+
+
+@metric("shift_summary", description_id="Shift kasir yang ditutup dalam periode: modal, tunai, seharusnya, dihitung, selisih",
+        description_en="Till shifts closed in the period: float, cash taken, expected, counted, variance", unit="list")
+async def shift_summary(session: AsyncSession, ctx: MetricContext) -> MetricResult:
+    from app.services.shifts import shift_view
+
+    shifts = (await session.execute(
+        select(Shift).where(Shift.status == "closed", Shift.closed_at >= ctx.since, Shift.closed_at < ctx.until)
+        .order_by(Shift.closed_at.desc()).limit(max(ctx.limit, 20))
+    )).scalars().all()
+    rows = []
+    for sh in shifts:
+        v = await shift_view(session, sh)
+        rows.append({"shift_id": v["id"], "staff": v["staff_name"], "opened_at": v["opened_at"], "closed_at": v["closed_at"],
+                     "opening_float": float(v["opening_float"]), "cash_sales": float(v["cash_sales"]),
+                     "cash_refunds": float(v["cash_refunds"]), "cash_in": float(v["cash_in"]), "cash_out": float(v["cash_out"]),
+                     "expected_cash": float(v["expected_cash"] or 0), "counted_cash": float(v["counted_cash"] or 0),
+                     "variance": float(v["variance"] or 0), "notes": v["notes"]})
+    total_variance = sum((Decimal(str(r["variance"])) for r in rows), Decimal(0))
+    return MetricResult(name="shift_summary", unit="list", value=_money(total_variance), rows=rows)
+
+
+@metric("customer_summary", description_id="Ringkasan pelanggan: kunjungan, belanja, kunjungan terakhir, saldo poin (satu pelanggan, atau pelanggan teratas dalam periode)",
+        description_en="Customer summary: visits, spend, last visit, points (one customer, or the top customers of the period)",
+        unit="list", dimensions=("customer",))
+async def customer_summary(session: AsyncSession, ctx: MetricContext) -> MetricResult:
+    from app.services.customers import customer_view, customer_views
+
+    if ctx.customer_id is not None:
+        cust = await session.get(Customer, ctx.customer_id)
+        if cust is None:
+            return MetricResult(name="customer_summary", unit="list", rows=[])
+        v = await customer_view(session, cust)
+        period_spend, period_visits = (await session.execute(
+            select(func.coalesce(func.sum(case((Order.status == "completed", Order.total), else_=0)), 0), func.count(Order.id))
+            .where(Order.customer_id == cust.id, Order.status != "voided", Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
+        )).one()
+        row = {**v, "period_spend": float(_money(period_spend)), "period_visits": int(period_visits)}
+        return MetricResult(name="customer_summary", unit="list", value=_money(v["total_spent"]), rows=[row])
+    top = (await session.execute(
+        select(Customer, func.coalesce(func.sum(case((Order.status == "completed", Order.total), else_=0)), 0).label("spend"),
+               func.count(Order.id).label("visits"))
+        .join(Order, Order.customer_id == Customer.id)
+        .where(Order.status != "voided", Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
+        .group_by(Customer.id).order_by(desc("spend")).limit(ctx.limit)
+    )).all()
+    views = await customer_views(session, [c for c, _s, _v in top])
+    rows = [{**v, "period_spend": float(_money(sp)), "period_visits": int(n)} for v, (_c, sp, n) in zip(views, top)]
+    return MetricResult(name="customer_summary", unit="list", rows=rows)
+
+
+@metric("promo_performance", description_id="Kinerja promo dalam periode: berapa kali dipakai, biaya, dan penjualan struk yang memakainya",
+        description_en="Promo performance in the period: applications, cost, and revenue of the orders it applied to", unit="list")
+async def promo_performance(session: AsyncSession, ctx: MetricContext) -> MetricResult:
+    rows = (await session.execute(
+        select(Promo.id, Promo.name, Promo.kind, Promo.is_active,
+               func.count(PromoApplication.id), func.coalesce(func.sum(PromoApplication.amount), 0),
+               func.count(func.distinct(PromoApplication.order_id)))
+        .join(PromoApplication, PromoApplication.promo_id == Promo.id)
+        .join(Order, Order.id == PromoApplication.order_id)
+        .where(Order.status != "voided", Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
+        .group_by(Promo.id).order_by(desc(func.coalesce(func.sum(PromoApplication.amount), 0)))
+        .limit(max(ctx.limit, 20))
+    )).all()
+    out = []
+    for pid, name, kind, active, n, given, n_orders in rows:
+        order_revenue = (await session.execute(
+            select(func.coalesce(func.sum(Order.total), 0)).where(
+                Order.id.in_(select(PromoApplication.order_id).where(PromoApplication.promo_id == pid)),
+                Order.status != "voided", Order.sold_at >= ctx.since, Order.sold_at < ctx.until,
+            )
+        )).scalar_one()
+        out.append({"promo_id": pid, "name": name, "kind": kind, "is_active": active, "applications": int(n),
+                    "orders": int(n_orders), "given_away": float(_money(given)), "order_revenue": float(_money(order_revenue))})
+    total = sum((Decimal(str(r["given_away"])) for r in out), Decimal(0))
+    return MetricResult(name="promo_performance", unit="list", value=_money(total), rows=out)
 
 
 STANDARD_METRIC_NAMES = (
