@@ -1,6 +1,6 @@
 # Warung Pintar — Autonomous Build Roadmap
 
-**Version 4** · 6 September 2026. Adds M13 (table service), M14 (offline-first POS) and
+**Version 8** · 6 September 2026. Adds M13 (table service), M14 (offline-first POS) and
 M15 (go-live hardening). This system is being deployed in a real café, not only submitted.
 **Target:** the core of majoo's SME operating system, plus the things majoo cannot do.
 
@@ -310,12 +310,22 @@ Two rules fall out and they are the whole design:
 
 The café goes live before the report is submitted, so the order is:
 
-1. **M15-T1 → M15-T4** — backups, restore drill, clean bootstrap, business day boundary
-2. **M12** — Supabase (paid tier, not free), Meta templates, Railway, Vercel
-3. **M15-T5 → M15-T9** — monitoring, printing, manager role, lockout recovery, runbook
-4. **M14-T1 → M14-T8, then T10** — the offline queue (T9 conditional, see its note)
-5. **M1-T3 part 2 and the remaining evaluation questions** — once Gemini billing is on
-6. **M13** — cut, counter service, do not build
+*Revised 6 September 2026, after the M15-T9 runbook audit found the app has no void or refund
+button at all.*
+
+1. ~~**M15-T1 → M15-T4**~~ **done** — backups, restore drill, clean bootstrap, day boundary
+2. ~~**M15-T7 → M15-T9**~~ **done** — manager role, lockout recovery, runbook
+3. **M15-T11** — the void and refund screen. **Do this next.** A café rings something up wrong
+   every day; the WiFi drops far less often. Fix the daily incident before the weekly one.
+4. **M15-T10** — backdated sale entry, so paper sales from an outage can reach the books
+5. **M12** — Supabase (paid tier, not free), Meta templates, Railway, Vercel
+6. **M15-T5, M15-T6** — uptime alert and the real printer; both need step 5 and the hardware
+7. **M14-T1 → M14-T8, then M14-T10** — the offline queue (M14-T9 is cut)
+8. **M1-T3 part 2 and the remaining evaluation questions** — once Gemini billing is on
+9. **M13** — cut, counter service, do not build
+
+**Do not start M14 before steps 3 and 4 are done.** Offline is the more interesting engineering and
+the less urgent problem.
 
 Work this order, not the numeric order. Everything else in this document still applies.
 
@@ -940,6 +950,31 @@ Owner-only screen to enter a sale with a chosen date and time. It posts through 
 in the audit trail and can be excluded from anomaly baselines.
 **Done when:** a paper sale from two days ago is entered, lands on the correct business day, moves
 stock and posts to the ledger, and the reconciliation invariant still holds.
+
+**M15-T11 · The void and refund screen** — `blocked_by: M15-T7` · **HIGHEST PRIORITY**
+
+Found during M15-T9 and confirmed by reading `frontend/app/pos/[businessToken]/page.tsx`:
+`POST /pos/orders/{id}/void` and `POST /pos/orders/{id}/refund` exist, are tested, and **nothing in
+the till or the dashboard ever calls them.** The only "Batal" in the POS cancels an open e-menu
+ticket, which is a different thing. `ReceiptSheet` renders a `voided` status that no user action
+can produce.
+
+"A sale was rung up wrong" is the most common incident in a café and it happens daily. There is no
+button for it. The runbook's honest instruction is currently "write it on the paper sheet and call
+a developer". M15-T7 built the authorisation, the manager role and the `approvals` audit trail for
+a screen that does not exist.
+
+Build:
+- Recent orders list on the till (today's, newest first, searchable by receipt number)
+- Open one, see the receipt, choose **Batalkan** or **Kembalikan** (refund with a restock toggle)
+- Manager PIN prompt through the existing `verify_manager_pin`, plus a reason note
+- Confirmation on screen, reprintable
+- Owner-side equivalent on the sales page for a mistake found after the shift closed
+
+**Done when:** a cashier can void a sale they just rang up wrong, with a manager PIN, without
+anyone touching an API client or `/docs`; the reversing lines, reversing payments, `sale_void`
+stock movements and the `approvals` row all land exactly as M3-T4 and M15-T7 already specify; and
+the reconciliation invariant still holds afterwards.
 
 **M15-T9 · The runbook** — `blocked_by: M15-T8`
 `docs/runbook.md`, written for a stressed person at 8am, not for a developer:
