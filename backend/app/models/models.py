@@ -6,7 +6,7 @@ construction and must not drift from it. A migration that adds a table adds its
 model here in the same commit (roadmap §1.7).
 """
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from pgvector.sqlalchemy import Vector
@@ -20,9 +20,10 @@ from sqlalchemy import (
     Integer,
     Numeric,
     Text,
+    Time,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -66,6 +67,12 @@ cash_movement_kind = Enum(
 )
 points_reason = Enum(
     "earn", "redeem", "adjust", "reversal", "expire", name="points_reason", create_type=False
+)
+promo_kind = Enum(
+    "percent_off", "amount_off", "bonus_item", name="promo_kind", create_type=False
+)
+promo_condition_kind = Enum(
+    "date_range", "day_of_week", "time_window", "min_spend", "multiples", name="promo_condition_kind", create_type=False
 )
 
 
@@ -337,6 +344,7 @@ class Order(Base):
     status: Mapped[str] = mapped_column(order_status, nullable=False, server_default="completed")
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     discount_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    promo_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")  # M8-T3, migration 0023
     tax_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     service_charge: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     rounding: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
@@ -841,4 +849,66 @@ class PointsMovement(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
     notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
+
+
+class Promo(Base):
+    """A campaign's reward (migration 0023, roadmap M8-T3): a percentage or an
+    amount off an item or the bill, or a bonus item. Its conditions live in
+    `promo_conditions` and are ANDed at the moment of sale."""
+
+    __tablename__ = "promos"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(promo_kind, nullable=False)
+    value: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False, server_default="0")
+    item_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
+    bonus_item_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
+    bonus_quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, server_default="1")
+    max_per_order: Mapped[int | None] = mapped_column(Integer)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class PromoCondition(Base):
+    """One condition of a promo (migration 0023). Which columns are set depends on `kind`."""
+
+    __tablename__ = "promo_conditions"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    promo_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("promos.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(promo_condition_kind, nullable=False)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    days_of_week: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
+    time_start: Mapped[time | None] = mapped_column(Time)
+    time_end: Mapped[time | None] = mapped_column(Time)
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    created_at: Mapped[datetime] = _now()
+
+
+class PromoApplication(Base):
+    """What a promo gave on an order (migration 0023): the receipt, the
+    reversal and the campaign report read this."""
+
+    __tablename__ = "promo_applications"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
+    promo_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("promos.id"), nullable=False)
+    order_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("order_lines.id"))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    bonus_quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, server_default="0")
     created_at: Mapped[datetime] = _now()

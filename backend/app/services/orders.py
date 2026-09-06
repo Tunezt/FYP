@@ -36,6 +36,7 @@ from app.services.points import (
     PointsInvalid, award_points_for_order, loyalty_config, redeem_points_for_payment, reverse_points_for_order,
 )
 from app.services.pricing import LineInput, price_order, pricing_config
+from app.services.promos import CartLine, apply_promos, load_rules
 from app.services.sales import ATOMIC_DECREMENT, InsufficientStock, ItemNotFound
 from app.services.stock import record_movement
 from app.services.units import convert_quantity, to_ledger_precision
@@ -132,6 +133,7 @@ class OrderLineSpec:
     variant_id: uuid.UUID | None = None  # None → the item's default variant (M4-T1)
     modifier_ids: list[uuid.UUID] = field(default_factory=list)  # "extra shot, less sugar" (M4-T2)
     line_discount: Decimal = Decimal(0)  # rupiah off this line (M7-T4b); gated like the bill discount
+    promo_id: uuid.UUID | None = None   # set by the engine on a bonus line it added (M8-T3); never from the API
 
 
 @dataclass
@@ -191,7 +193,13 @@ async def create_order(
     #    Price and cost come from the variant (explicit, else the item's default);
     #    stock is the parent item's until recipes arrive (M4-T4).
     priced: list[tuple] = []  # (spec, item, variant, modifiers, price, cost, line_total, remaining, consumed)
-    for spec in lines:
+    # The cart is priced in two passes: the cashier's lines, then — once the
+    # promo engine has seen them — any bonus lines a promo adds (M8-T3), which
+    # take stock and cost exactly like a paid line.
+    queue: list[OrderLineSpec] = list(lines)
+    promo_result = None
+    while queue:
+        spec = queue.pop(0)
         item = await session.get(Item, spec.item_id)
         if item is None:
             raise ItemNotFound()
@@ -247,17 +255,29 @@ async def create_order(
         price = (base + sum((Decimal(m.price_delta) for m in modifiers), Decimal(0))).quantize(TWO_PLACES)
         line_total = (price * quantity).quantize(TWO_PLACES)
         priced.append((spec, item, variant, modifiers, price, cost, line_total, Decimal(remaining), consumed))
+        if not queue and promo_result is None:
+            promo_result = await _evaluate_promos(session, business_id, priced, sold_at, bill_discount)
+            queue.extend(
+                OrderLineSpec(item_id=b.item_id, quantity=b.quantity, unit_price=b.unit_price, promo_id=b.promo_id,
+                              notes=f"promo: {b.promo_name}")
+                for b in promo_result.bonus_lines
+            )
 
     # 2. Price the bill (M7-T4b): discounts, tax, service charge, rounding —
     #    one pure function, the same one the kiosk quotes from. PricingInvalid
     #    (a discount bigger than its line or the bill) propagates: nothing has
     #    been written yet and the stock decrements roll back with the caller.
+    n_cart = len(lines)
+    # Promo discount per priced line: the engine's figure for the cashier's lines,
+    # the whole line for a bonus line (it is free).
+    promo_per_line = list(promo_result.line_discounts) + [priced[i][6] for i in range(n_cart, len(priced))]
     bill = price_order(
         [
-            LineInput(unit_price=p[4], quantity=Decimal(p[0].quantity), line_discount=Decimal(p[0].line_discount or 0))
-            for p in priced
+            LineInput(unit_price=p[4], quantity=Decimal(p[0].quantity), line_discount=Decimal(p[0].line_discount or 0),
+                      promo_discount=promo_per_line[i])
+            for i, p in enumerate(priced)
         ],
-        config, bill_discount=bill_discount,
+        config, bill_discount=bill_discount, promo_bill_discount=promo_result.bill_discount,
     )
     subtotal, total = bill.subtotal, bill.total
 
@@ -276,6 +296,7 @@ async def create_order(
         customer_id=customer.id if customer is not None else None,
         subtotal=subtotal,
         discount_total=bill.discount_total,
+        promo_total=bill.promo_total,
         tax_total=bill.tax_total,
         service_charge=bill.service_charge,
         rounding=bill.rounding,
@@ -333,6 +354,23 @@ async def create_order(
         ]
         session.add_all(snapshots)
         created.lines.append(CreatedLine(line=line, item_name=item.name, remaining_stock=remaining, modifiers=snapshots))
+
+    # What each promo gave, by line (M8-T3): the receipt, the reversal and the
+    # campaign report read these rows.
+    from app.models import PromoApplication
+
+    for app_ in promo_result.applications:
+        line_row = None
+        if app_.bonus_index is not None:
+            line_row = created.lines[n_cart + app_.bonus_index].line
+        elif app_.line_index is not None:
+            line_row = created.lines[app_.line_index].line
+        session.add(PromoApplication(
+            business_id=business_id, order_id=order.id, promo_id=app_.promo_id,
+            order_line_id=line_row.id if line_row is not None else None, amount=app_.amount,
+            bonus_quantity=app_.bonus_quantity,
+        ))
+    await session.flush()
 
     for p in payments:
         payment = Payment(
@@ -575,7 +613,27 @@ async def _reverse(
     return reversal
 
 
-FISCAL_COMPONENTS = ("discount", "tax", "service_charge", "rounding_up", "rounding_down")
+FISCAL_COMPONENTS = ("discount", "promo", "tax", "service_charge", "rounding_up", "rounding_down")
+
+
+async def _evaluate_promos(session: AsyncSession, business_id: uuid.UUID, priced: list[tuple], sold_at: datetime, bill_discount: Decimal):
+    """Run the pure promo engine over the priced cart (M8-T3). List prices for
+    bonus items not in the cart are looked up here so the engine stays pure."""
+    from app.models import Business
+
+    rules = await load_rules(session)
+    cart = [CartLine(item_id=p[1].id, unit_price=p[4], quantity=Decimal(p[0].quantity), line_discount=Decimal(p[0].line_discount or 0)) for p in priced]
+    price_of: dict[uuid.UUID, Decimal] = {}
+    for r in rules:
+        for iid in (r.bonus_item_id, r.item_id):
+            if iid is not None and iid not in price_of:
+                item = await session.get(Item, iid)
+                if item is not None:
+                    variant = await default_variant(session, item.id)
+                    price_of[iid] = Decimal(variant.sell_price) if variant is not None else Decimal(item.sell_price)
+    business = await session.get(Business, business_id)
+    tz = business.timezone if business is not None else "Asia/Jakarta"
+    return apply_promos(cart, rules, at_utc=sold_at, tz=tz, bill_discount=Decimal(bill_discount or 0), price_of=price_of)
 
 
 async def _fiscal_lines_of_sale(session: AsyncSession, order_id: uuid.UUID) -> dict[str, Decimal]:

@@ -33,6 +33,9 @@ from app.schemas.dashboard import (
     LoyaltySettingsPatch,
     PointsAdjustIn,
     PointsMovementOut,
+    PromoCreateIn,
+    PromoOut,
+    PromoUpdateIn,
     PricingSettingsOut,
     PricingSettingsPatch,
     ExpensesPage,
@@ -1287,6 +1290,77 @@ async def adjust_customer_points(customer_id: uuid.UUID, payload: PointsAdjustIn
     except InsufficientPoints as exc:
         raise HTTPException(status_code=409, detail=f"Poin tidak cukup — tersedia {exc.available}")
     return CustomerOut(**await customer_view(ctx.session, row))
+
+
+# ── Promos (M8-T3) ──────────────────────────────────────────────────────────
+
+_PROMO_ERRORS = {
+    "name": (422, "Nama promo tidak boleh kosong"),
+    "kind": (422, "Jenis promo tidak dikenali"),
+    "value": (422, "Nilai promo tidak valid (persen 0–100, rupiah lebih dari nol)"),
+    "item": (422, "Barang promo tidak ditemukan"),
+    "bonus_item": (422, "Barang bonus tidak ditemukan"),
+    "bonus_quantity": (422, "Jumlah bonus harus lebih dari nol"),
+    "max_per_order": (422, "Batas per struk harus lebih dari nol"),
+    "condition": (422, "Syarat promo tidak lengkap atau tidak valid"),
+    "not_found": (404, "Promo tidak ditemukan"),
+}
+
+
+async def _promo_out(session, promo) -> PromoOut:
+    from app.models import PromoApplication
+    from app.services.promos import promo_view
+
+    n, given = (
+        await session.execute(
+            select(func.count(PromoApplication.id), func.coalesce(func.sum(PromoApplication.amount), 0))
+            .where(PromoApplication.promo_id == promo.id)
+        )
+    ).one()
+    return PromoOut(**await promo_view(session, promo), applications=int(n), given_away=Decimal(given))
+
+
+@router.get("/promos", response_model=list[PromoOut])
+async def list_promos(ctx: OwnerCtx, include_inactive: bool = Query(default=True)):
+    from app.models import Promo
+
+    stmt = select(Promo).order_by(Promo.is_active.desc(), Promo.name)
+    if not include_inactive:
+        stmt = stmt.where(Promo.is_active.is_(True))
+    return [await _promo_out(ctx.session, p) for p in (await ctx.session.execute(stmt)).scalars()]
+
+
+@router.post("/promos", response_model=PromoOut, status_code=201)
+async def add_promo(payload: PromoCreateIn, ctx: OwnerCtx):
+    from app.services.promos import PromoInvalid, create_promo
+
+    data = payload.model_dump()
+    conditions = data.pop("conditions")
+    try:
+        promo = await create_promo(ctx.session, ctx.business_id, conditions=conditions, **data)
+    except PromoInvalid as exc:
+        status, detail = _PROMO_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return await _promo_out(ctx.session, promo)
+
+
+@router.patch("/promos/{promo_id}", response_model=PromoOut)
+async def edit_promo(promo_id: uuid.UUID, payload: PromoUpdateIn, ctx: OwnerCtx):
+    from app.models import Promo
+    from app.services.promos import PromoInvalid, update_promo
+
+    promo = await ctx.session.get(Promo, promo_id)
+    if promo is None:
+        status, detail = _PROMO_ERRORS["not_found"]
+        raise HTTPException(status_code=status, detail=detail)
+    data = payload.model_dump(exclude_unset=True)
+    conditions = data.pop("conditions", None)
+    try:
+        promo = await update_promo(ctx.session, promo, conditions=conditions, **data)
+    except PromoInvalid as exc:
+        status, detail = _PROMO_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return await _promo_out(ctx.session, promo)
 
 
 @router.get("/pricing-settings", response_model=PricingSettingsOut)

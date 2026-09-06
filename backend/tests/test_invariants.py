@@ -84,6 +84,12 @@ KNOWN_MONEY_COLUMNS = {
     ("journal_lines", "credit"),
     ("pricing_settings", "service_charge_rate"),
     ("pricing_settings", "rounding_unit"),
+    ("orders", "promo_total"),
+    ("promo_conditions", "amount"),
+    ("promo_conditions", "quantity"),
+    ("promo_applications", "amount"),
+    ("promo_applications", "bonus_quantity"),
+    ("promos", "bonus_quantity"),
 }
 
 # pg_catalog rather than information_schema: the latter only lists columns the

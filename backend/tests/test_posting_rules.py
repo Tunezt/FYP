@@ -136,7 +136,7 @@ async def test_owner_endpoints(session_factory, shop):
         await _set_tenant(s, shop)
         ctx = SimpleNamespace(session=s, business_id=shop, staff_id=None)
         rows = await list_posting_rules(ctx, event_type="OrderCompleted")
-        assert len(rows) == 13 and all(r.is_system for r in rows)   # 7 payment methods, discount, tax, service charge, cogs, rounding up/down (M7-T4b)
+        assert len(rows) == 14 and all(r.is_system for r in rows)   # 7 payment methods, discount, promo, tax, service charge, cogs, rounding up/down (M7-T4b, M8-T3)
         cash = next(r for r in rows if r.component == "payment:cash")
         out = await edit_posting_rule(cash.id, PostingRuleUpdateIn(description="Kas laci"), ctx)
         assert out.description == "Kas laci"

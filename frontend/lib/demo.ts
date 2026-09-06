@@ -23,6 +23,7 @@ import type {
   Page,
   PnlMonth,
   PricingSettings,
+  PromoRow,
   ReceiptRow,
   SaleRow,
   ShiftRow,
@@ -491,6 +492,24 @@ const CUSTOMERS: CustomerRow[] = [
 
 const LOYALTY: LoyaltySettings = { is_active: true, rupiah_per_point: "1000.00", point_value: "100.00", min_redeem_points: 10 };
 
+const PROMOS: PromoRow[] = [
+  {
+    id: "demo-promo-1", name: "Beli 1 gratis 1 Kopi Arabica (sore)", kind: "bonus_item", value: "0", item_id: "demo-item-4",
+    bonus_item_id: null, bonus_quantity: "1.000", max_per_order: 2, is_active: true, created_at: jktIso(20, 9),
+    conditions: [
+      { kind: "day_of_week", starts_at: null, ends_at: null, days_of_week: [0, 1, 2, 3, 4], time_start: null, time_end: null, amount: null, quantity: null },
+      { kind: "time_window", starts_at: null, ends_at: null, days_of_week: null, time_start: "14:00:00", time_end: "17:00:00", amount: null, quantity: null },
+    ],
+    applications: 37, given_away: "740000",
+  },
+  {
+    id: "demo-promo-2", name: "Jumat Nasi Goreng 10%", kind: "percent_off", value: "0.1000", item_id: "demo-item-6",
+    bonus_item_id: null, bonus_quantity: "1.000", max_per_order: null, is_active: true, created_at: jktIso(12, 9),
+    conditions: [{ kind: "day_of_week", starts_at: null, ends_at: null, days_of_week: [4], time_start: null, time_end: null, amount: null, quantity: null }],
+    applications: 9, given_away: "31500",
+  },
+];
+
 function paginate<T>(rows: T[], page: number, pageSize: number, inflateTotal = 0): Page<T> {
   const start = (page - 1) * pageSize;
   return {
@@ -525,6 +544,7 @@ export function demoData(path: string): unknown {
   }
   if (pathname === "/api/pricing-settings") return PRICING;
   if (pathname === "/api/loyalty-settings") return LOYALTY;
+  if (pathname === "/api/promos") return PROMOS;
   if (/^\/api\/customers\/[^/]+\/points$/.test(pathname)) return [];
   if (pathname === "/api/customers") {
     const q = (params.get("q") ?? "").toLowerCase();

@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Literal
 
@@ -628,3 +628,58 @@ class PointsMovementOut(BaseModel):
 class PointsAdjustIn(BaseModel):
     points_delta: int = Field(ge=-1000000, le=1000000)
     notes: str | None = Field(default=None, max_length=300)
+
+
+# ── Promos (M8-T3) ──────────────────────────────────────────────────────────
+
+
+class PromoConditionIn(BaseModel):
+    kind: Literal["date_range", "day_of_week", "time_window", "min_spend", "multiples"]
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    days_of_week: list[int] | None = None
+    time_start: time | None = None
+    time_end: time | None = None
+    amount: Decimal | None = Field(default=None, gt=0)
+    quantity: Decimal | None = Field(default=None, gt=0)
+
+
+class PromoConditionOut(PromoConditionIn):
+    pass
+
+
+class PromoCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    kind: Literal["percent_off", "amount_off", "bonus_item"]
+    value: Decimal = Field(default=Decimal(0), ge=0)
+    item_id: uuid.UUID | None = None
+    bonus_item_id: uuid.UUID | None = None
+    bonus_quantity: Decimal = Field(default=Decimal(1), gt=0)
+    max_per_order: int | None = Field(default=None, gt=0)
+    is_active: bool = True
+    conditions: list[PromoConditionIn] = Field(default_factory=list, max_length=10)
+
+
+class PromoUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    value: Decimal | None = Field(default=None, ge=0)
+    bonus_quantity: Decimal | None = Field(default=None, gt=0)
+    max_per_order: int | None = Field(default=None, gt=0)
+    is_active: bool | None = None
+    conditions: list[PromoConditionIn] | None = None   # given → replaces the whole set
+
+
+class PromoOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    kind: str
+    value: Decimal
+    item_id: uuid.UUID | None
+    bonus_item_id: uuid.UUID | None
+    bonus_quantity: Decimal
+    max_per_order: int | None
+    is_active: bool
+    created_at: datetime
+    conditions: list[PromoConditionOut]
+    applications: int = 0
+    given_away: Decimal = Decimal(0)

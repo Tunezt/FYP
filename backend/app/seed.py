@@ -32,6 +32,7 @@ from app.services.posting_rules import ensure_standard_rules
 from app.services.points import award_points_for_order, ensure_loyalty_settings
 from app.services.pricing import ensure_pricing_settings
 from app.services.customers import create_customer
+from app.services.promos import create_promo
 from app.services.shifts import post_variance
 from app.services.stock import record_movement
 from app.services.suppliers import create_supplier
@@ -289,6 +290,24 @@ async def seed() -> None:
             order.shift_id = shift.id
             payment.shift_id = shift.id
         await post_variance(session, shift)
+
+        # Promos (M8-T3): a weekday afternoon BOGO on the Kopi Arabica cup, and a
+        # Friday 10% off Nasi Goreng. Both evaluate themselves at the till.
+        from datetime import time as _time
+        arabica = next(i for i, _w in items if i.name.startswith("Kopi Arabica"))
+        nasgor = next(i for i, _w in items if i.name.startswith("Nasi Goreng"))
+        await create_promo(
+            session, business_id, name="Beli 1 gratis 1 Kopi Arabica (sore)", kind="bonus_item", item_id=arabica.id,
+            max_per_order=2,
+            conditions=[
+                {"kind": "day_of_week", "days_of_week": [0, 1, 2, 3, 4]},
+                {"kind": "time_window", "time_start": _time(14, 0), "time_end": _time(17, 0)},
+            ],
+        )
+        await create_promo(
+            session, business_id, name="Jumat Nasi Goreng 10%", kind="percent_off", value=Decimal("0.10"), item_id=nasgor.id,
+            conditions=[{"kind": "day_of_week", "days_of_week": [4]}],
+        )
 
         # Books (M6-T4/M6-T5): the opening stock is capitalised as owner's
         # capital and the history's sales post through the engine, one summary

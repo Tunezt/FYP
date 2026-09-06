@@ -16,6 +16,7 @@ import {
   IconHome,
   IconLogout,
   IconShop,
+  IconSpark,
   IconUsers,
   IconWallet,
 } from "@/components/icons";
@@ -27,6 +28,7 @@ const NAV = [
   { href: "/inventory", label: "Stok", Icon: IconBox },
   { href: "/money", label: "Keuangan", Icon: IconWallet },
   { href: "/customers", label: "Pelanggan", Icon: IconUsers },
+  { href: "/promos", label: "Promo", Icon: IconSpark },
   { href: "/alerts", label: "Peringatan", Icon: IconBell },
   { href: "/settings", label: "Pengaturan", Icon: IconGear },
 ];

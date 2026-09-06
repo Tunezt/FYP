@@ -168,3 +168,31 @@ export type PointsMovementRow = {
   notes: string | null;
   created_at: string;
 };
+
+// Promos (M8-T3).
+export type PromoCondition = {
+  kind: "date_range" | "day_of_week" | "time_window" | "min_spend" | "multiples";
+  starts_at: string | null;
+  ends_at: string | null;
+  days_of_week: number[] | null;
+  time_start: string | null;
+  time_end: string | null;
+  amount: string | null;
+  quantity: string | null;
+};
+
+export type PromoRow = {
+  id: string;
+  name: string;
+  kind: "percent_off" | "amount_off" | "bonus_item";
+  value: string;
+  item_id: string | null;
+  bonus_item_id: string | null;
+  bonus_quantity: string;
+  max_per_order: number | null;
+  is_active: boolean;
+  created_at: string;
+  conditions: PromoCondition[];
+  applications: number;
+  given_away: string;
+};

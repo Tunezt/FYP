@@ -170,11 +170,23 @@ class QuoteLineOut(BaseModel):
     gross: Decimal
     line_discount: Decimal
     line_total: Decimal
+    promo_discount: Decimal = Decimal(0)
+    is_bonus: bool = False          # added by a promo, not rung up by the cashier (M8-T3)
+    promo_name: str | None = None
+
+
+class QuotePromoOut(BaseModel):
+    promo_id: uuid.UUID
+    name: str
+    amount: Decimal
+    bonus_quantity: Decimal
 
 
 class QuoteOut(BaseModel):
     subtotal: Decimal
     discount_total: Decimal
+    promo_total: Decimal = Decimal(0)
+    promos: list[QuotePromoOut] = []
     service_charge: Decimal
     tax_total: Decimal
     tax_inclusive: bool
@@ -212,6 +224,7 @@ class OrderOut(BaseModel):
     points_redeemed: int = 0
     subtotal: Decimal
     discount_total: Decimal = Decimal(0)
+    promo_total: Decimal = Decimal(0)
     service_charge: Decimal = Decimal(0)
     tax_total: Decimal = Decimal(0)
     rounding: Decimal = Decimal(0)
@@ -245,6 +258,8 @@ class ReceiptOut(BaseModel):
     lines: list[ReceiptLineOut]
     subtotal: Decimal
     discount_total: Decimal = Decimal(0)
+    promo_total: Decimal = Decimal(0)
+    promo_names: list[str] = []
     service_charge: Decimal = Decimal(0)
     tax_total: Decimal = Decimal(0)
     tax_inclusive: bool = True        # true → tax_total is contained in the prices ("termasuk pajak")

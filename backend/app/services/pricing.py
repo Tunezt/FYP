@@ -21,8 +21,8 @@ The four knobs and what they mean:
 The identity every result satisfies, and which `test_pricing` asserts on all
 twelve combinations:
 
-  exclusive tax:  total = subtotal − discount + service_charge + tax + rounding
-  inclusive tax:  total = subtotal − discount + service_charge + rounding
+  exclusive tax:  total = subtotal − discount − promo + service_charge + tax + rounding
+  inclusive tax:  total = subtotal − discount − promo + service_charge + rounding
                   (tax_total is the tax *contained* in those figures, and is
                   reported so the ledger can move it out of revenue)
 
@@ -53,7 +53,7 @@ def q(amount: Decimal) -> Decimal:
 
 
 class PricingInvalid(Exception):
-    """`code`: quantity, price, discount, line_discount, mode, rate, unit."""
+    """`code`: quantity, price, discount, line_discount, promo, mode, rate, unit."""
 
     def __init__(self, code: str):
         self.code = code
@@ -91,6 +91,7 @@ class LineInput:
     unit_price: Decimal
     quantity: Decimal
     line_discount: Decimal = Decimal(0)   # an amount off this line, not a rate
+    promo_discount: Decimal = Decimal(0)  # what the promo engine gave on this line (M8-T3)
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,8 @@ class PricedLine:
     quantity: Decimal
     gross: Decimal          # unit_price × quantity
     line_discount: Decimal
-    line_total: Decimal     # gross − line_discount
+    line_total: Decimal     # gross − line_discount (the promo is order-level: see PricedOrder.promo_total)
+    promo_discount: Decimal = Decimal("0.00")
 
 
 @dataclass(frozen=True)
@@ -107,7 +109,7 @@ class PricedOrder:
     """Exactly the figures an `orders` row carries, plus the priced lines."""
 
     subtotal: Decimal          # Σ gross, before any discount
-    discount_total: Decimal    # line discounts + the bill discount
+    discount_total: Decimal    # line discounts + the bill discount (the cashier's)
     service_charge: Decimal
     tax_total: Decimal         # added on top (exclusive) or contained (inclusive)
     rounding: Decimal          # total − the figure before rounding
@@ -115,11 +117,12 @@ class PricedOrder:
     tax_inclusive: bool
     lines: tuple[PricedLine, ...]
     service_tax: Decimal = Decimal("0.00")   # the part of service_charge that is tax (inclusive + taxed only)
+    promo_total: Decimal = Decimal("0.00")   # what promos gave away (M8-T3), kept apart from discount_total
 
     @property
     def net(self) -> Decimal:
-        """What the goods cost after discounts, at menu prices."""
-        return q(self.subtotal - self.discount_total)
+        """What the goods cost after discounts and promos, at menu prices."""
+        return q(self.subtotal - self.discount_total - self.promo_total)
 
     def fiscal_components(self) -> dict[str, Decimal]:
         """What the sale reclassifies out of revenue, for the posting engine
@@ -131,6 +134,7 @@ class PricedOrder:
         never posts a negative amount."""
         return {
             "discount": self.discount_total,
+            "promo": self.promo_total,
             "tax": self.tax_total,
             "service_charge": q(self.service_charge - self.service_tax),
             "rounding_up": self.rounding if self.rounding > 0 else Decimal("0.00"),
@@ -162,6 +166,7 @@ def price_order(
     config: PricingConfig,
     *,
     bill_discount: Decimal = Decimal(0),
+    promo_bill_discount: Decimal = Decimal(0),
 ) -> PricedOrder:
     """Price one bill. Raises rather than silently clamping: a discount larger
     than the bill, a negative quantity or an unknown rounding mode is a bug in
@@ -173,9 +178,11 @@ def price_order(
     priced: list[PricedLine] = []
     subtotal = Decimal(0)
     line_discounts = Decimal(0)
+    promo_lines = Decimal(0)
     for line in lines:
         quantity, unit_price = Decimal(line.quantity), Decimal(line.unit_price)
         discount = q(line.line_discount or 0)
+        promo = q(line.promo_discount or 0)
         if quantity <= 0:
             raise PricingInvalid("quantity")
         if unit_price < 0:
@@ -183,9 +190,12 @@ def price_order(
         gross = q(unit_price * quantity)
         if discount < 0 or discount > gross:
             raise PricingInvalid("line_discount")
-        priced.append(PricedLine(q(unit_price), quantity, gross, discount, q(gross - discount)))
+        if promo < 0 or promo > gross - discount:
+            raise PricingInvalid("promo")
+        priced.append(PricedLine(q(unit_price), quantity, gross, discount, q(gross - discount), promo))
         subtotal += gross
         line_discounts += discount
+        promo_lines += promo
 
     subtotal = q(subtotal)
     bill_discount = q(bill_discount or 0)
@@ -194,8 +204,14 @@ def price_order(
     discount_total = q(line_discounts + bill_discount)
     if discount_total > subtotal:
         raise PricingInvalid("discount")
+    promo_bill_discount = q(promo_bill_discount or 0)
+    if promo_bill_discount < 0:
+        raise PricingInvalid("promo")
+    promo_total = q(promo_lines + promo_bill_discount)
+    if discount_total + promo_total > subtotal:
+        raise PricingInvalid("promo")
 
-    net = q(subtotal - discount_total)
+    net = q(subtotal - discount_total - promo_total)
     tax_rate, sc_rate = Decimal(config.tax_rate), Decimal(config.service_charge_rate)
 
     service_tax = Decimal("0.00")
@@ -236,6 +252,7 @@ def price_order(
         tax_inclusive=config.tax_inclusive,
         lines=tuple(priced),
         service_tax=service_tax,
+        promo_total=promo_total,
     )
 
 

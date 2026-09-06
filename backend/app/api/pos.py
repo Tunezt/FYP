@@ -30,6 +30,7 @@ from app.schemas.pos import (
     QuoteIn,
     QuoteLineOut,
     QuoteOut,
+    QuotePromoOut,
     PaymentOut,
     LineModifierOut,
     PosBusinessOut,
@@ -252,18 +253,48 @@ async def pos_quote(payload: QuoteIn, ctx: PosCtx):
             if m is not None:
                 extras += Decimal(m.price_delta)
         inputs.append(LineInput(unit_price=(base + extras).quantize(Decimal("0.01")), quantity=l.quantity, line_discount=l.line_discount))
+    # Promos (M8-T3): the same engine the sale runs, at "now" in the business's timezone.
+    from datetime import datetime, timezone as _tz
+
+    from app.services.promos import CartLine, apply_promos, load_rules
+
+    rules = await load_rules(ctx.session)
+    price_of = {}
+    for r in rules:
+        for iid in (r.bonus_item_id, r.item_id):
+            if iid is not None and iid not in price_of:
+                it = await ctx.session.get(Item, iid)
+                if it is not None:
+                    v = await default_variant(ctx.session, it.id)
+                    price_of[iid] = Decimal(v.sell_price) if v is not None else Decimal(it.sell_price)
+    business = await ctx.session.get(Business, ctx.business_id)
+    promo = apply_promos(
+        [CartLine(item_id=l.item_id, unit_price=i.unit_price, quantity=i.quantity, line_discount=i.line_discount) for l, i in zip(payload.lines, inputs)],
+        rules, at_utc=datetime.now(_tz.utc), tz=business.timezone if business else "Asia/Jakarta",
+        bill_discount=payload.bill_discount, price_of=price_of,
+    )
+    bonus_inputs = [LineInput(unit_price=b.unit_price, quantity=b.quantity, promo_discount=(b.unit_price * b.quantity).quantize(Decimal("0.01"))) for b in promo.bonus_lines]
+    all_inputs = [
+        LineInput(unit_price=i.unit_price, quantity=i.quantity, line_discount=i.line_discount, promo_discount=d)
+        for i, d in zip(inputs, promo.line_discounts)
+    ] + bonus_inputs
     try:
-        bill = price_order(inputs, config, bill_discount=payload.bill_discount)
+        bill = price_order(all_inputs, config, bill_discount=payload.bill_discount, promo_bill_discount=promo.bill_discount)
     except PricingInvalid as exc:
         raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
+    item_ids = [l.item_id for l in payload.lines] + [b.item_id for b in promo.bonus_lines]
+    bonus_names = [None] * len(payload.lines) + [b.promo_name for b in promo.bonus_lines]
     return QuoteOut(
-        subtotal=bill.subtotal, discount_total=bill.discount_total, service_charge=bill.service_charge,
+        subtotal=bill.subtotal, discount_total=bill.discount_total, promo_total=bill.promo_total,
+        promos=[QuotePromoOut(promo_id=a.promo_id, name=a.promo_name, amount=a.amount, bonus_quantity=a.bonus_quantity) for a in promo.applications],
+        service_charge=bill.service_charge,
         tax_total=bill.tax_total, tax_inclusive=bill.tax_inclusive, rounding=bill.rounding, total=bill.total,
         discount_requires_pin=config.discount_requires_pin,
         lines=[
-            QuoteLineOut(item_id=l.item_id, unit_price=pl.unit_price, quantity=pl.quantity, gross=pl.gross,
-                         line_discount=pl.line_discount, line_total=pl.line_total)
-            for l, pl in zip(payload.lines, bill.lines)
+            QuoteLineOut(item_id=iid, unit_price=pl.unit_price, quantity=pl.quantity, gross=pl.gross,
+                         line_discount=pl.line_discount, line_total=pl.line_total, promo_discount=pl.promo_discount,
+                         is_bonus=name is not None, promo_name=name)
+            for iid, name, pl in zip(item_ids, bonus_names, bill.lines)
         ],
     )
 
@@ -354,6 +385,7 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         points_redeemed=redeemed,
         subtotal=order.subtotal,
         discount_total=order.discount_total,
+        promo_total=order.promo_total,
         service_charge=order.service_charge,
         tax_total=order.tax_total,
         rounding=order.rounding,
@@ -389,6 +421,14 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
     config = await pricing_config(ctx.session, ctx.business_id)
     order = data["order"]
     earned, redeemed = await points_of_order(ctx.session, order.id)
+    from app.models import Promo
+    from app.services.promos import applications_of_order
+
+    promo_names: list[str] = []
+    for app_ in await applications_of_order(ctx.session, order.id):
+        pr = await ctx.session.get(Promo, app_.promo_id)
+        if pr is not None and pr.name not in promo_names:
+            promo_names.append(pr.name)
     return ReceiptOut(
         order_id=order.id,
         number=str(order.id)[-8:].upper(),
@@ -411,6 +451,8 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
         ],
         subtotal=order.subtotal,
         discount_total=order.discount_total,
+        promo_total=order.promo_total,
+        promo_names=promo_names,
         service_charge=order.service_charge,
         tax_total=order.tax_total,
         tax_inclusive=config.tax_inclusive,

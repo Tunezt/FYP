@@ -660,3 +660,29 @@ async def test_rls_isolates_points_and_loyalty_settings(session_factory, two_ten
         session.add(PointsMovement(business_id=b.id, customer_id=cust_id, points_delta=1, reason="adjust"))
         with pytest.raises(Exception):
             await session.commit()
+
+
+async def test_rls_isolates_promos(session_factory, two_tenants):
+    """M8-T3 / roadmap §2: promos, their conditions and applications."""
+    from decimal import Decimal as _D
+
+    from app.models import Promo, PromoCondition
+
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        promo = Promo(business_id=a.id, name="Semua 10%", kind="percent_off", value=_D("0.10"))
+        session.add(promo)
+        await session.flush()
+        session.add(PromoCondition(business_id=a.id, promo_id=promo.id, kind="min_spend", amount=_D(10000)))
+        await session.commit()
+        promo_id = promo.id
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert await session.get(Promo, promo_id) is None
+        assert (await session.execute(select(PromoCondition))).scalars().all() == []
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(Promo(business_id=b.id, name="smuggled", kind="amount_off", value=_D(1)))
+        with pytest.raises(Exception):
+            await session.commit()

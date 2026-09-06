@@ -33,6 +33,7 @@ STANDARD_RULES: list[tuple[str, str, str | None, str | None, str]] = [
     ("OrderCompleted", "payment:points", "2300", "4100", "Penjualan ditukar poin"),
     ("OrderCompleted", "payment:other", "1200", "4100", "Penjualan, pembayaran lain / piutang"),
     ("OrderCompleted", "discount", "4200", "4100", "Diskon penjualan (kontra pendapatan)"),
+    ("OrderCompleted", "promo", "4250", "4100", "Biaya promo (kontra pendapatan)"),   # M8-T3, migration 0023
     ("OrderCompleted", "tax", "4100", "2200", "Pajak yang dipungut dipisahkan dari pendapatan"),
     ("OrderCompleted", "service_charge", "4100", "4900", "Service charge diakui sebagai pendapatan lain"),
     ("OrderCompleted", "cogs", "5100", "1300", "Harga pokok penjualan"),
@@ -51,6 +52,7 @@ STANDARD_RULES: list[tuple[str, str, str | None, str | None, str]] = [
     ("OrderRefunded", "cogs_reversal", "1300", "5100", "Barang kembali ke persediaan"),
     # A refund also undoes what the sale reclassified (M7-T4b); migration 0020.
     ("OrderRefunded", "discount_reversal", "4100", "4200", "Retur: diskon penjualan dibatalkan"),
+    ("OrderRefunded", "promo_reversal", "4100", "4250", "Retur: promo dibatalkan"),   # M8-T3
     ("OrderRefunded", "tax_reversal", "2200", "4100", "Retur: pajak yang dipungut dikembalikan"),
     ("OrderRefunded", "service_charge_reversal", "4900", "4100", "Retur: service charge dibatalkan"),
     ("OrderRefunded", "rounding_up_reversal", "4900", "4100", "Retur: pembulatan ke atas dibatalkan"),

@@ -50,6 +50,8 @@ type Receipt = {
   }[];
   subtotal: string;
   discount_total: string;
+  promo_total: string;
+  promo_names: string[];
   service_charge: string;
   tax_total: string;
   tax_inclusive: boolean;
@@ -73,6 +75,9 @@ type CartLine = { item: Item; variant: Variant | null; modifiers: Modifier[]; qt
 type Quote = {
   subtotal: string;
   discount_total: string;
+  promo_total: string;
+  promos: { promo_id: string; name: string; amount: string; bonus_quantity: string }[];
+  lines: { item_id: string; quantity: string; is_bonus: boolean; promo_name: string | null; promo_discount: string }[];
   service_charge: string;
   tax_total: string;
   tax_inclusive: boolean;
@@ -1266,6 +1271,15 @@ function SellScreen({
                     <dd className="tabular-nums">− {formatRupiah(quote.discount_total)}</dd>
                   </div>
                 )}
+                {quote.promos.map((p, i) => (
+                  <div key={`${p.promo_id}-${i}`} className="flex justify-between">
+                    <dt className="ink-soft truncate">
+                      🎉 {p.name}
+                      {Number(p.bonus_quantity) > 0 ? ` (+${Number(p.bonus_quantity)} gratis)` : ""}
+                    </dt>
+                    <dd className="shrink-0 tabular-nums">− {formatRupiah(p.amount)}</dd>
+                  </div>
+                ))}
                 {Number(quote.service_charge) > 0 && (
                   <div className="flex justify-between">
                     <dt className="ink-soft">Service charge</dt>
@@ -1563,6 +1577,7 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
         ))}
         <hr className="my-3 border-dashed border-black" />
         {(Number(receipt.discount_total) > 0 ||
+          Number(receipt.promo_total) > 0 ||
           Number(receipt.service_charge) > 0 ||
           Number(receipt.tax_total) > 0 ||
           Number(receipt.rounding) !== 0) && (
@@ -1575,6 +1590,12 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
               <div className="flex justify-between">
                 <span>Diskon</span>
                 <span>-{formatRupiah(receipt.discount_total)}</span>
+              </div>
+            )}
+            {Number(receipt.promo_total) > 0 && (
+              <div className="flex justify-between">
+                <span>Promo{receipt.promo_names.length ? ` (${receipt.promo_names.join(", ")})` : ""}</span>
+                <span>-{formatRupiah(receipt.promo_total)}</span>
               </div>
             )}
             {Number(receipt.service_charge) > 0 && (

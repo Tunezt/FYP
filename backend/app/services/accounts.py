@@ -39,6 +39,7 @@ STANDARD_CHART: list[tuple[str, str, str]] = [
     ("3900", "Laba ditahan", "equity"),
     ("4100", "Penjualan", "revenue"),
     ("4200", "Diskon penjualan", "revenue"),
+    ("4250", "Diskon promo", "revenue"),   # M8-T3, backfilled by migration 0023
     ("4300", "Retur penjualan", "revenue"),
     ("4900", "Pendapatan lain-lain", "revenue"),
     ("5100", "Harga pokok penjualan (HPP)", "expense"),
