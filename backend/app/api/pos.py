@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
 from app.core.db import tenant_session
+from app.ai.periods import period_range
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
 from app.schemas.menu import PosTicketOut, TicketCancelIn, TicketSettleIn
@@ -26,6 +27,8 @@ from app.schemas.pos import (
     OrderIn,
     OrderLineOut,
     OrderOut,
+    OrderSummaryOut,
+    OrdersPage,
     PosCustomerIn,
     PosCustomerOut,
     PosLoyaltyOut,
@@ -53,6 +56,8 @@ from app.schemas.pos import (
 )
 from app.services.orders import (
     DiscountNeedsManager,
+    list_orders,
+    order_number,
     ManagerPinRejected,
     ModifierSelectionInvalid,
     OrderLineSpec,
@@ -551,22 +556,25 @@ async def pos_cancel_ticket(order_id: uuid.UUID, payload: TicketCancelIn, ctx: P
     return ticket_out(ticket, PosTicketOut)
 
 
-@router.get("/orders/{order_id}/receipt", response_model=ReceiptOut)
-async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
+async def receipt_view(session, business_id: uuid.UUID, order_id: uuid.UUID) -> ReceiptOut:
     """What gets printed (browser print, M4-T2): every line with its size and
     modifiers as sold, payments, totals. Voided orders print with their
-    reversing lines so the paper says what happened."""
+    reversing lines so the paper says what happened.
+
+    Shared by the till and the owner's dashboard (M15-T11): the owner deciding
+    whether to void a sale must be looking at exactly what the cashier printed,
+    so there is one shaping function and not two that can drift."""
     try:
-        data = await load_receipt(ctx.session, business_id=ctx.business_id, order_id=order_id)
+        data = await load_receipt(session, business_id=business_id, order_id=order_id)
     except OrderNotFound:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
     from app.services.points import points_of_order
     from app.services.pricing import pricing_config
 
-    business = await ctx.session.get(Business, ctx.business_id)
-    config = await pricing_config(ctx.session, ctx.business_id)
+    business = await session.get(Business, business_id)
+    config = await pricing_config(session, business_id)
     order = data["order"]
-    earned, redeemed = await points_of_order(ctx.session, order.id)
+    earned, redeemed = await points_of_order(session, order.id)
     from app.models import Promo
     from app.services.promos import applications_of_order
 
@@ -574,18 +582,18 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
     from app.services.vouchers import redemptions_of_order
 
     voucher_code = None
-    for red in await redemptions_of_order(ctx.session, order.id):
+    for red in await redemptions_of_order(session, order.id):
         if red.amount > 0:
-            v = await ctx.session.get(Voucher, red.voucher_id)
+            v = await session.get(Voucher, red.voucher_id)
             voucher_code = v.code if v else None
     promo_names: list[str] = []
-    for app_ in await applications_of_order(ctx.session, order.id):
-        pr = await ctx.session.get(Promo, app_.promo_id)
+    for app_ in await applications_of_order(session, order.id):
+        pr = await session.get(Promo, app_.promo_id)
         if pr is not None and pr.name not in promo_names:
             promo_names.append(pr.name)
     return ReceiptOut(
         order_id=order.id,
-        number=str(order.id)[-8:].upper(),
+        number=order_number(order.id),
         business_name=business.name if business else "",
         staff_name=data["staff_name"],
         customer_name=data.get("customer_name"),
@@ -621,6 +629,30 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
     )
 
 
+@router.get("/orders/{order_id}/receipt", response_model=ReceiptOut)
+async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
+    return await receipt_view(ctx.session, ctx.business_id, order_id)
+
+
+@router.get("/orders", response_model=OrdersPage)
+async def pos_recent_orders(
+    ctx: PosCtx,
+    q: str = Query(default="", max_length=40),
+    limit: int = Query(default=40, ge=1, le=100),
+):
+    """Today's sales, newest first — the list a cashier opens to find the one
+    they rang up wrong (M15-T11). "Today" is the business day (M15-T4), so a
+    23:50 sale is still findable at 00:15 without scrolling into yesterday.
+
+    Anything older is the owner's job on the dashboard, because a mistake found
+    after the shift closed is a different conversation from one found while the
+    customer is still standing there."""
+    business = await ctx.session.get(Business, ctx.business_id)
+    since, until, _ = period_range("today", business.timezone, day_start_hour=business.day_start_hour)
+    rows, total = await list_orders(ctx.session, since=since, until=until, q=q, limit=limit)
+    return OrdersPage(total=total, rows=[OrderSummaryOut(**vars(r)) for r in rows])
+
+
 _STATUS_ID = {"voided": "sudah dibatalkan", "refunded": "sudah dikembalikan", "open": "masih terbuka"}
 
 
@@ -641,7 +673,11 @@ def _reversal_out(rev: Reversal) -> ReversalOut:
     )
 
 
-async def _run_reversal(ctx, order_id: uuid.UUID, fn, path: str, **kwargs) -> ReversalOut:
+async def run_reversal(ctx, order_id: uuid.UUID, fn, path: str, *, channel: str = "pos", **kwargs) -> ReversalOut:
+    """One reversal path for both surfaces (M15-T11). The till and the owner's
+    dashboard differ only in `channel` and in which staff id is doing the
+    asking; the guard, the error text and the audit row are identical, because
+    a void done from the office must not be a different kind of void."""
     start = time.perf_counter()
     try:
         rev = await fn(ctx.session, business_id=ctx.business_id, order_id=order_id, staff_id=ctx.staff_id, **kwargs)
@@ -655,7 +691,7 @@ async def _run_reversal(ctx, order_id: uuid.UUID, fn, path: str, **kwargs) -> Re
         )
     ctx.session.add(
         RequestLog(
-            business_id=ctx.business_id, channel="pos", path=path,
+            business_id=ctx.business_id, channel=channel, path=path,
             latency_ms=int((time.perf_counter() - start) * 1000), status="ok",
         )
     )
@@ -666,7 +702,7 @@ async def _run_reversal(ctx, order_id: uuid.UUID, fn, path: str, **kwargs) -> Re
 async def pos_void_order(order_id: uuid.UUID, payload: ReversalIn, ctx: PosCtx):
     """Manager-PIN gated. Writes reversing lines, payments and stock movements;
     the original order stays readable in full (M3-T4)."""
-    return await _run_reversal(
+    return await run_reversal(
         ctx, order_id, void_order, "/pos/orders/{id}/void", manager_pin=payload.manager_pin, note=payload.note,
     )
 
@@ -675,7 +711,7 @@ async def pos_void_order(order_id: uuid.UUID, payload: ReversalIn, ctx: PosCtx):
 async def pos_refund_order(order_id: uuid.UUID, payload: RefundIn, ctx: PosCtx):
     """Manager-PIN gated. Like void, but `restock=false` keeps stock down when
     the goods are not coming back."""
-    return await _run_reversal(
+    return await run_reversal(
         ctx, order_id, refund_order, "/pos/orders/{id}/refund",
         manager_pin=payload.manager_pin, note=payload.note, restock=payload.restock,
     )

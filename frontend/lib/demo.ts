@@ -20,6 +20,7 @@ import type {
   ExpenseRow,
   InventoryItem,
   LoyaltySettings,
+  OrderRow,
   Overview,
   Page,
   PnlMonth,
@@ -124,6 +125,38 @@ const STAFF: StaffMember[] = [
   { id: "demo-staff-2", name: "Sari", role: "staff", is_active: true, created_at: jktIso(118, 10) },
   { id: "demo-staff-3", name: "Budi", role: "manager", is_active: true, created_at: jktIso(96, 11) },
 ];
+
+// M15-T11: the orders the reversal screen searches.
+const ORDERS: OrderRow[] = [
+  { id: "demo-order-1", number: "A1B2C3D4", sold_at: jktIso(0, 15), status: "voided",
+    order_type: "takeaway", total: "48000.00", line_count: 3, staff_name: "Sari",
+    customer_name: null, table_label: null },
+  { id: "demo-order-2", number: "E5F6A7B8", sold_at: jktIso(0, 12), status: "completed",
+    order_type: "dine_in", total: "62000.00", line_count: 4, staff_name: "Sari",
+    customer_name: "Andi", table_label: "3" },
+  { id: "demo-order-3", number: "C9D0E1F2", sold_at: jktIso(1, 16), status: "refunded",
+    order_type: "takeaway", total: "22000.00", line_count: 1, staff_name: "Budi",
+    customer_name: null, table_label: null },
+  { id: "demo-order-4", number: "1A2B3C4D", sold_at: jktIso(1, 9), status: "completed",
+    order_type: "takeaway", total: "35000.00", line_count: 2, staff_name: "Budi",
+    customer_name: null, table_label: null },
+];
+
+const DEMO_RECEIPT_LINES: Record<string, { name: string; quantity: string; line_total: string }[]> = {
+  "demo-order-1": [
+    { name: "Kopi Susu Gula Aren", quantity: "2", line_total: "36000.00" },
+    { name: "Roti Bakar Coklat", quantity: "1", line_total: "12000.00" },
+  ],
+  "demo-order-2": [
+    { name: "Es Kopi Susu", quantity: "3", line_total: "45000.00" },
+    { name: "Pisang Goreng", quantity: "1", line_total: "17000.00" },
+  ],
+  "demo-order-3": [{ name: "Matcha Latte", quantity: "1", line_total: "22000.00" }],
+  "demo-order-4": [
+    { name: "Americano", quantity: "1", line_total: "18000.00" },
+    { name: "Croissant", quantity: "1", line_total: "17000.00" },
+  ],
+};
 
 // M15-T7: the override trail the owner reads back.
 const APPROVALS: ApprovalRow[] = [
@@ -581,6 +614,33 @@ export function demoData(path: string): unknown {
   }
   if (pathname === "/api/shifts") return SHIFTS.slice(0, num("limit", 30));
   if (pathname === "/api/cash-movements") return CASH_MOVEMENTS.slice(0, num("limit", 50));
+  if (pathname === "/api/orders") {
+    const q = (params.get("q") ?? "").replace(/-/g, "").toUpperCase();
+    return {
+      total: ORDERS.filter((o) => !q || o.number.includes(q)).length,
+      rows: ORDERS.filter((o) => !q || o.number.includes(q)).slice(0, num("limit", 20)),
+    };
+  }
+  if (/^\/api\/orders\/[^/]+\/receipt$/.test(pathname)) {
+    const id = pathname.split("/")[3];
+    const order = ORDERS.find((o) => o.id === id);
+    if (!order) return null;
+    return {
+      order_id: order.id,
+      number: order.number,
+      business_name: BUSINESS.name,
+      staff_name: order.staff_name,
+      customer_name: order.customer_name,
+      status: order.status,
+      order_type: order.order_type,
+      sold_at: order.sold_at,
+      lines: (DEMO_RECEIPT_LINES[order.id] ?? []).map((l) => ({
+        ...l, variant: null, unit_price: l.line_total, modifiers: [], notes: null,
+      })),
+      subtotal: order.total,
+      total: order.total,
+    };
+  }
   if (pathname === "/api/approvals") {
     const action = params.get("action");
     return APPROVALS.filter((a) => !action || a.action === action).slice(0, num("limit", 50));

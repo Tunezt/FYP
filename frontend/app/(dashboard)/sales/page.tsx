@@ -7,6 +7,7 @@ import { formatQty, formatRupiah } from "@/lib/format";
 import { daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
 import type { Business, Page, SaleRow, TrendPoint } from "@/lib/types";
 import { DayHeader, EmptyState, ErrorState, Glass, ItemIcon, Segmented, Skeleton } from "@/components/ui";
+import { ReversalPanel } from "@/components/ReversalPanel";
 
 const RANGES = [
   { value: "7", label: "7 hari" },
@@ -106,6 +107,9 @@ export default function SalesPage() {
           )}
         </div>
       </Glass>
+
+      {/* M15-T11 — reverse a sale found after the shift closed */}
+      <ReversalPanel tz={tz} dayStart={dayStart} />
 
       {/* Day-grouped history — open rows on the page background */}
       <section>

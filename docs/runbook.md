@@ -88,21 +88,28 @@ fine.
 **Not yet paid** — an order that is still sitting in the queue from a QR menu: cancel it at the
 till (Batal on the ticket) and ring it up again correctly. Nothing has moved yet.
 
-**Already paid** — this needs a void or a refund, which needs a **PIN pemilik atau manajer**. The
-rule is which side of the counter the goods are on:
+**Already paid** — at the till, tap **Transaksi**. Today's sales are listed newest first; find it
+by the time, or type the receipt number into the search box. Open it, check the lines are the ones
+you meant, then choose:
 
-* the customer has not taken the goods, and the whole thing was a mistake → **void**;
-* the customer is giving goods back, or you are handing money back → **refund**.
+* **Batalkan** — the whole thing was a mistake and the customer never took the goods;
+* **Kembalikan** — the customer is handing goods back, or you are handing money back. Leave
+  "barang kembali ke stok" on if the goods are re-sellable, and turn it **off** if they were
+  drunk, spilled or thrown away.
+
+Type the reason, then a **PIN pemilik atau manajer**. A cashier's own PIN will not work — that is
+the point of it. The screen confirms what happened and can reprint the slip.
+
+**After the shift has closed**, or for anything older than today: dashboard → Penjualan →
+**Batalkan atau kembalikan transaksi**. Same search, same two choices, same PIN.
 
 Either way the system writes a reversing entry — the original sale stays visible, nothing is
-deleted, and stock goes back on the shelf unless you say the goods are not coming back.
+deleted, stock goes back on the shelf unless you said otherwise, and the approval is recorded in
+Keuangan → Otorisasi manajer with who approved it and why.
 
-> **Known gap, read this before go-live.** The void and refund exist in the system and are tested,
-> but **there is no button for them on the till or the dashboard yet** — nothing in the app calls
-> them. Until that screen is built, a wrong sale that has already been paid needs a developer.
-> What to do meanwhile: write it on the day's paper sheet — the receipt number or the time, what
-> was wrong, and what actually happened — and do **not** ring up a second "correcting" sale, and do
-> **not** edit the stock by hand. Both make the books worse than leaving the mistake visible.
+**Two things never to do instead.** Do not ring up a second "correcting" sale, and do not edit the
+stock by hand to compensate. Both leave the books further from reality than the original mistake,
+and neither leaves a trail anyone can follow later.
 
 ### Stock looks wrong
 
@@ -228,7 +235,6 @@ Honest list, so nobody discovers these at 8am. Each one is a task that exists an
 
 | Gap | What it means in the shop | Task |
 |---|---|---|
-| No void/refund button | a wrong paid sale needs a developer (see above) | — |
 | No offline till | the internet going down stops sales; paper and re-entry | M14 |
 | No backdated entry | paper sales are entered at today's time, not theirs | M15-T10 |
 | No uptime alert | you find out the API is down by trying to use it | M15-T5 |

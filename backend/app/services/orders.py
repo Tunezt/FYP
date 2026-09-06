@@ -24,7 +24,7 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import func, select
+from sqlalchemy import Text, func, select
 
 from app.models import (
     Approval, Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier, Payment, RecipeLine,
@@ -847,6 +847,82 @@ async def load_receipt(session: AsyncSession, *, business_id: uuid.UUID, order_i
         ],
         "payments": payments,
     }
+
+
+@dataclass(frozen=True)
+class OrderSummary:
+    """One row of the "which sale was it?" list (M15-T11). `number` is what the
+    receipt prints and what a cashier reads back over the counter."""
+
+    id: uuid.UUID
+    number: str
+    sold_at: datetime
+    status: str
+    order_type: str
+    total: Decimal
+    line_count: int
+    staff_name: str | None
+    customer_name: str | None
+    table_label: str | None
+
+
+def order_number(order_id: uuid.UUID) -> str:
+    """The last eight characters of the id, upper case — the same short
+    reference the receipt prints (`pos_receipt`)."""
+    return str(order_id)[-8:].upper()
+
+
+async def list_orders(
+    session: AsyncSession, *, since: datetime | None = None, until: datetime | None = None,
+    q: str = "", limit: int = 50, offset: int = 0, statuses: tuple[str, ...] = ("completed", "voided", "refunded"),
+) -> tuple[list[OrderSummary], int]:
+    """Orders newest first, with the count before paging (M15-T11).
+
+    `q` matches the receipt number — the last eight characters of the id, which
+    is what a cashier can actually read off a printed slip. Matching is on that
+    suffix and is case- and dash-insensitive, so "a1b2c3d4", "A1B2C3D4" and a
+    number copied with its dashes all find the same sale.
+
+    Open e-menu tickets are excluded by default: they are not sales yet, they
+    have their own screen, and cancelling one is a different action entirely."""
+    from app.models import Customer
+
+    number = func.upper(func.right(func.cast(Order.id, Text), 8))
+    lines = (
+        select(OrderLine.order_id, func.count(OrderLine.id).label("n"))
+        .where(OrderLine.quantity > 0)
+        .group_by(OrderLine.order_id)
+        .subquery()
+    )
+    base = (
+        select(Order, Staff.name, Customer.name, func.coalesce(lines.c.n, 0))
+        .outerjoin(Staff, Staff.id == Order.staff_id)
+        .outerjoin(Customer, Customer.id == Order.customer_id)
+        .outerjoin(lines, lines.c.order_id == Order.id)
+        .where(Order.status.in_(statuses))
+    )
+    if since is not None:
+        base = base.where(Order.sold_at >= since)
+    if until is not None:
+        base = base.where(Order.sold_at < until)
+    needle = (q or "").strip().replace("-", "").upper()
+    if needle:
+        base = base.where(number.like(f"%{needle}%"))
+
+    total = (await session.execute(
+        select(func.count()).select_from(base.order_by(None).subquery())
+    )).scalar_one()
+    rows = (await session.execute(
+        base.order_by(Order.sold_at.desc(), Order.id).offset(offset).limit(limit)
+    )).all()
+    return [
+        OrderSummary(
+            id=o.id, number=order_number(o.id), sold_at=o.sold_at, status=o.status,
+            order_type=o.order_type, total=Decimal(o.total), line_count=int(n),
+            staff_name=staff_name, customer_name=customer_name, table_label=o.table_label,
+        )
+        for o, staff_name, customer_name, n in rows
+    ], int(total)
 
 
 async def void_order(

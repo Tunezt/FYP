@@ -24,6 +24,7 @@ from app.models import (
     Account, Alert, Approval, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PostingRule,
     PurchaseOrder, Receipt, RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
 )
+from app.schemas.pos import OrdersPage, ReceiptOut, RefundIn, ReversalIn, ReversalOut
 from app.schemas.dashboard import (
     ApprovalRow,
     BalanceSheetOut,
@@ -1541,6 +1542,66 @@ async def list_shifts(ctx: OwnerCtx, limit: int = Query(default=30, ge=1, le=200
     from app.services.shifts import list_shifts as _list, shift_view
 
     return [ShiftOut(**await shift_view(ctx.session, sh)) for sh in await _list(ctx.session, limit=limit)]
+
+
+# ── Orders: find one, read it, reverse it (M15-T11) ─────────────────────────
+
+
+@router.get("/orders", response_model=OrdersPage)
+async def owner_orders(
+    ctx: OwnerCtx,
+    q: str = Query(default="", max_length=40),
+    limit: int = Query(default=30, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    """Every sale, newest first, searchable by receipt number — the owner's way
+    into a mistake found after the shift closed (M15-T11). The till's own list
+    (`GET /pos/orders`) stops at today; this one does not, because that is the
+    difference the two screens exist for."""
+    from app.schemas.pos import OrderSummaryOut
+    from app.services.orders import list_orders
+
+    rows, total = await list_orders(ctx.session, q=q, limit=limit, offset=offset)
+    return OrdersPage(total=total, rows=[OrderSummaryOut(**vars(r)) for r in rows])
+
+
+@router.get("/orders/{order_id}/receipt", response_model=ReceiptOut)
+async def owner_receipt(order_id: uuid.UUID, ctx: OwnerCtx):
+    """The same receipt the cashier printed, shaped by the same function — the
+    owner deciding whether to void must not be looking at a different document."""
+    from app.api.pos import receipt_view
+
+    return await receipt_view(ctx.session, ctx.business_id, order_id)
+
+
+@router.post("/orders/{order_id}/void", response_model=ReversalOut)
+async def owner_void_order(order_id: uuid.UUID, payload: ReversalIn, ctx: OwnerCtx):
+    """Manager-PIN gated, exactly like the till (M15-T11).
+
+    The owner is already authenticated, so the PIN is not proving who they are.
+    It is doing two other things: it stops a dashboard left open on an
+    unattended laptop from reversing a sale with one click, and it produces the
+    `approvals` row (M15-T7) that names a person rather than a session."""
+    from app.api.pos import run_reversal
+    from app.services.orders import void_order
+
+    return await run_reversal(
+        ctx, order_id, void_order, "/api/orders/{id}/void", channel="dashboard",
+        manager_pin=payload.manager_pin, note=payload.note,
+    )
+
+
+@router.post("/orders/{order_id}/refund", response_model=ReversalOut)
+async def owner_refund_order(order_id: uuid.UUID, payload: RefundIn, ctx: OwnerCtx):
+    """Like void, but `restock=false` keeps stock down when the goods are not
+    coming back (eaten, spoiled, thrown away)."""
+    from app.api.pos import run_reversal
+    from app.services.orders import refund_order
+
+    return await run_reversal(
+        ctx, order_id, refund_order, "/api/orders/{id}/refund", channel="dashboard",
+        manager_pin=payload.manager_pin, note=payload.note, restock=payload.restock,
+    )
 
 
 # ── Override audit trail (M15-T7) ───────────────────────────────────────────

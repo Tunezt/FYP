@@ -292,6 +292,28 @@ class ReceiptOut(BaseModel):
 # ── Void / refund (M3-T4): reversals authorised by the manager (owner) PIN ────
 
 
+class OrderSummaryOut(BaseModel):
+    """One row of the recent-sales list (M15-T11). Enough to recognise the sale
+    across the counter: the receipt number, the time, who rang it up, what it
+    came to, and whether it has already been reversed."""
+
+    id: uuid.UUID
+    number: str
+    sold_at: datetime
+    status: str
+    order_type: str
+    total: Decimal
+    line_count: int
+    staff_name: str | None = None
+    customer_name: str | None = None
+    table_label: str | None = None
+
+
+class OrdersPage(BaseModel):
+    total: int
+    rows: list[OrderSummaryOut]
+
+
 class ReversalIn(BaseModel):
     manager_pin: str = Field(min_length=4, max_length=6, pattern=r"^\d{4,6}$")
     note: str | None = Field(default=None, max_length=200)

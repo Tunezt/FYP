@@ -129,6 +129,56 @@ export type ApprovalRow = {
   created_at: string;
 };
 
+/** Orders as the owner searches them (M15-T11). `number` is the receipt's short
+ *  reference — the last eight characters of the id — which is what a customer
+ *  can actually read off a printed slip. */
+export type OrderRow = {
+  id: string;
+  number: string;
+  sold_at: string;
+  status: "completed" | "voided" | "refunded";
+  order_type: string;
+  total: string;
+  line_count: number;
+  staff_name: string | null;
+  customer_name: string | null;
+  table_label: string | null;
+};
+
+export type OrdersPage = { total: number; rows: OrderRow[] };
+
+export type ReceiptLine = {
+  name: string;
+  variant: string | null;
+  quantity: string;
+  unit_price: string;
+  line_total: string;
+  modifiers: { name: string; price_delta: string }[];
+  notes: string | null;
+};
+
+/** The same shape the till prints, from the same endpoint shaping function. */
+export type Receipt = {
+  order_id: string;
+  number: string;
+  business_name: string;
+  staff_name: string | null;
+  customer_name: string | null;
+  status: string;
+  order_type: string;
+  sold_at: string;
+  lines: ReceiptLine[];
+  subtotal: string;
+  total: string;
+};
+
+export type ReversalResult = {
+  order_id: string;
+  status: "voided" | "refunded";
+  reversing_lines: { id: string; item_id: string; quantity: string; line_total: string; stock_after: string | null }[];
+  reversing_payments: { id: string; method: string; amount: string; reference: string | null }[];
+};
+
 export type CashMovementRow = {
   id: string;
   shift_id: string | null;
