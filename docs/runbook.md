@@ -1,12 +1,238 @@
 # Runbook
 
-**For the person on shift, not for a developer.** Find your situation, do what it says.
+**For the person on shift, not for a developer.** Find your heading, do what it says. You do not
+have to read the rest.
 
-This file grows as the go-live tasks land. Today it covers first-time setup, backups and
-restoring one (roadmap M15-T1 to M15-T3). The rest — internet down, tablet dead, printer
-stuck, API down, a sale rung up wrong, stock looks wrong, closing the day, who pays for
-what — arrives with **M15-T9**, and the empty headings at the bottom say so rather than
-pretending.
+| If this is happening | Go to |
+|---|---|
+| The internet is down | [When something is wrong during service](#the-internet-is-down) |
+| The tablet died mid-service | [The tablet died mid-service](#the-tablet-died-mid-service) |
+| The printer will not print | [The printer will not print](#the-printer-will-not-print) |
+| Nothing in the app works, but the internet is fine | [The API is down](#the-api-is-down-the-app-loads-but-nothing-works) |
+| A sale was rung up wrong | [A sale was rung up wrong](#a-sale-was-rung-up-wrong) |
+| The stock number is wrong | [Stock looks wrong](#stock-looks-wrong) |
+| Someone forgot their PIN | [Locked out](#locked-out-a-lost-tablet-a-lost-link-a-forgotten-pin) |
+| The tablet is lost or stolen | [Locked out](#locked-out-a-lost-tablet-a-lost-link-a-forgotten-pin) |
+| Something has to be cancelled and the owner is away | [When the owner is not there](#when-the-owner-is-not-there-and-something-has-to-be-cancelled) |
+| It is closing time | [Closing the day](#closing-the-day) |
+| The database is gone | [Restoring from a backup](#restoring-from-a-backup) |
+
+**Two rules that outrank everything below: keep selling, and do not make the numbers up.** A sale
+written on paper can be entered later. A sale nobody wrote down is gone for good, and so is the
+stock it took.
+
+---
+
+## When something is wrong during service
+
+Read the one heading that matches. Each is written to be finished in a minute, standing up, with
+customers waiting.
+
+### The internet is down
+
+The till needs the internet. There is no offline mode yet — that is M14, and it is not built — so
+when the connection drops the kiosk stops accepting sales.
+
+1. **Check it is really the internet.** Open any website on the tablet. If that fails too, it is
+   the connection, not the app.
+2. **Try the phone's hotspot.** Turn on tethering, connect the tablet to it, reload the kiosk. This
+   is the fastest fix and it works for most outages. Keep the hotspot password written somewhere
+   the staff can reach without you.
+3. **If neither works, go to paper.** One line per customer: what they bought, how many, what they
+   paid, cash or QRIS, and the time. Keep the sheet — it is the only record that exists.
+4. **When the connection comes back**, ring the paper sales up on the till, oldest first. They will
+   be timestamped as of now, not when they happened, so if it crossed a day boundary write a note
+   on the sheet and keep it. (Entering them at their real time is M15-T10, not built yet.)
+5. **Stock will be wrong until you do step 4**, because nothing came off the shelf in the system.
+   Do not "fix" the stock number by hand as well or you will subtract it twice.
+
+### The tablet died mid-service
+
+Dead battery, cracked screen, will not wake. One tablet is one point of failure and this is what
+that costs.
+
+1. **Go to paper immediately** — same list as above. Do not stop selling.
+2. **Get any other device on the kiosk**: a phone, a laptop, the owner's tablet. Open the kiosk
+   link (Pengaturan → Layar kasir), sign in with a PIN, and carry on. A phone screen is a bad till
+   but it is a working one.
+3. If the link is not to hand and the old tablet is unrecoverable, see
+   [Locked out: a lost tablet](#the-tablet-is-lost-stolen-or-sold) below.
+4. **Enter the paper sales** on whatever device is now the till, oldest first, as in step 4 above.
+
+### The printer will not print
+
+1. Ask first whether the customer needs paper at all. Most do not.
+2. Check the obvious: paper roll in the right way round, lid clicked shut, power, cable or
+   Bluetooth pairing.
+3. **The receipt still exists without the printer.** It is on the sale in the app, and it can be
+   shown on the screen or read out.
+4. Never hold up the queue for a receipt. Sell, then sort the printer out between customers.
+
+### The API is down (the app loads but nothing works)
+
+The symptom is the dashboard or the kiosk showing errors on everything while other websites are
+fine.
+
+1. **Reload once.** Then wait sixty seconds and reload again — most of these are momentary.
+2. **Check whether it is only you.** Try the dashboard on the phone's mobile data. If it works
+   there, it is the café's WiFi and the "internet is down" steps apply instead.
+3. **If it is really down, go to paper** and keep selling. It is the same drill as a lost
+   connection, because from behind the counter it is the same thing.
+4. **Restart the API.** Once deployed this is Railway → the API service → Restart (M12-T4). Nothing
+   is lost by restarting; the database is a separate service and keeps running.
+5. If it comes back and immediately breaks again, do not keep restarting it. Write down the time it
+   started and what was on screen, and send that with the day's paper sheet.
+
+### A sale was rung up wrong
+
+**Not yet paid** — an order that is still sitting in the queue from a QR menu: cancel it at the
+till (Batal on the ticket) and ring it up again correctly. Nothing has moved yet.
+
+**Already paid** — this needs a void or a refund, which needs a **PIN pemilik atau manajer**. The
+rule is which side of the counter the goods are on:
+
+* the customer has not taken the goods, and the whole thing was a mistake → **void**;
+* the customer is giving goods back, or you are handing money back → **refund**.
+
+Either way the system writes a reversing entry — the original sale stays visible, nothing is
+deleted, and stock goes back on the shelf unless you say the goods are not coming back.
+
+> **Known gap, read this before go-live.** The void and refund exist in the system and are tested,
+> but **there is no button for them on the till or the dashboard yet** — nothing in the app calls
+> them. Until that screen is built, a wrong sale that has already been paid needs a developer.
+> What to do meanwhile: write it on the day's paper sheet — the receipt number or the time, what
+> was wrong, and what actually happened — and do **not** ring up a second "correcting" sale, and do
+> **not** edit the stock by hand. Both make the books worse than leaving the mistake visible.
+
+### Stock looks wrong
+
+Count the shelf first. Then Stok → the item → set the stock figure to what you counted → save.
+
+That is not an override: it writes a **correction** movement into the ledger, so the difference is
+visible afterwards as a correction rather than quietly disappearing. Correct one item at a time and
+only when you have actually counted it.
+
+If a lot of items are wrong at once, the usual cause is sales that never reached the system —
+paper sales from an outage that were never entered. Enter those first, then count.
+
+---
+
+## When the owner is not there and something has to be cancelled
+
+Batal transaksi, refund and a discount all need a **PIN pemilik atau manajer**. If you are the
+only person who can give one and you are not at the shop, the cashier's only remaining option
+is to do the sums in their head — which is exactly how the books stop matching the till.
+
+So appoint a manager before you need one. Dashboard → Pengaturan → Staf kasir → **jadikan
+manajer** on someone you trust, or pick "Manajer" when you add them. The same button takes it
+back. A manager can approve those three things at the kiosk and nothing else: reports and
+settings need the owner login, which is your phone number and your OTP, and no staff PIN can
+reach them.
+
+Every approval is recorded and you can read it: Keuangan → **Otorisasi manajer**. Each row says
+what was approved, who approved it, the role they held at the time, who asked, and how much it
+was worth. Look at it once a week. A manager approving large discounts late at night, or the
+same cashier asking for voids every day, is the pattern this list exists to make visible.
+
+If someone leaves: Pengaturan → Staf kasir → **nonaktifkan**. Their PIN stops working
+immediately, including for approvals — the check is on the account, not on a token they were
+given at the start of the shift. What they already approved stays in the trail, with the role
+they held then.
+
+---
+
+## Locked out: a lost tablet, a lost link, a forgotten PIN
+
+### Someone forgot their PIN, and there is a queue
+
+Dashboard → Pengaturan → Staf kasir → **ganti PIN** next to their name → type four digits →
+Simpan. The cashier goes back to the "siapa kamu" screen, picks their name and types the new PIN.
+The old PIN stops working immediately. Nothing they already rang up changes — a PIN is a key, not
+a name, and the sales stay under theirs.
+
+Your own PIN has the same button. Reset it the moment you notice, because it is also the PIN that
+approves a void or a refund, so forgetting it locks the till out of fixing mistakes as well as out
+of your own shifts. If you would rather not be the only one who can approve, appoint a manager
+(see "When the owner is not there").
+
+### The tablet is lost, stolen, or sold
+
+Do this from any phone or laptop you can sign in on. It takes one button.
+
+1. **Pengaturan → Layar kasir (POS) → "Tablet hilang? Putuskan perangkat lama & buat tautan
+   baru"** → confirm. Every old kiosk link stops working, and every till that is currently open —
+   including a good tablet still on the counter — is signed out on its next tap. That bluntness is
+   the point: you press this because a device is out of your hands.
+2. **Copy the new link** it gives you and open it once on the replacement device.
+3. The cashier picks their name and types their PIN. If they have forgotten it too, reset it
+   first (above).
+4. Sell something small to check, then carry on.
+
+Nothing that was already rung up is affected. The old tablet, wherever it is, now shows
+"Perangkat ini sudah tidak dipasangkan" and cannot see your menu, your staff names, or your
+takings — even though whoever has it still holds the old link.
+
+**Just showing the link again is safe.** The plain "Buat tautan kasir" button does not cut anyone
+off; use it when you are simply pairing a second device or reading the link out over the phone.
+Only the red one retires what exists.
+
+### How long the recovery takes — measured
+
+6 September 2026, development machine. The software's share of the whole drill — cut off, reset a
+PIN, open the link, sign in, load the menu, take the first sale — is **0.2 seconds**:
+
+| Step | |
+|---|---|
+| Cut the lost tablet off | 7 ms |
+| The lost tablet's session is dead on its next request | 2 ms |
+| Reset the forgotten PIN | 47 ms |
+| Replacement tablet opens the link | 4 ms |
+| Cashier signs in | 43 ms |
+| Menu loads | 5 ms |
+| First sale on the new device | 97 ms |
+| **Total** | **204 ms** |
+
+So the five minutes the plan allows is spent entirely on people and hardware: finding the
+replacement tablet, getting the link onto it, and typing a PIN. Copy the link into WhatsApp and
+open it there rather than retyping a long URL on a touchscreen — that one habit is most of the
+difference between one minute and five.
+
+**Re-time this on the café's own tablet before go-live**, once and with a stopwatch, and write the
+number here. The figures above are the server's work only; they say nothing about how long the
+café's WiFi and the café's tablet take.
+
+---
+
+## Closing the day
+
+1. **The cashier closes the shift at the till.** Tutup shift → count the drawer → type what is
+   actually there. Do not type what the screen expects. The difference is the point of the
+   exercise, and it is posted to the books as a variance either way.
+2. **A difference is information, not an accusation.** Small and both directions over a week is
+   normal. Consistently short is worth a quiet conversation. Consistently short on one person's
+   shifts is worth a louder one.
+3. **The owner checks Keuangan**: the shift you just closed, its expected-versus-counted, and the
+   day's expenses. Then **Otorisasi manajer** — anything approved today that you did not know
+   about.
+4. **The nightly job runs by itself** and sends what needs attention to WhatsApp. You do not have
+   to wait up for it. If it found nothing, it sends nothing — silence means normal.
+5. **If the day's number looks wrong**, check the business day boundary before anything else:
+   Pengaturan → Profil usaha → "Hari usaha dimulai jam". A café that closes after midnight with
+   this set to 00.00 splits every night across two days.
+
+---
+
+## Known gaps at go-live
+
+Honest list, so nobody discovers these at 8am. Each one is a task that exists and is not built.
+
+| Gap | What it means in the shop | Task |
+|---|---|---|
+| No void/refund button | a wrong paid sale needs a developer (see above) | — |
+| No offline till | the internet going down stops sales; paper and re-entry | M14 |
+| No backdated entry | paper sales are entered at today's time, not theirs | M15-T10 |
+| No uptime alert | you find out the API is down by trying to use it | M15-T5 |
+| No tested printer | receipt printing has not been proven on real hardware | M15-T6 |
 
 ---
 
@@ -165,99 +391,24 @@ the production database has real history — an estimate in a runbook is worth n
 
 ---
 
-## When the owner is not there and something has to be cancelled
+## Who pays for what, every month
 
-Batal transaksi, refund and a discount all need a **PIN pemilik atau manajer**. If you are the
-only person who can give one and you are not at the shop, the cashier's only remaining option
-is to do the sums in their head — which is exactly how the books stop matching the till.
+Fill in the amounts when each account is created (M12) and keep this table current. **Nothing here
+should be on a free tier.** This project has already lost a database once, on 16 July 2026, to a
+free-tier project being reaped with no warning, which is exactly what free tiers are allowed to do.
 
-So appoint a manager before you need one. Dashboard → Pengaturan → Staf kasir → **jadikan
-manajer** on someone you trust, or pick "Manajer" when you add them. The same button takes it
-back. A manager can approve those three things at the kiosk and nothing else: reports and
-settings need the owner login, which is your phone number and your OTP, and no staff PIN can
-reach them.
+| Service | What it is | If it lapses | Cost |
+|---|---|---|---|
+| Supabase | the database, and the stored receipt photos | everything stops, and the data is at risk | |
+| Railway | the API and the scheduled jobs (nightly alerts, backups) | till and dashboard stop; no backups | |
+| Vercel | the dashboard and the kiosk pages | nothing loads, even though the data is fine | |
+| Meta WhatsApp | the assistant and the alerts | messages stop; the rest keeps working | |
+| Google Gemini | reading receipt photos, answering questions | photo capture and the assistant stop; the till is fine | |
+| Domain (if any) | the address people type | links break | |
 
-Every approval is recorded and you can read it: Keuangan → **Otorisasi manajer**. Each row says
-what was approved, who approved it, the role they held at the time, who asked, and how much it
-was worth. Look at it once a week. A manager approving large discounts late at night, or the
-same cashier asking for voids every day, is the pattern this list exists to make visible.
+Two habits that cost nothing:
 
-If someone leaves: Pengaturan → Staf kasir → **nonaktifkan**. Their PIN stops working
-immediately, including for approvals — the check is on the account, not on a token they were
-given at the start of the shift. What they already approved stays in the trail, with the role
-they held then.
-
----
-
-## Locked out: a lost tablet, a lost link, a forgotten PIN
-
-### Someone forgot their PIN, and there is a queue
-
-Dashboard → Pengaturan → Staf kasir → **ganti PIN** next to their name → type four digits →
-Simpan. The cashier goes back to the "siapa kamu" screen, picks their name and types the new PIN.
-The old PIN stops working immediately. Nothing they already rang up changes — a PIN is a key, not
-a name, and the sales stay under theirs.
-
-Your own PIN has the same button. Reset it the moment you notice, because it is also the PIN that
-approves a void or a refund, so forgetting it locks the till out of fixing mistakes as well as out
-of your own shifts. If you would rather not be the only one who can approve, appoint a manager
-(see "When the owner is not there").
-
-### The tablet is lost, stolen, or sold
-
-Do this from any phone or laptop you can sign in on. It takes one button.
-
-1. **Pengaturan → Layar kasir (POS) → "Tablet hilang? Putuskan perangkat lama & buat tautan
-   baru"** → confirm. Every old kiosk link stops working, and every till that is currently open —
-   including a good tablet still on the counter — is signed out on its next tap. That bluntness is
-   the point: you press this because a device is out of your hands.
-2. **Copy the new link** it gives you and open it once on the replacement device.
-3. The cashier picks their name and types their PIN. If they have forgotten it too, reset it
-   first (above).
-4. Sell something small to check, then carry on.
-
-Nothing that was already rung up is affected. The old tablet, wherever it is, now shows
-"Perangkat ini sudah tidak dipasangkan" and cannot see your menu, your staff names, or your
-takings — even though whoever has it still holds the old link.
-
-**Just showing the link again is safe.** The plain "Buat tautan kasir" button does not cut anyone
-off; use it when you are simply pairing a second device or reading the link out over the phone.
-Only the red one retires what exists.
-
-### How long the recovery takes — measured
-
-6 September 2026, development machine. The software's share of the whole drill — cut off, reset a
-PIN, open the link, sign in, load the menu, take the first sale — is **0.2 seconds**:
-
-| Step | |
-|---|---|
-| Cut the lost tablet off | 7 ms |
-| The lost tablet's session is dead on its next request | 2 ms |
-| Reset the forgotten PIN | 47 ms |
-| Replacement tablet opens the link | 4 ms |
-| Cashier signs in | 43 ms |
-| Menu loads | 5 ms |
-| First sale on the new device | 97 ms |
-| **Total** | **204 ms** |
-
-So the five minutes the plan allows is spent entirely on people and hardware: finding the
-replacement tablet, getting the link onto it, and typing a PIN. Copy the link into WhatsApp and
-open it there rather than retyping a long URL on a touchscreen — that one habit is most of the
-difference between one minute and five.
-
-**Re-time this on the café's own tablet before go-live**, once and with a stopwatch, and write the
-number here. The figures above are the server's work only; they say nothing about how long the
-café's WiFi and the café's tablet take.
-
----
-
-## Still to be written (M15-T9)
-
-- The internet is down
-- The tablet died mid-service
-- The printer will not print
-- The API is down
-- A sale was rung up wrong
-- Stock looks wrong
-- Closing the day
-- Who pays for what, each month
+* **Put every renewal on one card and check that card monthly.** A card that expires takes the
+  café down as effectively as a bug.
+* **Check that last night's backup ran** — ["Did the backup work last night?"](#did-the-backup-work-last-night)
+  above, once a week, takes ten seconds.
