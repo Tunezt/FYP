@@ -126,6 +126,25 @@ class OrderIn(BaseModel):
     order_type: PosOrderType = "takeaway"
     bill_discount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))  # M7-T4b
     manager_pin: str | None = Field(default=None, min_length=4, max_length=6)  # required for a discount when the settings say so
+    customer_id: uuid.UUID | None = None  # M8-T1: attach the customer
+
+
+# ── Customers at the till (M8-T1) ───────────────────────────────────────────
+
+
+class PosCustomerOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    phone: str | None
+    visits: int
+    last_visit: datetime | None
+
+
+class PosCustomerIn(BaseModel):
+    """Quick add from the kiosk: a name and, usually, a phone."""
+
+    name: str = Field(min_length=1, max_length=120)
+    phone: str | None = Field(default=None, max_length=32)
 
 
 class QuoteIn(BaseModel):
@@ -179,6 +198,7 @@ class PaymentOut(BaseModel):
 class OrderOut(BaseModel):
     id: uuid.UUID
     order_type: str
+    customer_id: uuid.UUID | None = None
     subtotal: Decimal
     discount_total: Decimal = Decimal(0)
     service_charge: Decimal = Decimal(0)
@@ -205,6 +225,7 @@ class ReceiptOut(BaseModel):
     number: str                     # short human reference, last 8 of the id
     business_name: str
     staff_name: str | None
+    customer_name: str | None = None
     status: str
     order_type: str
     sold_at: datetime

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -549,3 +549,44 @@ class PricingSettingsPatch(BaseModel):
     rounding_unit: Decimal | None = Field(default=None, ge=0, le=Decimal("100000"))
     rounding_mode: Literal["nearest", "up", "down"] | None = None
     discount_requires_pin: bool | None = None
+
+
+# ── Customers (M8-T1) ───────────────────────────────────────────────────────
+
+
+class CustomerOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    phone: str | None
+    address: str | None
+    birthday: date | None
+    notes: str | None
+    is_active: bool
+    visits: int
+    total_spent: Decimal
+    last_visit: datetime | None
+    created_at: datetime
+
+
+class CustomerCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    phone: str | None = Field(default=None, max_length=32)
+    address: str | None = Field(default=None, max_length=300)
+    birthday: date | None = None
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class CustomerUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    phone: str | None = Field(default=None, max_length=32)   # "" clears it
+    address: str | None = Field(default=None, max_length=300)
+    birthday: date | None = None
+    notes: str | None = Field(default=None, max_length=500)
+    is_active: bool | None = None
+
+
+class CustomersPage(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    rows: list[CustomerOut]

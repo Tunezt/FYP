@@ -11,7 +11,7 @@ from decimal import Decimal
 import uuid
 
 import jwt as pyjwt
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
 from app.core.db import tenant_session
@@ -24,6 +24,8 @@ from app.schemas.pos import (
     OrderIn,
     OrderLineOut,
     OrderOut,
+    PosCustomerIn,
+    PosCustomerOut,
     QuoteIn,
     QuoteLineOut,
     QuoteOut,
@@ -62,6 +64,7 @@ from app.services.orders import (
     refund_order,
     void_order,
 )
+from app.services.customers import CustomerInvalid
 from app.services.pricing import PricingInvalid
 from app.services.sales import InsufficientStock, ItemNotFound, record_sale
 from app.services.velocity import check_low_stock_for_item
@@ -283,7 +286,10 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
             bill_discount=payload.bill_discount,
             manager_pin=payload.manager_pin,
+            customer_id=payload.customer_id,
         )
+    except CustomerInvalid:
+        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan atau sudah tidak aktif")
     except DiscountNeedsManager:
         raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik memasukkan PIN-nya")
     except ManagerPinRejected:
@@ -334,6 +340,7 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
     return OrderOut(
         id=order.id,
         order_type=order.order_type,
+        customer_id=order.customer_id,
         subtotal=order.subtotal,
         discount_total=order.discount_total,
         service_charge=order.service_charge,
@@ -374,6 +381,7 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
         number=str(order.id)[-8:].upper(),
         business_name=business.name if business else "",
         staff_name=data["staff_name"],
+        customer_name=data.get("customer_name"),
         status=order.status,
         order_type=order.order_type,
         sold_at=order.sold_at,
@@ -455,6 +463,39 @@ async def pos_refund_order(order_id: uuid.UUID, payload: RefundIn, ctx: PosCtx):
         ctx, order_id, refund_order, "/pos/orders/{id}/refund",
         manager_pin=payload.manager_pin, note=payload.note, restock=payload.restock,
     )
+
+
+# ── Customers at the till (M8-T1) ──────────────────────────────────────────
+
+_CUSTOMER_ERRORS = {
+    "name": (422, "Nama pelanggan tidak boleh kosong"),
+    "phone": (422, "Nomor HP tidak valid — pakai 8–15 angka"),
+    "duplicate_phone": (409, "Nomor HP ini sudah terdaftar atas pelanggan lain"),
+    "not_found": (404, "Pelanggan tidak ditemukan atau sudah tidak aktif"),
+}
+
+
+@router.get("/customers", response_model=list[PosCustomerOut])
+async def pos_search_customers(ctx: PosCtx, q: str = Query(default="", max_length=60)):
+    """Find a customer by name or phone to attach to the order (M8-T1)."""
+    from app.services.customers import customer_views, search_customers
+
+    rows = await search_customers(ctx.session, q, limit=10)
+    return [PosCustomerOut(**v) for v in await customer_views(ctx.session, rows)]
+
+
+@router.post("/customers", response_model=PosCustomerOut, status_code=201)
+async def pos_add_customer(payload: PosCustomerIn, ctx: PosCtx):
+    """Quick add from the kiosk. A phone that already belongs to someone is a
+    409 with their name, not a second record."""
+    from app.services.customers import CustomerInvalid, create_customer, customer_view
+
+    try:
+        row = await create_customer(ctx.session, ctx.business_id, name=payload.name, phone=payload.phone)
+    except CustomerInvalid as exc:
+        status, detail = _CUSTOMER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return PosCustomerOut(**await customer_view(ctx.session, row))
 
 
 # ── Shifts (M7-T1) ──────────────────────────────────────────────────────────

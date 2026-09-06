@@ -609,3 +609,28 @@ async def test_rls_isolates_cash_movements(session_factory, two_tenants):
         session.add(CashMovement(business_id=b.id, kind="bank_drop", via="cash", amount=Decimal(1), reason="smuggled"))
         with pytest.raises(Exception):
             await session.commit()
+
+
+async def test_rls_isolates_customers(session_factory, two_tenants):
+    """M8-T1 / roadmap §2: a customer, and the same phone, in two businesses."""
+    from app.models import Customer
+
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        row = Customer(business_id=a.id, name="Andi", phone="6281200009999")
+        session.add(row)
+        await session.commit()
+        row_id = row.id
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert await session.get(Customer, row_id) is None
+        assert (await session.execute(select(Customer))).scalars().all() == []
+        # The phone is a key per business, not globally: B may have its own Andi.
+        session.add(Customer(business_id=b.id, name="Andi (B)", phone="6281200009999"))
+        await session.commit()
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(Customer(business_id=b.id, name="smuggled", phone=None))
+        with pytest.raises(Exception):
+            await session.commit()

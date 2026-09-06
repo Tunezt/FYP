@@ -31,6 +31,7 @@ from app.models import (
     StockMovement,
 )
 from app.services.catalog import default_variant
+from app.services.customers import require_customer
 from app.services.pricing import LineInput, price_order, pricing_config
 from app.services.sales import ATOMIC_DECREMENT, InsufficientStock, ItemNotFound
 from app.services.stock import record_movement
@@ -163,6 +164,7 @@ async def create_order(
     sold_at: datetime | None = None,
     bill_discount: Decimal = Decimal(0),
     manager_pin: str | None = None,
+    customer_id: uuid.UUID | None = None,
 ) -> CreatedOrder:
     if not lines:
         raise EmptyOrder()
@@ -170,6 +172,7 @@ async def create_order(
         raise PaymentMismatch(Decimal(0), Decimal(0))
     sold_at = sold_at or datetime.now(timezone.utc)
     shift_id = await open_shift_id(session, staff_id)  # the cashier's open till, if any (M7-T1)
+    customer = await require_customer(session, customer_id)  # must be this business's, and active (M8-T1)
 
     # 0. The discount gate (M7-T4b): when the settings say so, nobody discounts
     #    anything without the manager's PIN — checked before any stock moves.
@@ -267,6 +270,7 @@ async def create_order(
         staff_id=staff_id,
         order_type=order_type,
         status="completed",
+        customer_id=customer.id if customer is not None else None,
         subtotal=subtotal,
         discount_total=bill.discount_total,
         tax_total=bill.tax_total,
@@ -587,6 +591,11 @@ async def load_receipt(session: AsyncSession, *, business_id: uuid.UUID, order_i
     if order.staff_id is not None:
         staff = await session.get(Staff, order.staff_id)
         staff_name = staff.name if staff else None
+    customer_name = None
+    if order.customer_id is not None:
+        from app.models import Customer
+        customer = await session.get(Customer, order.customer_id)
+        customer_name = customer.name if customer else None
     lines = (
         await session.execute(
             select(OrderLine).where(OrderLine.order_id == order_id).order_by(OrderLine.created_at, OrderLine.id)
@@ -612,6 +621,7 @@ async def load_receipt(session: AsyncSession, *, business_id: uuid.UUID, order_i
     return {
         "order": order,
         "staff_name": staff_name,
+        "customer_name": customer_name,
         "lines": [
             {
                 "line": l,

@@ -133,3 +133,18 @@ export type PricingSettings = {
   rounding_mode: "nearest" | "up" | "down";
   discount_requires_pin: boolean;
 };
+
+// Customers (M8-T1). History is derived from orders by the API.
+export type CustomerRow = {
+  id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  birthday: string | null;
+  notes: string | null;
+  is_active: boolean;
+  visits: number;
+  total_spent: string;
+  last_visit: string | null;
+  created_at: string;
+};

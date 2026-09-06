@@ -329,7 +329,7 @@ class Order(Base):
         UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
     )
     staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
-    customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))  # FK arrives with M8
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"))  # FK since 0021 (M8-T1)
     order_type: Mapped[str] = mapped_column(order_type, nullable=False, server_default="takeaway")
     status: Mapped[str] = mapped_column(order_status, nullable=False, server_default="completed")
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
@@ -776,5 +776,26 @@ class PricingSettings(Base):
     rounding_unit: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     rounding_mode: Mapped[str] = mapped_column(Text, nullable=False, server_default="nearest")
     discount_requires_pin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class Customer(Base):
+    """Who bought (migration 0021, roadmap M8-T1). Phone is the natural key and
+    the WhatsApp identity — digits only, international — unique per business
+    when present. Purchase history is derived from orders, never stored here."""
+
+    __tablename__ = "customers"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    phone: Mapped[str | None] = mapped_column(Text)
+    address: Mapped[str | None] = mapped_column(Text)
+    birthday: Mapped[date | None] = mapped_column(Date)
+    notes: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()

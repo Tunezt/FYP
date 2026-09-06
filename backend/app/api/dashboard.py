@@ -25,6 +25,10 @@ from app.schemas.dashboard import (
     StatementLineOut,
     AlertRow,
     BusinessUpdateIn,
+    CustomerCreateIn,
+    CustomerOut,
+    CustomersPage,
+    CustomerUpdateIn,
     PricingSettingsOut,
     PricingSettingsPatch,
     ExpensesPage,
@@ -1170,6 +1174,61 @@ async def update_business(payload: BusinessUpdateIn, ctx: OwnerCtx):
         setattr(business, field, value)
     await ctx.session.flush()
     return BusinessOut.model_validate(business)
+
+
+# ── Customers (M8-T1) ───────────────────────────────────────────────────────
+
+_CUSTOMER_ERRORS = {
+    "name": (422, "Nama pelanggan tidak boleh kosong"),
+    "phone": (422, "Nomor HP tidak valid — pakai 8–15 angka"),
+    "duplicate_phone": (409, "Nomor HP ini sudah terdaftar atas pelanggan lain"),
+    "not_found": (404, "Pelanggan tidak ditemukan"),
+}
+
+
+@router.get("/customers", response_model=CustomersPage)
+async def list_customers(
+    ctx: OwnerCtx, q: str = Query(default="", max_length=60), include_inactive: bool = Query(default=False),
+    page: int = Query(default=1, ge=1), page_size: int = Query(default=30, ge=1, le=200),
+):
+    """Customers with their derived visits / spend / last visit (M8-T1)."""
+    from app.models import Customer
+    from app.services.customers import customer_views, search_customers
+
+    matched = await search_customers(ctx.session, q, limit=10000, include_inactive=include_inactive)
+    total = len(matched)
+    start = (page - 1) * page_size
+    rows = await customer_views(ctx.session, matched[start:start + page_size])
+    return CustomersPage(total=total, page=page, page_size=page_size, rows=[CustomerOut(**r) for r in rows])
+
+
+@router.post("/customers", response_model=CustomerOut, status_code=201)
+async def add_customer(payload: CustomerCreateIn, ctx: OwnerCtx):
+    from app.services.customers import CustomerInvalid, create_customer, customer_view
+
+    try:
+        row = await create_customer(ctx.session, ctx.business_id, **payload.model_dump())
+    except CustomerInvalid as exc:
+        status, detail = _CUSTOMER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return CustomerOut(**await customer_view(ctx.session, row))
+
+
+@router.patch("/customers/{customer_id}", response_model=CustomerOut)
+async def edit_customer(customer_id: uuid.UUID, payload: CustomerUpdateIn, ctx: OwnerCtx):
+    from app.models import Customer
+    from app.services.customers import CustomerInvalid, customer_view, update_customer
+
+    row = await ctx.session.get(Customer, customer_id)
+    if row is None:
+        status, detail = _CUSTOMER_ERRORS["not_found"]
+        raise HTTPException(status_code=status, detail=detail)
+    try:
+        row = await update_customer(ctx.session, row, **payload.model_dump(exclude_unset=True))
+    except CustomerInvalid as exc:
+        status, detail = _CUSTOMER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return CustomerOut(**await customer_view(ctx.session, row))
 
 
 @router.get("/pricing-settings", response_model=PricingSettingsOut)

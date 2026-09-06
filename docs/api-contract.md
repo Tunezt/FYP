@@ -30,6 +30,7 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | GET | `/api/alerts?limit=` · POST `/api/alerts/{id}/ack` | |
 | GET | `/api/receipts?page=` | paginated, short-lived signed image URLs |
 | GET/PATCH | `/api/business` · POST `/api/business/complete-onboarding` | |
+| GET | `/api/customers?q=&page=&page_size=&include_inactive=` · POST `/api/customers` · PATCH `/api/customers/{id}` | owner | customers (M8-T1): name, phone (normalised to `62…` digits, unique per business, the WhatsApp identity), address, birthday, notes, `is_active`; each row carries derived `visits`, `total_spent` (completed orders), `last_visit` |
 | GET/PATCH | `/api/pricing-settings` | owner | how a bill is built (M7-T4): `tax_rate` (fraction), `tax_inclusive`, `service_charge_rate`, `service_before_tax`, `rounding_unit`, `rounding_mode` (nearest/up/down), `discount_requires_pin`; takes effect on the next sale, nothing already sold is repriced |
 | GET | `/api/stock-template` | template-stok.xlsx download |
 
@@ -41,7 +42,8 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | POST | `/pos/login` | pairing token in body | `{staff_id, pin}` → pos JWT |
 | GET | `/pos/items` | pos | |
 | POST | `/pos/sales` | pos | atomic decrement; 409 on insufficient stock; triggers velocity check |
-| POST | `/pos/orders` | pos | multi-line order + payments (cash/qris/transfer/card/ewallet/other); per-line atomic stock guard, all-or-nothing (409); writes order, lines with `unit_cost_at_sale`, payments, stock movements. M7-T4b: lines take `line_discount` (Rp), the body takes `bill_discount` and `manager_pin`; any discount needs the PIN when `pricing_settings.discount_requires_pin` (403 otherwise); the bill is priced by `services/pricing` (tax, service charge, rounding) and payments must equal the **rounded** total (422); response carries `discount_total`, `service_charge`, `tax_total`, `rounding` |
+| POST | `/pos/orders` | pos | multi-line order + payments (cash/qris/transfer/card/ewallet/other); per-line atomic stock guard, all-or-nothing (409); writes order, lines with `unit_cost_at_sale`, payments, stock movements. M7-T4b: lines take `line_discount` (Rp), the body takes `bill_discount` and `manager_pin`; M8-T1: optional `customer_id` (404 if unknown or inactive); any discount needs the PIN when `pricing_settings.discount_requires_pin` (403 otherwise); the bill is priced by `services/pricing` (tax, service charge, rounding) and payments must equal the **rounded** total (422); response carries `discount_total`, `service_charge`, `tax_total`, `rounding` |
+| GET | `/pos/customers?q=` · POST `/pos/customers` | pos | find a customer by name or phone to attach to the order, or quick-add one (`{name, phone?}`; a phone already registered is a 409) (M8-T1) |
 | POST | `/pos/quote` | pos | price the cart without selling it (M7-T4b): same lines shape and `bill_discount`, returns subtotal / discount / service charge / tax (`tax_inclusive` says whether it is contained) / rounding / total plus `discount_requires_pin` so the kiosk asks for the PIN — the same pure function the sale uses, so screen and ledger agree |
 | POST | `/pos/orders/{id}/void` | pos | `{manager_pin, note?}` — owner PIN; reversing lines, payments and `sale_void` stock movements; original untouched; 403 wrong PIN, 409 already reversed |
 | POST | `/pos/orders/{id}/refund` | pos | `{manager_pin, restock?, note?}` — like void with `refund` movements; `restock=false` reverses money only |

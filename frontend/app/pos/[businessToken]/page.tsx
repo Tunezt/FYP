@@ -34,6 +34,7 @@ type Receipt = {
   number: string;
   business_name: string;
   staff_name: string | null;
+  customer_name: string | null;
   status: string;
   sold_at: string;
   lines: {
@@ -95,6 +96,8 @@ type Shift = {
 // Cash in and out (M7-T2).
 type CashKind = "cash_in" | "petty_cash" | "supplier_payment" | "bank_drop";
 type SupplierLite = { id: string; name: string };
+// Customers at the till (M8-T1).
+type CustomerLite = { id: string; name: string; phone: string | null; visits: number };
 
 const lineKey = (itemId: string, variant: Variant | null, modifiers: Modifier[]) =>
   `${itemId}:${variant?.id ?? "default"}:${modifiers.map((m) => m.id).sort().join(",")}`;
@@ -361,6 +364,13 @@ function SellScreen({
   const [managerPin, setManagerPin] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [lineDiscountFor, setLineDiscountFor] = useState<string | null>(null);
+  // Customer attached to this order (M8-T1).
+  const [customer, setCustomer] = useState<CustomerLite | null>(null);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [customerMatches, setCustomerMatches] = useState<CustomerLite[]>([]);
+  const [customerNew, setCustomerNew] = useState<{ name: string; phone: string } | null>(null);
+  const [customerError, setCustomerError] = useState<string | null>(null);
+
   const [lineDiscountDraft, setLineDiscountDraft] = useState("");
   const [cashPart, setCashPart] = useState("");
   const [busy, setBusy] = useState(false);
@@ -487,6 +497,35 @@ function SellScreen({
   // What the customer pays: the server's priced total when we have it, else the plain sum.
   const cartTotal = quote ? Number(quote.total) : cartGross;
   const needsPin = anyDiscount && (quote?.discount_requires_pin ?? true);
+
+  useEffect(() => {
+    if (!paying || customer || customerQuery.trim().length < 2) {
+      setCustomerMatches([]);
+      return;
+    }
+    const handle = setTimeout(() => {
+      api<CustomerLite[]>(`/pos/customers?q=${encodeURIComponent(customerQuery.trim())}`, { token })
+        .then(setCustomerMatches)
+        .catch(() => setCustomerMatches([]));
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [customerQuery, paying, customer, token]);
+
+  async function quickAddCustomer() {
+    if (!customerNew || !customerNew.name.trim()) return;
+    setCustomerError(null);
+    try {
+      const row = await api<CustomerLite>("/pos/customers", {
+        token,
+        body: { name: customerNew.name.trim(), phone: customerNew.phone.trim() || null },
+      });
+      setCustomer(row);
+      setCustomerNew(null);
+      setCustomerQuery("");
+    } catch (e: unknown) {
+      setCustomerError(e instanceof ApiError ? e.detail : "Gagal menyimpan pelanggan.");
+    }
+  }
 
   // Re-price whenever the cart or a discount changes. Debounced a touch so a
   // quick run of taps is one request.
@@ -618,6 +657,7 @@ function SellScreen({
           order_type: "takeaway",
           bill_discount: Number(billDiscount || 0),
           manager_pin: needsPin ? managerPin || null : null,
+          customer_id: customer?.id ?? null,
         },
       });
       setFlash(res);
@@ -625,6 +665,9 @@ function SellScreen({
       setBillDiscount("");
       setManagerPin("");
       setQuote(null);
+      setCustomer(null);
+      setCustomerQuery("");
+      setCustomerNew(null);
       setCartOpen(false);
       setPaying(false);
       setPayMode("cash");
@@ -1225,6 +1268,84 @@ function SellScreen({
                 )}
               </dl>
             )}
+            {/* Customer (M8-T1): optional, by name or phone; quick add inline */}
+            <div className="mt-4">
+              <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">Pelanggan (opsional)</span>
+              {customer ? (
+                <div className="glass-card mt-1 flex items-center justify-between rounded-2xl px-3 py-2 text-sm">
+                  <span className="truncate">
+                    <span className="font-semibold">{customer.name}</span>
+                    {customer.phone ? <span className="ink-faint"> · {customer.phone}</span> : null}
+                    {customer.visits > 0 ? <span className="ink-faint"> · {customer.visits}× datang</span> : null}
+                  </span>
+                  <button onClick={() => setCustomer(null)} className="ink-soft ml-2 shrink-0 text-xs">
+                    ganti
+                  </button>
+                </div>
+              ) : customerNew ? (
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <input
+                    autoFocus
+                    value={customerNew.name}
+                    onChange={(e) => setCustomerNew({ ...customerNew, name: e.target.value })}
+                    className="glass-card rounded-2xl px-3 py-2 text-sm"
+                    placeholder="Nama"
+                  />
+                  <input
+                    inputMode="tel"
+                    value={customerNew.phone}
+                    onChange={(e) => setCustomerNew({ ...customerNew, phone: e.target.value })}
+                    className="glass-card rounded-2xl px-3 py-2 text-sm tabular-nums"
+                    placeholder="Nomor HP"
+                  />
+                  <button onClick={quickAddCustomer} className="btn-accent col-span-1 py-2 text-sm">
+                    Simpan pelanggan
+                  </button>
+                  <button onClick={() => setCustomerNew(null)} className="btn-quiet py-2 text-sm">
+                    Batal
+                  </button>
+                  {customerError && <p className="col-span-2 text-xs text-red-600">{customerError}</p>}
+                </div>
+              ) : (
+                <div className="relative mt-1">
+                  <input
+                    value={customerQuery}
+                    onChange={(e) => setCustomerQuery(e.target.value)}
+                    className="glass-card w-full rounded-2xl px-3 py-2 text-sm"
+                    placeholder="Cari nama atau nomor HP"
+                  />
+                  {(customerMatches.length > 0 || customerQuery.trim().length >= 2) && (
+                    <ul className="glass-card glass-strong absolute left-0 right-0 top-full z-10 mt-1 max-h-44 overflow-auto rounded-2xl py-1 text-sm">
+                      {customerMatches.map((m) => (
+                        <li key={m.id}>
+                          <button
+                            onClick={() => {
+                              setCustomer(m);
+                              setCustomerQuery("");
+                            }}
+                            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-[color:var(--accent-soft)]/40"
+                          >
+                            <span className="truncate">{m.name}</span>
+                            <span className="ink-faint ml-2 shrink-0 text-xs tabular-nums">{m.phone ?? ""}</span>
+                          </button>
+                        </li>
+                      ))}
+                      <li>
+                        <button
+                          onClick={() => {
+                            const q = customerQuery.trim();
+                            setCustomerNew(/^[\d+\s-]+$/.test(q) ? { name: "", phone: q } : { name: q, phone: "" });
+                          }}
+                          className="ink-soft w-full px-3 py-1.5 text-left text-xs hover:bg-[color:var(--accent-soft)]/40"
+                        >
+                          + Pelanggan baru &ldquo;{customerQuery.trim()}&rdquo;
+                        </button>
+                      </li>
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">Diskon struk (Rp)</span>
@@ -1364,6 +1485,7 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
         <p className="text-center">
           #{receipt.number}
           {receipt.staff_name ? ` · ${receipt.staff_name}` : ""}
+          {receipt.customer_name ? ` · utk ${receipt.customer_name}` : ""}
           {receipt.status !== "completed" ? ` · ${receipt.status === "voided" ? "DIBATALKAN" : "DIKEMBALIKAN"}` : ""}
         </p>
         <hr className="my-3 border-dashed border-black" />

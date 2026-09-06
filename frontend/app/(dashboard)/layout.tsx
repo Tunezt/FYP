@@ -16,6 +16,7 @@ import {
   IconHome,
   IconLogout,
   IconShop,
+  IconUsers,
   IconWallet,
 } from "@/components/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -25,6 +26,7 @@ const NAV = [
   { href: "/sales", label: "Penjualan", Icon: IconChart },
   { href: "/inventory", label: "Stok", Icon: IconBox },
   { href: "/money", label: "Keuangan", Icon: IconWallet },
+  { href: "/customers", label: "Pelanggan", Icon: IconUsers },
   { href: "/alerts", label: "Peringatan", Icon: IconBell },
   { href: "/settings", label: "Pengaturan", Icon: IconGear },
 ];
