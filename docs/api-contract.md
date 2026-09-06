@@ -17,9 +17,9 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 
 | Method | Path | Notes |
 |---|---|---|
-| GET/POST | `/auth/staff` · PATCH `/auth/staff/{id}` | list / create (name + 4-digit PIN + `role`) / promote-demote. `role` is `staff` or `manager` (M15-T7) — `owner` is refused with 422, and the owner's own row cannot be re-roled (400). A manager approves voids, refunds and discounts at the till and gets no more than a cashier anywhere else: POS login issues `scope="pos"`, and owner scope comes only from the OTP flow |
+| GET/POST | `/auth/staff` · PATCH `/auth/staff/{id}` · POST `/auth/staff/{id}/pin` | list / create (name + 4-digit PIN + `role`) / promote-demote / reset a forgotten PIN (M15-T8: owner-only, 4–6 digits, the old PIN dies at once and nothing already rung up under it changes). `role` is `staff` or `manager` (M15-T7) — `owner` is refused with 422, and the owner's own row cannot be re-roled (400). A manager approves voids, refunds and discounts at the till and gets no more than a cashier anywhere else: POS login issues `scope="pos"`, and owner scope comes only from the OTP flow |
 | POST | `/auth/staff/{id}/deactivate` | owner row protected |
-| POST | `/auth/pos-pairing` | long-lived kiosk pairing token → `/pos/{token}` |
+| POST | `/auth/pos-pairing` · `/auth/pos-pairing/reset` | long-lived kiosk pairing token → `/pos/{token}`. Both are owner-only. The plain one mints a link under the current `businesses.pairing_generation` and cuts nobody off; `/reset` (M15-T8) raises that counter, which retires every older pairing link **and** every live `pos` token — both then answer 401 “Perangkat ini sudah tidak dipasangkan…”. Every issued token carries its `gen`; `pos` requests check it against the business row |
 | GET | `/api/overview` | today, month P&L, alert + low-stock counts |
 | GET | `/api/sales-trend?days=7..90` | zero-filled daily series, business-local days |
 | GET | `/api/sales?page=&page_size=` | paginated, item+staff names joined |

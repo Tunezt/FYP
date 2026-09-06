@@ -38,6 +38,7 @@ from app.schemas.auth import (
     RegisterOut,
     StaffCreateIn,
     StaffOut,
+    StaffPinResetIn,
     StaffUpdateIn,
 )
 from app.whatsapp.client import send_otp_template
@@ -252,9 +253,48 @@ async def deactivate_staff(staff_id: str, ctx: OwnerCtx):
     return staff
 
 
+@router.post("/staff/{staff_id}/pin", response_model=StaffOut)
+async def reset_staff_pin(staff_id: str, payload: StaffPinResetIn, ctx: OwnerCtx):
+    """A PIN forgotten mid-service (M15-T8). The owner sets a new one from the
+    dashboard and the cashier is back on the till on the next screen — no
+    support request, no waiting. The old PIN stops working at once; anything
+    already rung up under it is untouched, because a PIN is not an identity."""
+    staff = await ctx.session.get(Staff, staff_id)
+    if staff is None:
+        raise HTTPException(status_code=404, detail="Staf tidak ditemukan")
+    staff.pin_hash = hash_pin(payload.pin)
+    await ctx.session.flush()
+    return staff
+
+
+async def _current_business(ctx: OwnerCtx) -> Business:
+    business = await ctx.session.get(Business, ctx.business_id)
+    if business is None:
+        raise HTTPException(status_code=404, detail="Usaha tidak ditemukan")
+    return business
+
+
 @router.post("/pos-pairing", response_model=PairingOut)
 async def create_pos_pairing(ctx: OwnerCtx):
-    token = create_pairing_token(str(ctx.business_id))
+    """The link for the tablet at the counter. Showing it again is safe: it is
+    minted under the current generation and cuts nobody off (M15-T8)."""
+    business = await _current_business(ctx)
+    token = create_pairing_token(str(ctx.business_id), business.pairing_generation)
+    return PairingOut(pairing_token=token, pos_path=f"/pos/{token}")
+
+
+@router.post("/pos-pairing/reset", response_model=PairingOut)
+async def reset_pos_pairing(ctx: OwnerCtx):
+    """The tablet is gone — stolen, sold, or simply not coming back (M15-T8).
+
+    Raising the generation retires every kiosk link and every till session
+    issued before now, including the one on a device that is still working. That
+    bluntness is the point: you re-pair because a device is out of your hands,
+    and anything short of "everything before now is void" is not a cut-off."""
+    business = await _current_business(ctx)
+    business.pairing_generation = int(business.pairing_generation) + 1
+    await ctx.session.flush()
+    token = create_pairing_token(str(ctx.business_id), business.pairing_generation)
     return PairingOut(pairing_token=token, pos_path=f"/pos/{token}")
 
 

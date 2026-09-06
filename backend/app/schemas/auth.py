@@ -76,6 +76,13 @@ class StaffUpdateIn(BaseModel):
     role: AssignableRole
 
 
+class StaffPinResetIn(BaseModel):
+    """M15-T8: a forgotten PIN mid-service. The owner sets a new one from the
+    dashboard; the old one stops working immediately."""
+
+    pin: str = Field(min_length=4, max_length=6, pattern=r"^\d{4,6}$")
+
+
 class StaffOut(BaseModel):
     id: uuid.UUID
     name: str

@@ -95,6 +95,9 @@ class Business(Base):
     # M15-T4: the hour the business day starts. 0 = calendar day; 4 means a bill
     # settled at 00:15 belongs to the night before. Constrained 0..23 in the DDL.
     day_start_hour: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
+    # M15-T8: raised when the owner re-pairs. Every kiosk link and till session
+    # carries the generation it was issued under; an older one is refused.
+    pairing_generation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
 

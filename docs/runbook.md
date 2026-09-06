@@ -189,6 +189,68 @@ they held then.
 
 ---
 
+## Locked out: a lost tablet, a lost link, a forgotten PIN
+
+### Someone forgot their PIN, and there is a queue
+
+Dashboard → Pengaturan → Staf kasir → **ganti PIN** next to their name → type four digits →
+Simpan. The cashier goes back to the "siapa kamu" screen, picks their name and types the new PIN.
+The old PIN stops working immediately. Nothing they already rang up changes — a PIN is a key, not
+a name, and the sales stay under theirs.
+
+Your own PIN has the same button. Reset it the moment you notice, because it is also the PIN that
+approves a void or a refund, so forgetting it locks the till out of fixing mistakes as well as out
+of your own shifts. If you would rather not be the only one who can approve, appoint a manager
+(see "When the owner is not there").
+
+### The tablet is lost, stolen, or sold
+
+Do this from any phone or laptop you can sign in on. It takes one button.
+
+1. **Pengaturan → Layar kasir (POS) → "Tablet hilang? Putuskan perangkat lama & buat tautan
+   baru"** → confirm. Every old kiosk link stops working, and every till that is currently open —
+   including a good tablet still on the counter — is signed out on its next tap. That bluntness is
+   the point: you press this because a device is out of your hands.
+2. **Copy the new link** it gives you and open it once on the replacement device.
+3. The cashier picks their name and types their PIN. If they have forgotten it too, reset it
+   first (above).
+4. Sell something small to check, then carry on.
+
+Nothing that was already rung up is affected. The old tablet, wherever it is, now shows
+"Perangkat ini sudah tidak dipasangkan" and cannot see your menu, your staff names, or your
+takings — even though whoever has it still holds the old link.
+
+**Just showing the link again is safe.** The plain "Buat tautan kasir" button does not cut anyone
+off; use it when you are simply pairing a second device or reading the link out over the phone.
+Only the red one retires what exists.
+
+### How long the recovery takes — measured
+
+6 September 2026, development machine. The software's share of the whole drill — cut off, reset a
+PIN, open the link, sign in, load the menu, take the first sale — is **0.2 seconds**:
+
+| Step | |
+|---|---|
+| Cut the lost tablet off | 7 ms |
+| The lost tablet's session is dead on its next request | 2 ms |
+| Reset the forgotten PIN | 47 ms |
+| Replacement tablet opens the link | 4 ms |
+| Cashier signs in | 43 ms |
+| Menu loads | 5 ms |
+| First sale on the new device | 97 ms |
+| **Total** | **204 ms** |
+
+So the five minutes the plan allows is spent entirely on people and hardware: finding the
+replacement tablet, getting the link onto it, and typing a PIN. Copy the link into WhatsApp and
+open it there rather than retyping a long URL on a touchscreen — that one habit is most of the
+difference between one minute and five.
+
+**Re-time this on the café's own tablet before go-live**, once and with a stopwatch, and write the
+number here. The figures above are the server's work only; they say nothing about how long the
+café's WiFi and the café's tablet take.
+
+---
+
 ## Still to be written (M15-T9)
 
 - The internet is down

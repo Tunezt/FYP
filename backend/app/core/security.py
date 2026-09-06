@@ -45,7 +45,12 @@ def create_token(
     scope: str,
     staff_id: str | None = None,
     ttl_minutes: int | None = None,
+    generation: int = 1,
 ) -> str:
+    """`generation` (M15-T8) is the business's `pairing_generation` at the moment
+    of issue. Checked on every `pos` request, so re-pairing a lost tablet ends
+    the sessions it was holding rather than only stopping new logins. Default 1
+    matches a business that has never re-paired."""
     settings = get_settings()
     if ttl_minutes is None:
         ttl_minutes = (
@@ -56,6 +61,7 @@ def create_token(
         "sub": staff_id or business_id,
         "business_id": business_id,
         "scope": scope,
+        "gen": int(generation),
         "iat": now,
         "exp": now + timedelta(minutes=ttl_minutes),
     }
@@ -105,16 +111,22 @@ def create_menu_token(business_id: str) -> str:
     )
 
 
-def create_pairing_token(business_id: str) -> str:
+def create_pairing_token(business_id: str, generation: int = 1) -> str:
     """Long-lived token baked into the POS kiosk URL. Grants only the ability
     to list staff names and attempt PIN logins for one business — never data
-    access. Stateless by design (no revocation table needed at demo scale)."""
+    access.
+
+    It lives a year, so it needs a way to die early (M15-T8): the token carries
+    the business's `pairing_generation`, and re-pairing raises that counter,
+    which retires every link and session issued before it. No revocation table —
+    one integer compared against the business row that the caller already reads."""
     settings = get_settings()
     now = datetime.now(timezone.utc)
     return jwt.encode(
         {
             "business_id": business_id,
             "scope": "pos-pairing",
+            "gen": int(generation),
             "iat": now,
             "exp": now + timedelta(days=365),
         },

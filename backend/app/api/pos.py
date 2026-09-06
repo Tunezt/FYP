@@ -79,7 +79,13 @@ from app.services.velocity import check_low_stock_for_item
 router = APIRouter(prefix="/pos", tags=["pos"])
 
 
-def _pairing_business_id(pairing_token: str) -> uuid.UUID:
+STALE_PAIRING = "Perangkat ini sudah tidak dipasangkan — minta tautan kasir baru ke pemilik ya"
+
+
+def _pairing_claims(pairing_token: str) -> tuple[uuid.UUID, int]:
+    """(business_id, generation). The generation is checked against the business
+    row by `_live_business` — a signed token is not enough on its own once the
+    owner has re-paired (M15-T8)."""
     try:
         claims = decode_token(pairing_token)
     except pyjwt.PyJWTError:
@@ -88,17 +94,24 @@ def _pairing_business_id(pairing_token: str) -> uuid.UUID:
         )
     if claims.get("scope") != "pos-pairing":
         raise HTTPException(status_code=401, detail="Tautan kasir tidak dikenali")
-    return uuid.UUID(claims["business_id"])
+    return uuid.UUID(claims["business_id"]), int(claims.get("gen", 1))
+
+
+async def _live_business(session, business_id: uuid.UUID, generation: int) -> Business:
+    business = await session.get(Business, business_id)
+    if business is None:
+        raise HTTPException(status_code=404, detail="Usaha tidak ditemukan")
+    if int(business.pairing_generation) != generation:
+        raise HTTPException(status_code=401, detail=STALE_PAIRING)
+    return business
 
 
 @router.get("/business/{pairing_token}", response_model=PosBusinessOut)
 async def pos_business(pairing_token: str):
     """Kiosk boot: business name + active staff names for the 'who are you' screen."""
-    business_id = _pairing_business_id(pairing_token)
+    business_id, generation = _pairing_claims(pairing_token)
     async with tenant_session(business_id) as session:
-        business = await session.get(Business, business_id)
-        if business is None:
-            raise HTTPException(status_code=404, detail="Usaha tidak ditemukan")
+        business = await _live_business(session, business_id, generation)
         staff = (
             (
                 await session.execute(
@@ -116,15 +129,16 @@ async def pos_business(pairing_token: str):
 
 @router.post("/login", response_model=PosLoginOut)
 async def pos_login(payload: PosLoginIn):
-    business_id = _pairing_business_id(payload.pairing_token)
+    business_id, generation = _pairing_claims(payload.pairing_token)
     async with tenant_session(business_id) as session:
+        business = await _live_business(session, business_id, generation)
         staff = await session.get(Staff, payload.staff_id)
         if staff is None or not staff.is_active or not verify_pin(payload.pin, staff.pin_hash):
             # One message for both wrong-person and wrong-PIN: no oracle.
             raise HTTPException(status_code=401, detail="PIN salah — coba lagi")
-        business = await session.get(Business, business_id)
         token = create_token(
-            business_id=str(business_id), scope="pos", staff_id=str(staff.id)
+            business_id=str(business_id), scope="pos", staff_id=str(staff.id),
+            generation=business.pairing_generation,
         )
         return PosLoginOut(token=token, staff_name=staff.name, business_name=business.name)
 

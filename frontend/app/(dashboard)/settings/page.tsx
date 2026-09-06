@@ -76,6 +76,11 @@ export default function SettingsPage() {
   const [staffError, setStaffError] = useState<string | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
   const [pairingBusy, setPairingBusy] = useState(false);
+  // M15-T8: lockout recovery - cut a lost tablet off, reset a forgotten PIN.
+  const [confirmRepair, setConfirmRepair] = useState(false);
+  const [pinFor, setPinFor] = useState<StaffMember | null>(null);
+  const [pinDraft, setPinDraft] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
   // The QR e-menu (M11-T1): one link for every table, rendered as a QR to print.
   const [menuLink, setMenuLink] = useState<string | null>(null);
   const [menuQr, setMenuQr] = useState<string | null>(null);
@@ -234,6 +239,31 @@ export default function SettingsPage() {
       setPairing(`${window.location.origin}${res.pos_path}`);
     } finally {
       setPairingBusy(false);
+    }
+  }
+
+  /** M15-T8: the tablet is gone. Retires every old link and every open till
+   *  session, then hands back the link for the replacement device. */
+  async function repairDevices() {
+    setPairingBusy(true);
+    try {
+      const res = await mutate<{ pos_path: string }>("/auth/pos-pairing/reset");
+      setPairing(`${window.location.origin}${res.pos_path}`);
+      setConfirmRepair(false);
+    } finally {
+      setPairingBusy(false);
+    }
+  }
+
+  async function resetPin() {
+    if (!pinFor) return;
+    setPinBusy(true);
+    try {
+      await mutate(`/auth/staff/${pinFor.id}/pin`, { pin: pinDraft });
+      setPinFor(null);
+      setPinDraft("");
+    } finally {
+      setPinBusy(false);
     }
   }
 
@@ -569,6 +599,17 @@ export default function SettingsPage() {
                     {!member.is_active && " · nonaktif"}
                   </p>
                 </div>
+                {member.role === "owner" && (
+                  <button
+                    onClick={() => {
+                      setPinDraft("");
+                      setPinFor(member);
+                    }}
+                    className="ink-faint shrink-0 text-xs hover:text-[color:var(--ink)]"
+                  >
+                    ganti PIN
+                  </button>
+                )}
                 {member.role !== "owner" && member.is_active && (
                   <div className="flex shrink-0 items-center gap-3">
                     <button
@@ -583,6 +624,15 @@ export default function SettingsPage() {
                       className="ink-faint text-xs hover:text-[color:var(--ink)]"
                     >
                       {member.role === "manager" ? "cabut manajer" : "jadikan manajer"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPinDraft("");
+                        setPinFor(member);
+                      }}
+                      className="ink-faint text-xs hover:text-[color:var(--ink)]"
+                    >
+                      ganti PIN
                     </button>
                     <button
                       onClick={async () => {
@@ -626,6 +676,41 @@ export default function SettingsPage() {
               {pairingBusy ? "Membuat…" : "Buat tautan kasir"}
             </button>
           )}
+
+          {/* M15-T8 — the tablet is lost, stolen, or wiped */}
+          <div className="hairline-t pt-3">
+            {confirmRepair ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Putuskan semua perangkat?</p>
+                <p className="ink-soft text-xs">
+                  Semua tautan kasir lama berhenti berlaku, dan kasir yang sedang terbuka — termasuk
+                  tablet yang masih bagus — langsung keluar. Pakai ini kalau tablet hilang atau
+                  dicuri. Setelah itu buka tautan baru di perangkat pengganti, kasir tinggal masuk
+                  lagi dengan PIN. Transaksi yang sudah tercatat tidak berubah.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={repairDevices}
+                    disabled={pairingBusy}
+                    className="rounded-2xl px-4 py-2 text-sm font-semibold"
+                    style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+                  >
+                    {pairingBusy ? "Memutuskan…" : "Ya, putuskan semua"}
+                  </button>
+                  <button onClick={() => setConfirmRepair(false)} className="btn-quiet px-4 py-2 text-sm">
+                    Batal
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmRepair(true)}
+                className="ink-faint text-xs hover:text-[color:var(--bad)]"
+              >
+                Tablet hilang? Putuskan perangkat lama &amp; buat tautan baru
+              </button>
+            )}
+          </div>
         </Plate>
       </section>
 
@@ -751,6 +836,33 @@ export default function SettingsPage() {
           </p>
         )}
       </section>
+
+      <Sheet open={pinFor !== null} onClose={() => setPinFor(null)} title={`Ganti PIN ${pinFor?.name ?? ""}`}>
+        <div className="space-y-3">
+          <p className="ink-soft text-sm">
+            PIN lama langsung berhenti berlaku. Yang sudah tercatat atas nama {pinFor?.name} tidak
+            berubah — PIN cuma kunci, bukan identitas.
+          </p>
+          <label className="block">
+            <span className="ink-soft mb-1.5 block text-xs font-medium">PIN baru (4 angka)</span>
+            <input
+              className="field tabular-nums"
+              inputMode="numeric"
+              maxLength={4}
+              value={pinDraft}
+              onChange={(e) => setPinDraft(e.target.value.replace(/\D/g, ""))}
+              placeholder="••••"
+            />
+          </label>
+          <button
+            onClick={resetPin}
+            disabled={pinBusy || pinDraft.length !== 4}
+            className="btn-accent w-full py-3.5"
+          >
+            {pinBusy ? "Menyimpan…" : "Simpan PIN baru"}
+          </button>
+        </div>
+      </Sheet>
 
       <Sheet open={staffSheet} onClose={() => setStaffSheet(false)} title="Staf baru">
         <div className="space-y-3">

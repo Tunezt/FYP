@@ -14,8 +14,14 @@ import jwt as pyjwt
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from app.core.db import SessionLocal, set_tenant
 from app.core.security import decode_token
+
+# M15-T8: what a till is told when its device has been cut off. The same words
+# as the kiosk's pairing screen, because it is the same situation.
+STALE_DEVICE = "Perangkat ini sudah tidak dipasangkan — minta tautan kasir baru ke pemilik ya"
 
 
 @dataclass
@@ -53,6 +59,16 @@ async def _ctx(request: Request, required_scope: str) -> AsyncIterator[AuthConte
     request.state.business_id = business_id
     async with SessionLocal() as session:
         await set_tenant(session, business_id)
+        if required_scope == "pos":
+            # Re-pairing a lost tablet must end the sessions it was holding, not
+            # only stop new logins (M15-T8). One indexed read per till request.
+            from app.models import Business
+
+            current = (
+                await session.execute(select(Business.pairing_generation).where(Business.id == business_id))
+            ).scalar_one_or_none()
+            if current is None or int(current) != int(claims.get("gen", 1)):
+                raise HTTPException(status_code=401, detail=STALE_DEVICE)
         try:
             yield AuthContext(
                 business_id=business_id, scope=required_scope, staff_id=staff_id, session=session

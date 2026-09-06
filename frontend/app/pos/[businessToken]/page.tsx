@@ -185,7 +185,13 @@ export default function PosPage() {
         localStorage.setItem(POS_TOKEN_KEY, res.token);
         setPosToken(res.token);
         setScreen({ kind: "sell", staffName: res.staff_name, businessName: res.business_name });
-      } catch {
+      } catch (e: unknown) {
+        if (e instanceof ApiError && e.status === 401 && e.detail.startsWith("Perangkat ini")) {
+          // Re-paired while this kiosk was open (M15-T8): no PIN will work here
+          // again, so stop shaking the pad and say so.
+          setScreen({ kind: "error", message: e.detail });
+          return;
+        }
         setScreen({ kind: "pin", business, staff, pin: "", shake: true });
         setTimeout(
           () =>
@@ -284,7 +290,15 @@ export default function PosPage() {
         setPosToken(null);
         api<PosBusiness>(`/pos/business/${pairingToken}`)
           .then((business) => setScreen({ kind: "pick-staff", business }))
-          .catch(() => setScreen({ kind: "error", message: "Koneksi terputus." }));
+          .catch((e: unknown) =>
+            // A device the owner has re-paired (M15-T8) answers with its own
+            // message; showing "Koneksi terputus" would send staff to check
+            // the WiFi for something the WiFi cannot fix.
+            setScreen({
+              kind: "error",
+              message: e instanceof ApiError ? e.detail : "Koneksi terputus.",
+            })
+          );
       }}
     />
   );
