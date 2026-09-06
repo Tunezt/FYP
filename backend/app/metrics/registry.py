@@ -22,6 +22,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Any, Awaitable, Callable
 
@@ -163,6 +164,46 @@ def resolve_window(
     if until <= since:
         raise MetricArgumentInvalid("range", "until must be after since")
     return since, until, None, ""
+
+
+def local_day_windows(business: Business, days: int, *, now: datetime | None = None) -> list[tuple[str, datetime, datetime]]:
+    """The last `days` business-local calendar days, oldest first, as
+    (YYYY-MM-DD, since_utc, until_utc)."""
+    from datetime import timedelta
+
+    today_start, today_end, _ = period_range("today", business.timezone, now=now)
+    out = []
+    for offset in range(days - 1, -1, -1):
+        start, end = today_start - timedelta(days=offset), today_end - timedelta(days=offset)
+        out.append((start.astimezone(ZoneInfo(business.timezone)).date().isoformat(), start, end))
+    return out
+
+
+def local_month_windows(business: Business, months: int, *, now: datetime | None = None) -> list[tuple[str, datetime, datetime]]:
+    """The last `months` business-local calendar months, oldest first, as
+    (YYYY-MM, since_utc, until_utc)."""
+    from datetime import timedelta
+
+    tz = ZoneInfo(business.timezone)
+    this_start, this_end, _ = period_range("this_month", business.timezone, now=now)
+    starts = [this_start.astimezone(tz)]
+    for _ in range(months - 1):
+        prev = (starts[0] - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        starts.insert(0, prev)
+    out = []
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else this_end.astimezone(tz)
+        out.append((start.strftime("%Y-%m"), start.astimezone(timezone.utc), end.astimezone(timezone.utc)))
+    return out
+
+
+async def series(
+    session: AsyncSession, business: Business, name: str, windows: list[tuple[str, datetime, datetime]], **kw,
+) -> list[tuple[str, MetricResult]]:
+    """One metric over many windows — the dashboard's charts. The same
+    implementation as a single `compute`, so a bar and a WhatsApp answer for
+    the same day are the same number."""
+    return [(key, await compute(session, business, name, since=since, until=until, **kw)) for key, since, until in windows]
 
 
 async def compute(

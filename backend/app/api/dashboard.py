@@ -1,6 +1,10 @@
 """Owner dashboard API — every route requires scope="owner" (OwnerCtx), every
-query runs in the tenant-pinned session. Aggregations are single grouped
-queries (no per-row loops against the DB); list views are paginated.
+query runs in the tenant-pinned session. List views are paginated.
+
+Since M9-T3 every *figure* on the dashboard — overview tiles, the sales trend,
+the monthly P&L chart, stock velocity — comes from the metric registry
+(app/metrics), the same implementation the WhatsApp assistant reads. The
+endpoints here shape the result for a widget; they do not compute it.
 """
 import asyncio
 import io
@@ -91,7 +95,6 @@ from app.schemas.dashboard import (
     PostingRuleUpdateIn,
 )
 from app.schemas.auth import BusinessOut
-from app.services.velocity import VELOCITY_WINDOW_DAYS
 from app.whatsapp.storage import create_signed_url
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -112,94 +115,48 @@ async def _business(ctx) -> Business:
 @router.get("/overview", response_model=OverviewOut)
 async def overview(ctx: OwnerCtx):
     business = await _business(ctx)
-    today_start, today_end, _ = period_range("today", business.timezone)
-    y_start, y_end, _ = period_range("yesterday", business.timezone)
-    m_start, m_end, _ = period_range("this_month", business.timezone)
+    from app.metrics import compute
 
-    today_revenue, today_tx = (
-        await ctx.session.execute(
-            select(func.coalesce(func.sum(Sale.total_price), 0), func.count(Sale.id)).where(
-                Sale.sold_at >= today_start, Sale.sold_at < today_end
-            )
-        )
-    ).one()
-    yesterday_revenue = (
-        await ctx.session.execute(
-            select(func.coalesce(func.sum(Sale.total_price), 0)).where(
-                Sale.sold_at >= y_start, Sale.sold_at < y_end
-            )
-        )
-    ).scalar_one()
-    month_revenue = (
-        await ctx.session.execute(
-            select(func.coalesce(func.sum(Sale.total_price), 0)).where(
-                Sale.sold_at >= m_start, Sale.sold_at < m_end
-            )
-        )
-    ).scalar_one()
-    month_expenses = (
-        await ctx.session.execute(
-            select(func.coalesce(func.sum(Expense.amount), 0)).where(
-                Expense.occurred_at >= m_start, Expense.occurred_at < m_end
-            )
-        )
-    ).scalar_one()
+    today_revenue = await compute(ctx.session, business, "revenue", period="today")
+    today_tx = await compute(ctx.session, business, "transaction_count", period="today")
+    yesterday_revenue = await compute(ctx.session, business, "revenue", period="yesterday")
+    month_revenue = await compute(ctx.session, business, "revenue", period="this_month")
+    month_expenses = await compute(ctx.session, business, "expense_total", period="this_month")
+    stock = await compute(ctx.session, business, "stock_on_hand")
     unacked = (
         await ctx.session.execute(
             select(func.count(Alert.id)).where(Alert.is_acknowledged.is_(False))
         )
     ).scalar_one()
-    low_stock = (
-        await ctx.session.execute(
-            select(func.count(Item.id)).where(Item.current_stock <= Item.reorder_threshold)
-        )
-    ).scalar_one()
 
     return OverviewOut(
         business_name=business.name,
-        today_revenue=float(today_revenue),
-        today_transactions=int(today_tx),
-        yesterday_revenue=float(yesterday_revenue),
-        month_revenue=float(month_revenue),
-        month_expenses=float(month_expenses),
-        month_net=float(month_revenue) - float(month_expenses),
+        today_revenue=float(today_revenue.value or 0),
+        today_transactions=int(today_tx.value or 0),
+        yesterday_revenue=float(yesterday_revenue.value or 0),
+        month_revenue=float(month_revenue.value or 0),
+        month_expenses=float(month_expenses.value or 0),
+        month_net=float(month_revenue.value or 0) - float(month_expenses.value or 0),
         unacknowledged_alerts=int(unacked),
-        low_stock_items=int(low_stock),
+        low_stock_items=sum(1 for r in stock.rows if r["below_reorder_threshold"]),
         onboarding_completed=business.onboarding_completed_at is not None,
     )
 
 
 @router.get("/sales-trend", response_model=list[TrendPoint])
 async def sales_trend(ctx: OwnerCtx, days: int = Query(default=30, ge=1, le=365)):
+    """Revenue and order count per business-local day, dense (zero-filled so
+    charts do not skip quiet days), each day the registry's own number."""
     business = await _business(ctx)
-    tz = ZoneInfo(business.timezone)
-    since_utc, _, _ = period_range("today", business.timezone)
-    since_utc -= timedelta(days=days - 1)
+    from app.metrics import local_day_windows, series
 
-    # One grouped query: bucket by business-local calendar day.
-    local_day = func.date(func.timezone(business.timezone, Sale.sold_at))
-    rows = (
-        await ctx.session.execute(
-            select(
-                local_day.label("day"),
-                func.sum(Sale.total_price),
-                func.count(Sale.id),
-            )
-            .where(Sale.sold_at >= since_utc)
-            .group_by(local_day)
-            .order_by(local_day)
-        )
-    ).all()
-    by_day = {str(day): (float(rev), int(tx)) for day, rev, tx in rows}
-
-    # Dense series (zero-filled) so charts don't skip quiet days.
-    start_local = datetime.now(tz).date() - timedelta(days=days - 1)
-    series: list[TrendPoint] = []
-    for offset in range(days):
-        d = start_local + timedelta(days=offset)
-        revenue, tx = by_day.get(d.isoformat(), (0.0, 0))
-        series.append(TrendPoint(date=d.isoformat(), revenue=revenue, transactions=tx))
-    return series
+    windows = local_day_windows(business, days)
+    revenue = await series(ctx.session, business, "revenue", windows)
+    orders = await series(ctx.session, business, "transaction_count", windows)
+    return [
+        TrendPoint(date=key, revenue=float(r.value or 0), transactions=int(o.value or 0))
+        for (key, r), (_k, o) in zip(revenue, orders)
+    ]
 
 
 @router.get("/sales", response_model=SalesPage)
@@ -240,23 +197,18 @@ async def sales_history(
 
 @router.get("/items", response_model=list[InventoryItem])
 async def inventory(ctx: OwnerCtx):
+    """Every item with the registry's stock velocity (one grouped query inside
+    `stock_days_remaining`); prices come from the item row."""
+    business = await _business(ctx)
+    from app.metrics import compute
+
+    reading = await compute(ctx.session, business, "stock_days_remaining")
+    by_id = {r["item_id"]: r for r in reading.rows}
     items = (await ctx.session.execute(select(Item).order_by(Item.name))).scalars().all()
-
-    # Velocity for ALL items in one grouped query (no N+1).
-    since = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
-    usage_rows = (
-        await ctx.session.execute(
-            select(Sale.item_id, func.sum(Sale.quantity))
-            .where(Sale.sold_at >= since)
-            .group_by(Sale.item_id)
-        )
-    ).all()
-    usage = {item_id: Decimal(qty) for item_id, qty in usage_rows}
-
     out: list[InventoryItem] = []
     for item in items:
-        daily = usage.get(item.id, Decimal(0)) / VELOCITY_WINDOW_DAYS
-        days_remaining = float(item.current_stock / daily) if daily > 0 else None
+        r = by_id.get(item.id, {})
+        daily = r.get("daily_usage") or 0.0
         out.append(
             InventoryItem(
                 id=item.id,
@@ -266,9 +218,9 @@ async def inventory(ctx: OwnerCtx):
                 cost_price=item.cost_price,
                 sell_price=item.sell_price,
                 reorder_threshold=item.reorder_threshold,
-                avg_daily_usage=round(float(daily), 3) if daily > 0 else None,
-                days_remaining=round(days_remaining, 1) if days_remaining is not None else None,
-                below_reorder_threshold=item.current_stock <= item.reorder_threshold,
+                avg_daily_usage=round(daily, 3) if daily > 0 else None,
+                days_remaining=r.get("days_remaining"),
+                below_reorder_threshold=bool(r.get("below_reorder_threshold", item.current_stock <= item.reorder_threshold)),
             )
         )
     return out
@@ -1047,45 +999,19 @@ async def expenses(
 
 @router.get("/pnl", response_model=list[PnlMonth])
 async def pnl(ctx: OwnerCtx, months: int = Query(default=6, ge=1, le=12)):
+    """Revenue and recorded expenses per business-local month, each the
+    registry's own number; `net` is their difference (the operating view the
+    money page has always shown — the accounting P&L is /api/statements)."""
     business = await _business(ctx)
-    month_start, _, _ = period_range("this_month", business.timezone)
-    tz = ZoneInfo(business.timezone)
+    from app.metrics import local_month_windows, series
 
-    # First fencepost: (months-1) months before this month's start, local.
-    first_local = month_start.astimezone(tz)
-    for _ in range(months - 1):
-        first_local = (first_local - timedelta(days=1)).replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0
-        )
-    since = first_local.astimezone(timezone.utc)
-
-    sale_month = func.to_char(func.timezone(business.timezone, Sale.sold_at), "YYYY-MM")
-    expense_month = func.to_char(func.timezone(business.timezone, Expense.occurred_at), "YYYY-MM")
-
-    # Two grouped queries on one session (a single AsyncSession is one DB
-    # connection — queries on it are inherently sequential).
-    revenue_rows = await ctx.session.execute(
-        select(sale_month.label("m"), func.sum(Sale.total_price))
-        .where(Sale.sold_at >= since)
-        .group_by("m")
-    )
-    expense_rows = await ctx.session.execute(
-        select(expense_month.label("m"), func.sum(Expense.amount))
-        .where(Expense.occurred_at >= since)
-        .group_by("m")
-    )
-    revenue_by_month = {m: float(v) for m, v in revenue_rows.all()}
-    expenses_by_month = {m: float(v) for m, v in expense_rows.all()}
-
-    series: list[PnlMonth] = []
-    cursor = first_local
-    for _ in range(months):
-        key = cursor.strftime("%Y-%m")
-        revenue = revenue_by_month.get(key, 0.0)
-        spend = expenses_by_month.get(key, 0.0)
-        series.append(PnlMonth(month=key, revenue=revenue, expenses=spend, net=revenue - spend))
-        cursor = (cursor + timedelta(days=32)).replace(day=1)
-    return series
+    windows = local_month_windows(business, months)
+    revenue = await series(ctx.session, business, "revenue", windows)
+    spend = await series(ctx.session, business, "expense_total", windows)
+    return [
+        PnlMonth(month=key, revenue=float(r.value or 0), expenses=float(e.value or 0), net=float(r.value or 0) - float(e.value or 0))
+        for (key, r), (_k, e) in zip(revenue, spend)
+    ]
 
 
 @router.get("/alerts", response_model=list[AlertRow])

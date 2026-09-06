@@ -12,6 +12,9 @@ from app.metrics.registry import (  # noqa: F401
     compute,
     get_metric,
     list_metrics,
+    local_day_windows,
+    local_month_windows,
     metric,
+    series,
 )
 from app.metrics import catalogue  # noqa: E402,F401  (registers the standard metrics)
