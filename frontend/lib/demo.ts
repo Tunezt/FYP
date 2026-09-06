@@ -18,6 +18,7 @@ import type {
   CustomerRow,
   ExpenseRow,
   InventoryItem,
+  LoyaltySettings,
   Overview,
   Page,
   PnlMonth,
@@ -482,11 +483,13 @@ const PRICING: PricingSettings = {
 };
 
 const CUSTOMERS: CustomerRow[] = [
-  { id: "demo-cust-1", name: "Andi Wijaya", phone: "6281234567890", address: "Jl. Melati 3", birthday: "1990-05-17", notes: "suka kopi susu, gula sedikit", is_active: true, visits: 14, total_spent: "412000", last_visit: jktIso(0, 9), created_at: jktIso(80, 10) },
-  { id: "demo-cust-2", name: "Rina Kartika", phone: "6281322223333", address: null, birthday: null, notes: null, is_active: true, visits: 6, total_spent: "168000", last_visit: jktIso(2, 16), created_at: jktIso(40, 12) },
-  { id: "demo-cust-3", name: "Pak Budi (kantor sebelah)", phone: "6281200001111", address: "Ruko Sentra 12", birthday: "1978-11-02", notes: "pesan rame-rame tiap Jumat", is_active: true, visits: 9, total_spent: "945000", last_visit: jktIso(4, 12), created_at: jktIso(60, 9) },
-  { id: "demo-cust-4", name: "Ibu tanpa nomor", phone: null, address: null, birthday: null, notes: null, is_active: true, visits: 1, total_spent: "22000", last_visit: jktIso(9, 8), created_at: jktIso(9, 8) },
+  { id: "demo-cust-1", name: "Andi Wijaya", phone: "6281234567890", address: "Jl. Melati 3", birthday: "1990-05-17", notes: "suka kopi susu, gula sedikit", is_active: true, visits: 14, total_spent: "412000", points_balance: 312, last_visit: jktIso(0, 9), created_at: jktIso(80, 10) },
+  { id: "demo-cust-2", name: "Rina Kartika", phone: "6281322223333", address: null, birthday: null, notes: null, is_active: true, visits: 6, total_spent: "168000", points_balance: 48, last_visit: jktIso(2, 16), created_at: jktIso(40, 12) },
+  { id: "demo-cust-3", name: "Pak Budi (kantor sebelah)", phone: "6281200001111", address: "Ruko Sentra 12", birthday: "1978-11-02", notes: "pesan rame-rame tiap Jumat", is_active: true, visits: 9, total_spent: "945000", points_balance: 905, last_visit: jktIso(4, 12), created_at: jktIso(60, 9) },
+  { id: "demo-cust-4", name: "Ibu tanpa nomor", phone: null, address: null, birthday: null, notes: null, is_active: true, visits: 1, total_spent: "22000", points_balance: 0, last_visit: jktIso(9, 8), created_at: jktIso(9, 8) },
 ];
+
+const LOYALTY: LoyaltySettings = { is_active: true, rupiah_per_point: "1000.00", point_value: "100.00", min_redeem_points: 10 };
 
 function paginate<T>(rows: T[], page: number, pageSize: number, inflateTotal = 0): Page<T> {
   const start = (page - 1) * pageSize;
@@ -521,6 +524,8 @@ export function demoData(path: string): unknown {
     return paginate(RECEIPTS, num("page", 1), num("page_size", 6));
   }
   if (pathname === "/api/pricing-settings") return PRICING;
+  if (pathname === "/api/loyalty-settings") return LOYALTY;
+  if (/^\/api\/customers\/[^/]+\/points$/.test(pathname)) return [];
   if (pathname === "/api/customers") {
     const q = (params.get("q") ?? "").toLowerCase();
     const rows = CUSTOMERS.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.phone ?? "").includes(q.replace(/\D/g, "")));

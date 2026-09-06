@@ -729,6 +729,7 @@ Add a row here before adding the code.
 | `ShiftClosed` | none | Dr or Cr cash variance |
 | `PointsEarned` | none | Dr marketing expense · Cr points liability |
 | `PointsRedeemed` | none | Dr points liability · Cr revenue |
+| `PointsReversed` | none | Dr points liability · Cr marketing expense (a void/refund takes back earned points; M8-T2) |
 
 ---
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
-import type { Business, PricingSettings, StaffMember } from "@/lib/types";
+import type { Business, LoyaltySettings, PricingSettings, StaffMember } from "@/lib/types";
 import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
@@ -35,10 +35,22 @@ function toForm(p: PricingSettings | null | undefined): PricingForm {
   };
 }
 
+type LoyaltyForm = { is_active: boolean; rupiah_per_point: string; point_value: string; min_redeem_points: string };
+
+function toLoyaltyForm(l: LoyaltySettings | null | undefined): LoyaltyForm {
+  return {
+    is_active: l?.is_active ?? false,
+    rupiah_per_point: String(Math.round(Number(l?.rupiah_per_point ?? 1000))),
+    point_value: String(Math.round(Number(l?.point_value ?? 100))),
+    min_redeem_points: String(l?.min_redeem_points ?? 0),
+  };
+}
+
 export default function SettingsPage() {
   const business = useOwnerData<Business>("/api/business");
   const staff = useOwnerData<StaffMember[]>("/auth/staff");
   const pricing = useOwnerData<PricingSettings>("/api/pricing-settings");
+  const loyalty = useOwnerData<LoyaltySettings>("/api/loyalty-settings");
   const mutate = useOwnerMutation();
 
   const [profileDraft, setProfileDraft] = useState<{ name: string; business_type: string } | null>(null);
@@ -55,6 +67,10 @@ export default function SettingsPage() {
   const [pricingDraft, setPricingDraft] = useState<PricingForm | null>(null);
   const [pricingBusy, setPricingBusy] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
+  // Points programme (M8-T2).
+  const [loyaltyDraft, setLoyaltyDraft] = useState<LoyaltyForm | null>(null);
+  const [loyaltyBusy, setLoyaltyBusy] = useState(false);
+  const [loyaltyError, setLoyaltyError] = useState<string | null>(null);
 
   async function importCatalog(file: File) {
     setImportBusy(true);
@@ -88,6 +104,32 @@ export default function SettingsPage() {
   const b = business.data;
   const draft = profileDraft ?? { name: b?.name ?? "", business_type: b?.business_type ?? "cafe" };
   const pricingForm: PricingForm = pricingDraft ?? toForm(pricing.data);
+  const loyaltyForm: LoyaltyForm = loyaltyDraft ?? toLoyaltyForm(loyalty.data);
+
+  async function saveLoyalty() {
+    setLoyaltyBusy(true);
+    setLoyaltyError(null);
+    try {
+      const per = Number(loyaltyForm.rupiah_per_point);
+      const value = Number(loyaltyForm.point_value);
+      const min = Number(loyaltyForm.min_redeem_points);
+      if (!(per > 0) || !(value >= 0) || !(min >= 0)) {
+        setLoyaltyError("Rupiah per poin harus lebih dari nol; nilai poin dan minimal tukar tidak boleh negatif.");
+        return;
+      }
+      await mutate(
+        "/api/loyalty-settings",
+        { is_active: loyaltyForm.is_active, rupiah_per_point: per.toFixed(2), point_value: value.toFixed(2), min_redeem_points: Math.round(min) },
+        "PATCH",
+      );
+      setLoyaltyDraft(null);
+      loyalty.reload();
+    } catch {
+      setLoyaltyError("Gagal menyimpan — coba lagi.");
+    } finally {
+      setLoyaltyBusy(false);
+    }
+  }
 
   async function savePricing() {
     setPricingBusy(true);
@@ -315,6 +357,75 @@ export default function SettingsPage() {
             {pricingDraft && (
               <button onClick={savePricing} disabled={pricingBusy} className="btn-accent px-5 py-2.5 text-sm">
                 {pricingBusy ? "Menyimpan…" : "Simpan perubahan"}
+              </button>
+            )}
+          </Plate>
+        )}
+      </section>
+
+      {/* Points programme (M8-T2) */}
+      <section>
+        <h2 className="mb-2 flex items-center gap-2 text-base font-bold">
+          Program poin
+          <HelpTip title="Cara poin bekerja">
+            Pelanggan yang dikaitkan di kasir dapat poin dari bagian yang dibayar uang (bukan dari poin).
+            Poin bisa dipakai bayar di kasir senilai &ldquo;nilai satu poin&rdquo;. Biaya poin masuk
+            pembukuan sebagai beban pemasaran dan liabilitas poin, jadi laporan tetap jujur.
+          </HelpTip>
+        </h2>
+        {loyalty.loading ? (
+          <Skeleton className="h-40" />
+        ) : (
+          <Plate className="space-y-4 px-6 py-5">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={loyaltyForm.is_active}
+                onChange={(e) => setLoyaltyDraft({ ...loyaltyForm, is_active: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium">Aktifkan program poin</span>
+                <span className="ink-faint block text-xs">Mati: tidak ada poin baru dan poin tidak bisa dipakai bayar.</span>
+              </span>
+            </label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Belanja per 1 poin (Rp)</span>
+                <input
+                  className="field"
+                  inputMode="numeric"
+                  value={loyaltyForm.rupiah_per_point}
+                  onChange={(e) => setLoyaltyDraft({ ...loyaltyForm, rupiah_per_point: e.target.value.replace(/[^0-9]/g, "") })}
+                />
+              </label>
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Nilai 1 poin saat dipakai (Rp)</span>
+                <input
+                  className="field"
+                  inputMode="numeric"
+                  value={loyaltyForm.point_value}
+                  onChange={(e) => setLoyaltyDraft({ ...loyaltyForm, point_value: e.target.value.replace(/[^0-9]/g, "") })}
+                />
+              </label>
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Minimal tukar (poin)</span>
+                <input
+                  className="field"
+                  inputMode="numeric"
+                  value={loyaltyForm.min_redeem_points}
+                  onChange={(e) => setLoyaltyDraft({ ...loyaltyForm, min_redeem_points: e.target.value.replace(/[^0-9]/g, "") })}
+                />
+              </label>
+            </div>
+            <p className="ink-faint text-xs">
+              Contoh: belanja Rp {Number(loyaltyForm.rupiah_per_point || 0).toLocaleString("id-ID")} = 1 poin; 100 poin = Rp{" "}
+              {(100 * Number(loyaltyForm.point_value || 0)).toLocaleString("id-ID")} potongan.
+            </p>
+            {loyaltyError && <p className="text-sm text-red-600">{loyaltyError}</p>}
+            {loyaltyDraft && (
+              <button onClick={saveLoyalty} disabled={loyaltyBusy} className="btn-accent px-5 py-2.5 text-sm">
+                {loyaltyBusy ? "Menyimpan…" : "Simpan perubahan"}
               </button>
             )}
           </Plate>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import { dayLabel } from "@/lib/dates";
-import type { Business, CustomerRow, Page } from "@/lib/types";
+import type { Business, CustomerRow, Page, PointsMovementRow } from "@/lib/types";
 import { EmptyState, ErrorState, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
@@ -35,6 +35,27 @@ export default function CustomersPage() {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Points (M8-T2): history of the customer being edited, and a manual adjustment.
+  const editingId = editing && editing !== "new" ? editing.id : null;
+  const history = useOwnerData<PointsMovementRow[]>(editingId ? `/api/customers/${editingId}/points?limit=20` : null);
+  const [adjust, setAdjust] = useState({ delta: "", notes: "" });
+  const [adjustBusy, setAdjustBusy] = useState(false);
+
+  async function saveAdjust() {
+    if (!editingId || !Number(adjust.delta)) return;
+    setAdjustBusy(true);
+    setError(null);
+    try {
+      await mutate(`/api/customers/${editingId}/points/adjust`, { points_delta: Number(adjust.delta), notes: adjust.notes.trim() || null });
+      setAdjust({ delta: "", notes: "" });
+      history.reload();
+      customers.reload();
+    } catch (e: unknown) {
+      setError(e instanceof Error && "detail" in e ? String((e as { detail: string }).detail) : "Gagal menyimpan poin.");
+    } finally {
+      setAdjustBusy(false);
+    }
+  }
 
   function open(c: CustomerRow | "new") {
     setEditing(c);
@@ -148,7 +169,13 @@ export default function CustomersPage() {
                       Ubah
                     </button>
                   </div>
-                  <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <dl className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                    <div>
+                      <dt className="ink-faint">Poin</dt>
+                      <dd className="font-semibold tabular-nums" style={c.points_balance < 0 ? { color: "var(--bad)" } : undefined}>
+                        {c.points_balance}
+                      </dd>
+                    </div>
                     <div>
                       <dt className="ink-faint">Kunjungan</dt>
                       <dd className="font-semibold tabular-nums">{c.visits}×</dd>
@@ -219,6 +246,47 @@ export default function CustomersPage() {
               <span className="ink-soft mb-1.5 block text-xs font-medium">Catatan</span>
               <input className="field" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
             </label>
+            {editingId && (
+              <div className="hairline-t pt-3">
+                <p className="text-sm font-semibold">
+                  Poin: <span className="tabular-nums">{editing !== "new" ? editing.points_balance : 0}</span>
+                </p>
+                <div className="mt-2 grid grid-cols-[6rem_1fr_auto] gap-2">
+                  <input
+                    className="field"
+                    inputMode="numeric"
+                    placeholder="+10 / -5"
+                    value={adjust.delta}
+                    onChange={(e) => setAdjust({ ...adjust, delta: e.target.value.replace(/[^0-9-]/g, "") })}
+                  />
+                  <input
+                    className="field"
+                    placeholder="Alasan (mis. kompensasi)"
+                    value={adjust.notes}
+                    onChange={(e) => setAdjust({ ...adjust, notes: e.target.value })}
+                  />
+                  <button onClick={saveAdjust} disabled={adjustBusy || !Number(adjust.delta)} className="btn-quiet px-3 text-sm disabled:opacity-40">
+                    Sesuaikan
+                  </button>
+                </div>
+                {history.data && history.data.length > 0 && (
+                  <ul className="mt-2 max-h-40 space-y-1 overflow-auto text-xs">
+                    {history.data.map((m) => (
+                      <li key={m.id} className="flex justify-between gap-2">
+                        <span className="ink-soft truncate">
+                          {{ earn: "dapat", redeem: "dipakai", adjust: "penyesuaian", reversal: "dibatalkan", expire: "kedaluwarsa" }[m.reason]}
+                          {m.notes ? ` — ${m.notes}` : ""} · {dayLabel(new Date(m.created_at), tz)}
+                        </span>
+                        <span className={`shrink-0 tabular-nums ${m.points_delta < 0 ? "" : "font-semibold"}`}>
+                          {m.points_delta > 0 ? "+" : ""}
+                          {m.points_delta}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex items-center gap-2 pt-1">
               <button onClick={save} disabled={busy} className="btn-accent px-5 py-2.5 text-sm">

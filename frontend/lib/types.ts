@@ -146,5 +146,25 @@ export type CustomerRow = {
   visits: number;
   total_spent: string;
   last_visit: string | null;
+  points_balance: number;
+  created_at: string;
+};
+
+// Points programme (M8-T2).
+export type LoyaltySettings = {
+  is_active: boolean;
+  rupiah_per_point: string;
+  point_value: string;
+  min_redeem_points: number;
+};
+
+export type PointsMovementRow = {
+  id: string;
+  points_delta: number;
+  reason: "earn" | "redeem" | "adjust" | "reversal" | "expire";
+  source_type: string | null;
+  source_id: string | null;
+  amount: string;
+  notes: string | null;
   created_at: string;
 };

@@ -29,7 +29,9 @@ from app.services.catalog import (
 )
 from app.services.accounts import ensure_standard_chart
 from app.services.posting_rules import ensure_standard_rules
+from app.services.points import award_points_for_order, ensure_loyalty_settings
 from app.services.pricing import ensure_pricing_settings
+from app.services.customers import create_customer
 from app.services.shifts import post_variance
 from app.services.stock import record_movement
 from app.services.suppliers import create_supplier
@@ -136,6 +138,13 @@ async def seed() -> None:
         await ensure_standard_chart(session, business_id)  # M6-T1
         await ensure_standard_rules(session, business_id)  # M6-T3
         await ensure_pricing_settings(session, business_id)  # M7-T4
+        loyalty = await ensure_loyalty_settings(session, business_id)  # M8-T2: on, 1 poin / Rp 1.000, poin = Rp 100
+        loyalty.is_active, loyalty.rupiah_per_point, loyalty.point_value, loyalty.min_redeem_points = True, Decimal(1000), Decimal(100), 10
+        await session.flush()
+        # Customers (M8-T1): two regulars; their history orders below earn points (M8-T2).
+        andi = await create_customer(session, business_id, name="Andi Wijaya", phone="0812-3456-7890", address="Jl. Melati 3", notes="suka kopi susu, gula sedikit")
+        rina = await create_customer(session, business_id, name="Rina Kartika", phone="0813-2222-3333")
+        regulars = [andi, andi, andi, rina]  # Andi comes three times as often
         for sname, sphone, saddress in SUPPLIERS:  # M5-T1
             await create_supplier(session, business_id, name=sname, phone=sphone, address=saddress)
 
@@ -208,13 +217,17 @@ async def seed() -> None:
                     variant_id, unit_price, unit_cost = large.id, large.sell_price, large.cost_price
                 total = unit_price * qty
                 staff_id = rng.choice(staff_ids)
+                regular = rng.choice(regulars) if rng.random() < 0.18 else None   # about one sale in six is a known customer
                 order = Order(
                     business_id=business_id, staff_id=staff_id, order_type="takeaway",
                     status="completed", subtotal=total, total=total, sold_at=sold_at,
-                    created_at=sold_at,
+                    created_at=sold_at, customer_id=regular.id if regular is not None else None,
                 )
                 session.add(order)
                 await session.flush()
+                if regular is not None:
+                    await award_points_for_order(session, business_id, regular, order.id, eligible_amount=total,
+                                                 staff_id=staff_id, created_at=sold_at)
                 line = OrderLine(
                     business_id=business_id, order_id=order.id, item_id=item.id, variant_id=variant_id,
                     quantity=qty, unit_price=unit_price, line_total=total,

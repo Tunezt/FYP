@@ -95,7 +95,7 @@ class SaleOut(BaseModel):
 
 from typing import Literal  # noqa: E402
 
-PosPaymentMethod = Literal["cash", "qris", "transfer", "card", "ewallet", "other"]
+PosPaymentMethod = Literal["cash", "qris", "transfer", "card", "ewallet", "points", "other"]  # points: M8-T2
 PosOrderType = Literal["dine_in", "takeaway", "delivery", "pickup"]
 
 
@@ -138,6 +138,15 @@ class PosCustomerOut(BaseModel):
     phone: str | None
     visits: int
     last_visit: datetime | None
+    points_balance: int = 0
+    points_value: Decimal = Decimal(0)   # what the balance pays for, at the programme's point value (M8-T2)
+
+
+class PosLoyaltyOut(BaseModel):
+    is_active: bool
+    rupiah_per_point: Decimal
+    point_value: Decimal
+    min_redeem_points: int
 
 
 class PosCustomerIn(BaseModel):
@@ -199,6 +208,8 @@ class OrderOut(BaseModel):
     id: uuid.UUID
     order_type: str
     customer_id: uuid.UUID | None = None
+    points_earned: int = 0
+    points_redeemed: int = 0
     subtotal: Decimal
     discount_total: Decimal = Decimal(0)
     service_charge: Decimal = Decimal(0)
@@ -226,6 +237,8 @@ class ReceiptOut(BaseModel):
     business_name: str
     staff_name: str | None
     customer_name: str | None = None
+    points_earned: int = 0
+    points_redeemed: int = 0
     status: str
     order_type: str
     sold_at: datetime

@@ -32,6 +32,9 @@ from app.models import (
 )
 from app.services.catalog import default_variant
 from app.services.customers import require_customer
+from app.services.points import (
+    PointsInvalid, award_points_for_order, loyalty_config, redeem_points_for_payment, reverse_points_for_order,
+)
 from app.services.pricing import LineInput, price_order, pricing_config
 from app.services.sales import ATOMIC_DECREMENT, InsufficientStock, ItemNotFound
 from app.services.stock import record_movement
@@ -344,6 +347,16 @@ async def create_order(
         created.payments.append(payment)
     await session.flush()
 
+    # 3b. Points (M8-T2). Paying with points spends them now, guarded — if the
+    #     balance does not cover it the whole sale rolls back, stock included.
+    loyalty = await loyalty_config(session, business_id)
+    paid_in_points = sum((Decimal(p.amount) for p in payments if p.method == "points"), Decimal(0)).quantize(TWO_PLACES)
+    if paid_in_points > 0:
+        await redeem_points_for_payment(
+            session, business_id, customer, order.id, rupiah=paid_in_points, staff_id=staff_id,
+            created_at=sold_at, config=loyalty,
+        )
+
     # 4. The books, in this same transaction (M6-T4): money in per method,
     #    reclassifications, and cost of goods. If this fails, the sale fails.
     from app.services.posting import post_event
@@ -360,6 +373,12 @@ async def create_order(
         session, business_id, "OrderCompleted", components, source_type="order", source_id=order.id,
         memo=f"penjualan #{str(order.id)[-8:].upper()}", posted_at=sold_at, created_by=staff_id,
     )
+    # Earn on what was paid with money, never on the part paid with points.
+    if customer is not None and loyalty.is_active:
+        await award_points_for_order(
+            session, business_id, customer, order.id, eligible_amount=total - paid_in_points,
+            staff_id=staff_id, created_at=sold_at, config=loyalty,
+        )
     return created
 
 
@@ -523,6 +542,8 @@ async def _reverse(
 
     order.status = "voided" if kind == "void" else "refunded"
     await session.flush()
+    # Points (M8-T2): what this order earned is taken back, what it spent returns.
+    await reverse_points_for_order(session, business_id, order_id, staff_id=staff_id, created_at=now, memo=tag)
 
     # The books (M6-T4): a void flips the sale's entry; a refund posts returns
     # per method (and inventory back when restocked). Same transaction.

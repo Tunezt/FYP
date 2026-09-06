@@ -179,12 +179,14 @@ async def register(payload: RegisterIn):
         from app.services.units import ensure_standard_uoms
 
         from app.services.posting_rules import ensure_standard_rules
+        from app.services.points import ensure_loyalty_settings
         from app.services.pricing import ensure_pricing_settings
 
         await ensure_standard_uoms(session, business_id)
         await ensure_standard_chart(session, business_id)  # M6-T1
         await ensure_standard_rules(session, business_id)  # M6-T3
         await ensure_pricing_settings(session, business_id)  # M7-T4
+        await ensure_loyalty_settings(session, business_id)  # M8-T2
         business = await session.get(Business, business_id)
         business_out = BusinessOut.model_validate(business)
 

@@ -82,6 +82,7 @@ STANDARD_RULES: list[tuple[str, str, str | None, str | None, str]] = [
     ("SupplierPaid", "transfer", "2100", "1110", "Bayar supplier lewat transfer"),
     ("PointsEarned", "points", "5600", "2300", "Poin diberikan ke pelanggan"),
     ("PointsRedeemed", "points", "2300", "4100", "Poin ditukar"),
+    ("PointsReversed", "points", "2300", "5600", "Poin ditarik kembali (void / retur)"),   # M8-T2, migration 0022
 ]
 
 EVENT_TYPES = sorted({e for e, *_ in STANDARD_RULES})

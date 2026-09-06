@@ -652,3 +652,41 @@ async def test_closed_shift_variance_is_posted(conn):
     assert problems == {}, f"closed shifts whose variance is not on the books: {problems}"
     assert n_closed > 0, "no closed shifts anywhere — the check ran vacuously"
     assert n_with_variance > 0, "no closed shift had a variance — the check proved nothing"
+
+
+
+# ── M8-T2: the points ledger reconciles with the cached balance ──────────────
+#
+# Same shape as the stock check: for every customer, SUM(points_movements.
+# points_delta) == customers.points_balance. A failure means some path moved
+# points without writing its row, or wrote a row without moving the cache.
+
+POINTS_RECONCILE_SQL = text(
+    """
+    select c.id, c.name, c.points_balance, coalesce(sum(m.points_delta), 0) as ledger
+    from customers c
+    left join points_movements m on m.customer_id = c.id
+    group by c.id, c.name, c.points_balance
+    having c.points_balance <> coalesce(sum(m.points_delta), 0)
+    order by c.name
+    """
+)
+
+
+async def test_points_ledger_reconciles_with_cached_balance(conn):
+    """M8-T2: after seeding (and whatever the other tests left behind), every
+    customer in every business has SUM(points_delta) == points_balance."""
+    n_customers = n_with_points = 0
+    gaps: dict[str, list[tuple[str, str, str]]] = {}
+    for business_id in (await conn.execute(text("select id from businesses order by created_at"))).scalars().all():
+        await conn.rollback()
+        await _set_tenant(conn, business_id)
+        n_customers += (await conn.execute(text("select count(*) from customers"))).scalar_one()
+        n_with_points += (await conn.execute(text("select count(*) from customers where points_balance <> 0"))).scalar_one()
+        rows = (await conn.execute(POINTS_RECONCILE_SQL)).all()
+        if rows:
+            gaps[str(business_id)] = [(name, str(bal), str(ledger)) for _, name, bal, ledger in rows]
+    await conn.rollback()
+    assert n_customers > 0, "no customers in any business — run `python -m app.seed` first"
+    assert n_with_points > 0, "no customer has any points — the check proved nothing"
+    assert gaps == {}, f"customers whose cached balance differs from the ledger: {gaps}"

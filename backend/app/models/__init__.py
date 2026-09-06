@@ -25,6 +25,8 @@ from app.models.models import (  # noqa: F401
     Shift,
     CashMovement,
     Customer,
+    LoyaltySettings,
+    PointsMovement,
     PurchaseOrder,
     Receipt,
     RecipeLine,

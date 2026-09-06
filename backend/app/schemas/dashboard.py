@@ -565,6 +565,7 @@ class CustomerOut(BaseModel):
     visits: int
     total_spent: Decimal
     last_visit: datetime | None
+    points_balance: int = 0
     created_at: datetime
 
 
@@ -590,3 +591,40 @@ class CustomersPage(BaseModel):
     page: int
     page_size: int
     rows: list[CustomerOut]
+
+
+# ── Points (M8-T2) ──────────────────────────────────────────────────────────
+
+
+class LoyaltySettingsOut(BaseModel):
+    is_active: bool
+    rupiah_per_point: Decimal
+    point_value: Decimal
+    min_redeem_points: int
+
+    model_config = {"from_attributes": True}
+
+
+class LoyaltySettingsPatch(BaseModel):
+    is_active: bool | None = None
+    rupiah_per_point: Decimal | None = Field(default=None, gt=0, le=Decimal("100000000"))
+    point_value: Decimal | None = Field(default=None, ge=0, le=Decimal("100000000"))
+    min_redeem_points: int | None = Field(default=None, ge=0, le=1000000)
+
+
+class PointsMovementOut(BaseModel):
+    id: uuid.UUID
+    points_delta: int
+    reason: str
+    source_type: str | None
+    source_id: uuid.UUID | None
+    amount: Decimal
+    notes: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PointsAdjustIn(BaseModel):
+    points_delta: int = Field(ge=-1000000, le=1000000)
+    notes: str | None = Field(default=None, max_length=300)

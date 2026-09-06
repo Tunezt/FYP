@@ -35,6 +35,8 @@ type Receipt = {
   business_name: string;
   staff_name: string | null;
   customer_name: string | null;
+  points_earned: number;
+  points_redeemed: number;
   status: string;
   sold_at: string;
   lines: {
@@ -58,6 +60,8 @@ type Receipt = {
 type OrderResult = {
   id: string;
   total: string;
+  points_earned: number;
+  points_redeemed: number;
   lines: { item_name: string; quantity: string; line_total: string; remaining_stock: string }[];
   payments: { method: string; amount: string }[];
 };
@@ -97,7 +101,8 @@ type Shift = {
 type CashKind = "cash_in" | "petty_cash" | "supplier_payment" | "bank_drop";
 type SupplierLite = { id: string; name: string };
 // Customers at the till (M8-T1).
-type CustomerLite = { id: string; name: string; phone: string | null; visits: number };
+type CustomerLite = { id: string; name: string; phone: string | null; visits: number; points_balance: number; points_value: string };
+type Loyalty = { is_active: boolean; rupiah_per_point: string; point_value: string; min_redeem_points: number };
 
 const lineKey = (itemId: string, variant: Variant | null, modifiers: Modifier[]) =>
   `${itemId}:${variant?.id ?? "default"}:${modifiers.map((m) => m.id).sort().join(",")}`;
@@ -370,6 +375,9 @@ function SellScreen({
   const [customerMatches, setCustomerMatches] = useState<CustomerLite[]>([]);
   const [customerNew, setCustomerNew] = useState<{ name: string; phone: string } | null>(null);
   const [customerError, setCustomerError] = useState<string | null>(null);
+  // Points (M8-T2): the programme, and whether this order is paid partly with points.
+  const [loyalty, setLoyalty] = useState<Loyalty | null>(null);
+  const [usePoints, setUsePoints] = useState(false);
 
   const [lineDiscountDraft, setLineDiscountDraft] = useState("");
   const [cashPart, setCashPart] = useState("");
@@ -527,6 +535,11 @@ function SellScreen({
     }
   }
 
+  // The points programme (M8-T2), once per kiosk session.
+  useEffect(() => {
+    api<Loyalty>("/pos/loyalty", { token }).then(setLoyalty).catch(() => setLoyalty(null));
+  }, [token]);
+
   // Re-price whenever the cart or a discount changes. Debounced a touch so a
   // quick run of taps is one request.
   useEffect(() => {
@@ -626,9 +639,18 @@ function SellScreen({
     }
   }
 
-  const cashAmount = payMode === "cash" ? cartTotal : payMode === "qris" ? 0 : Number(cashPart || 0);
-  const qrisAmount = cartTotal - cashAmount;
-  const splitValid = payMode !== "split" || (cashAmount > 0 && cashAmount < cartTotal);
+  // Points pay first (whole points only, capped at the bill and at the balance); the rest by the chosen mode.
+  const pointValue = Number(loyalty?.point_value ?? 0);
+  const pointsAvailable = customer ? Math.max(0, customer.points_balance) : 0;
+  const pointsUsable =
+    usePoints && loyalty?.is_active && customer && pointValue > 0
+      ? Math.min(pointsAvailable, Math.floor(cartTotal / pointValue))
+      : 0;
+  const pointsAmount = pointsUsable >= (loyalty?.min_redeem_points ?? 0) ? pointsUsable * pointValue : 0;
+  const moneyDue = cartTotal - pointsAmount;
+  const cashAmount = payMode === "cash" ? moneyDue : payMode === "qris" ? 0 : Number(cashPart || 0);
+  const qrisAmount = moneyDue - cashAmount;
+  const splitValid = payMode !== "split" || (cashAmount > 0 && cashAmount < moneyDue) || moneyDue === 0;
 
   async function confirmOrder() {
     if (cart.length === 0 || busy || !splitValid) return;
@@ -639,6 +661,7 @@ function SellScreen({
     setBusy(true);
     setError(null);
     const payments = [
+      ...(pointsAmount > 0 ? [{ method: "points", amount: pointsAmount }] : []),
       ...(cashAmount > 0 ? [{ method: "cash", amount: cashAmount }] : []),
       ...(qrisAmount > 0 ? [{ method: "qris", amount: qrisAmount }] : []),
     ];
@@ -668,6 +691,7 @@ function SellScreen({
       setCustomer(null);
       setCustomerQuery("");
       setCustomerNew(null);
+      setUsePoints(false);
       setCartOpen(false);
       setPaying(false);
       setPayMode("cash");
@@ -1277,8 +1301,17 @@ function SellScreen({
                     <span className="font-semibold">{customer.name}</span>
                     {customer.phone ? <span className="ink-faint"> · {customer.phone}</span> : null}
                     {customer.visits > 0 ? <span className="ink-faint"> · {customer.visits}× datang</span> : null}
+                    {loyalty?.is_active ? (
+                      <span className="ink-faint"> · {customer.points_balance} poin</span>
+                    ) : null}
                   </span>
-                  <button onClick={() => setCustomer(null)} className="ink-soft ml-2 shrink-0 text-xs">
+                  <button
+                    onClick={() => {
+                      setCustomer(null);
+                      setUsePoints(false);
+                    }}
+                    className="ink-soft ml-2 shrink-0 text-xs"
+                  >
                     ganti
                   </button>
                 </div>
@@ -1372,6 +1405,26 @@ function SellScreen({
               )}
             </div>
 
+            {loyalty?.is_active && customer && customer.points_balance >= (loyalty.min_redeem_points || 1) && (
+              <label className="glass-card mt-3 flex items-center justify-between rounded-2xl px-3 py-2 text-sm">
+                <span>
+                  <input type="checkbox" className="mr-2" checked={usePoints} onChange={(e) => setUsePoints(e.target.checked)} />
+                  Pakai poin
+                  <span className="ink-faint"> ({customer.points_balance} poin ≈ {formatRupiah(customer.points_balance * pointValue)})</span>
+                </span>
+                {pointsAmount > 0 && (
+                  <span className="font-semibold tabular-nums">
+                    − {formatRupiah(pointsAmount)} <span className="ink-faint font-normal">({pointsUsable} poin)</span>
+                  </span>
+                )}
+              </label>
+            )}
+            {pointsAmount > 0 && (
+              <p className="ink-soft mt-2 text-sm">
+                Sisa dibayar <span className="font-semibold tabular-nums">{formatRupiah(moneyDue)}</span>
+              </p>
+            )}
+
             <div className="mt-5 grid grid-cols-3 gap-2">
               {(
                 [
@@ -1426,7 +1479,7 @@ function SellScreen({
               disabled={busy || !splitValid}
               className="btn-accent mt-6 w-full py-4 text-lg disabled:opacity-50"
             >
-              {busy ? "Menyimpan…" : `Catat ${formatRupiah(cartTotal)}`}
+              {busy ? "Menyimpan…" : `Catat ${formatRupiah(cartTotal)}${pointsAmount > 0 ? ` (${formatRupiah(moneyDue)} + poin)` : ""}`}
             </button>
           </div>
         </div>
@@ -1449,8 +1502,9 @@ function SellScreen({
               </p>
               <p className="ink-soft text-xs">
                 {flash.payments
-                  .map((p) => `${p.method === "cash" ? "tunai" : p.method.toUpperCase()} ${formatRupiah(p.amount)}`)
+                  .map((p) => `${p.method === "cash" ? "tunai" : p.method === "points" ? "poin" : p.method.toUpperCase()} ${formatRupiah(p.amount)}`)
                   .join(" + ")}
+                {flash.points_earned > 0 ? ` · +${flash.points_earned} poin` : ""}
               </p>
             </div>
             <button onClick={() => printReceipt(flash.id)} className="btn-quiet ml-2 px-3 py-2 text-sm">
@@ -1556,6 +1610,13 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
             <span>{formatRupiah(p.amount)}</span>
           </div>
         ))}
+        {(receipt.points_earned > 0 || receipt.points_redeemed > 0) && (
+          <p className="mt-2 text-center text-[11px]">
+            {receipt.points_redeemed > 0 ? `Poin dipakai: ${receipt.points_redeemed}` : ""}
+            {receipt.points_redeemed > 0 && receipt.points_earned > 0 ? " · " : ""}
+            {receipt.points_earned > 0 ? `Poin didapat: +${receipt.points_earned}` : ""}
+          </p>
+        )}
         <p className="mt-4 text-center">Terima kasih 🙏</p>
         <div className="mt-4 flex gap-2 print:hidden">
           <button onClick={() => window.print()} className="btn-accent flex-1 py-2 text-sm">

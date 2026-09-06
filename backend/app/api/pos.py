@@ -26,6 +26,7 @@ from app.schemas.pos import (
     OrderOut,
     PosCustomerIn,
     PosCustomerOut,
+    PosLoyaltyOut,
     QuoteIn,
     QuoteLineOut,
     QuoteOut,
@@ -65,6 +66,7 @@ from app.services.orders import (
     void_order,
 )
 from app.services.customers import CustomerInvalid
+from app.services.points import InsufficientPoints, PointsInvalid
 from app.services.pricing import PricingInvalid
 from app.services.sales import InsufficientStock, ItemNotFound, record_sale
 from app.services.velocity import check_low_stock_for_item
@@ -290,6 +292,10 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         )
     except CustomerInvalid:
         raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan atau sudah tidak aktif")
+    except InsufficientPoints as exc:
+        raise HTTPException(status_code=409, detail=f"Poin tidak cukup — butuh {exc.needed}, tersedia {exc.available}")
+    except PointsInvalid as exc:
+        raise HTTPException(status_code=422, detail=_POINTS_ERRORS.get(exc.code, "Pembayaran poin tidak valid").format(exc.detail))
     except DiscountNeedsManager:
         raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik memasukkan PIN-nya")
     except ManagerPinRejected:
@@ -337,10 +343,15 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         )
     )
     order = created.order
+    from app.services.points import points_of_order
+
+    earned, redeemed = await points_of_order(ctx.session, order.id)
     return OrderOut(
         id=order.id,
         order_type=order.order_type,
         customer_id=order.customer_id,
+        points_earned=earned,
+        points_redeemed=redeemed,
         subtotal=order.subtotal,
         discount_total=order.discount_total,
         service_charge=order.service_charge,
@@ -371,17 +382,21 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
         data = await load_receipt(ctx.session, business_id=ctx.business_id, order_id=order_id)
     except OrderNotFound:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
+    from app.services.points import points_of_order
     from app.services.pricing import pricing_config
 
     business = await ctx.session.get(Business, ctx.business_id)
     config = await pricing_config(ctx.session, ctx.business_id)
     order = data["order"]
+    earned, redeemed = await points_of_order(ctx.session, order.id)
     return ReceiptOut(
         order_id=order.id,
         number=str(order.id)[-8:].upper(),
         business_name=business.name if business else "",
         staff_name=data["staff_name"],
         customer_name=data.get("customer_name"),
+        points_earned=earned,
+        points_redeemed=redeemed,
         status=order.status,
         order_type=order.order_type,
         sold_at=order.sold_at,
@@ -473,6 +488,32 @@ _CUSTOMER_ERRORS = {
     "duplicate_phone": (409, "Nomor HP ini sudah terdaftar atas pelanggan lain"),
     "not_found": (404, "Pelanggan tidak ditemukan atau sudah tidak aktif"),
 }
+_POINTS_ERRORS = {
+    "inactive": "Program poin belum aktif — nyalakan di dashboard",
+    "customer": "Bayar pakai poin perlu pelanggan terdaftar",
+    "whole": "Nilai poin harus kelipatan nilai satu poin",
+    "min": "Minimal tukar {} poin",
+    "points": "Jumlah poin harus lebih dari nol",
+    "delta": "Perubahan poin tidak boleh nol",
+}
+
+
+async def _pos_customer_out(ctx, view: dict) -> PosCustomerOut:
+    from app.services.points import loyalty_config, rupiah_for_points
+
+    cfg = await loyalty_config(ctx.session, ctx.business_id)
+    balance = int(view.get("points_balance") or 0)
+    return PosCustomerOut(**view, points_value=rupiah_for_points(balance, cfg) if cfg.is_active else Decimal(0))
+
+
+@router.get("/loyalty", response_model=PosLoyaltyOut)
+async def pos_loyalty(ctx: PosCtx):
+    """The points programme, so the kiosk knows whether to offer "pakai poin" (M8-T2)."""
+    from app.services.points import loyalty_config
+
+    cfg = await loyalty_config(ctx.session, ctx.business_id)
+    return PosLoyaltyOut(is_active=cfg.is_active, rupiah_per_point=cfg.rupiah_per_point, point_value=cfg.point_value,
+                         min_redeem_points=cfg.min_redeem_points)
 
 
 @router.get("/customers", response_model=list[PosCustomerOut])
@@ -481,7 +522,7 @@ async def pos_search_customers(ctx: PosCtx, q: str = Query(default="", max_lengt
     from app.services.customers import customer_views, search_customers
 
     rows = await search_customers(ctx.session, q, limit=10)
-    return [PosCustomerOut(**v) for v in await customer_views(ctx.session, rows)]
+    return [await _pos_customer_out(ctx, v) for v in await customer_views(ctx.session, rows)]
 
 
 @router.post("/customers", response_model=PosCustomerOut, status_code=201)
@@ -495,7 +536,7 @@ async def pos_add_customer(payload: PosCustomerIn, ctx: PosCtx):
     except CustomerInvalid as exc:
         status, detail = _CUSTOMER_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
-    return PosCustomerOut(**await customer_view(ctx.session, row))
+    return await _pos_customer_out(ctx, await customer_view(ctx.session, row))
 
 
 # ── Shifts (M7-T1) ──────────────────────────────────────────────────────────

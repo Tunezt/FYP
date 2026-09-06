@@ -165,7 +165,7 @@ async def customer_view(session: AsyncSession, customer: Customer) -> dict:
         "id": customer.id, "name": customer.name, "phone": customer.phone, "address": customer.address,
         "birthday": customer.birthday, "notes": customer.notes, "is_active": customer.is_active,
         "visits": summary.visits, "total_spent": summary.total_spent, "last_visit": summary.last_visit,
-        "created_at": customer.created_at,
+        "points_balance": int(customer.points_balance or 0), "created_at": customer.created_at,
     }
 
 
@@ -176,7 +176,7 @@ async def customer_views(session: AsyncSession, customers: list[Customer]) -> li
             "id": c.id, "name": c.name, "phone": c.phone, "address": c.address, "birthday": c.birthday,
             "notes": c.notes, "is_active": c.is_active, "visits": summaries[c.id].visits,
             "total_spent": summaries[c.id].total_spent, "last_visit": summaries[c.id].last_visit,
-            "created_at": c.created_at,
+            "points_balance": int(c.points_balance or 0), "created_at": c.created_at,
         }
         for c in customers
     ]

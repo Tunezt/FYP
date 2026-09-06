@@ -29,6 +29,10 @@ from app.schemas.dashboard import (
     CustomerOut,
     CustomersPage,
     CustomerUpdateIn,
+    LoyaltySettingsOut,
+    LoyaltySettingsPatch,
+    PointsAdjustIn,
+    PointsMovementOut,
     PricingSettingsOut,
     PricingSettingsPatch,
     ExpensesPage,
@@ -1228,6 +1232,60 @@ async def edit_customer(customer_id: uuid.UUID, payload: CustomerUpdateIn, ctx: 
     except CustomerInvalid as exc:
         status, detail = _CUSTOMER_ERRORS[exc.code]
         raise HTTPException(status_code=status, detail=detail)
+    return CustomerOut(**await customer_view(ctx.session, row))
+
+
+# ── Points (M8-T2) ──────────────────────────────────────────────────────────
+
+
+@router.get("/loyalty-settings", response_model=LoyaltySettingsOut)
+async def get_loyalty_settings(ctx: OwnerCtx):
+    from app.services.points import ensure_loyalty_settings
+
+    return LoyaltySettingsOut.model_validate(await ensure_loyalty_settings(ctx.session, ctx.business_id))
+
+
+@router.patch("/loyalty-settings", response_model=LoyaltySettingsOut)
+async def update_loyalty_settings(payload: LoyaltySettingsPatch, ctx: OwnerCtx):
+    """Takes effect on the next sale. Balances already earned keep their points;
+    a changed point value changes what they buy, which is what a warung means
+    when it changes the programme."""
+    from app.services.points import ensure_loyalty_settings
+
+    row = await ensure_loyalty_settings(ctx.session, ctx.business_id)
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(row, field, value)
+    row.updated_at = datetime.now(timezone.utc)
+    await ctx.session.flush()
+    return LoyaltySettingsOut.model_validate(row)
+
+
+@router.get("/customers/{customer_id}/points", response_model=list[PointsMovementOut])
+async def customer_points(customer_id: uuid.UUID, ctx: OwnerCtx, limit: int = Query(default=50, ge=1, le=500)):
+    from app.models import Customer
+    from app.services.points import list_points
+
+    if await ctx.session.get(Customer, customer_id) is None:
+        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
+    return [PointsMovementOut.model_validate(m) for m in await list_points(ctx.session, customer_id, limit=limit)]
+
+
+@router.post("/customers/{customer_id}/points/adjust", response_model=CustomerOut)
+async def adjust_customer_points(customer_id: uuid.UUID, payload: PointsAdjustIn, ctx: OwnerCtx):
+    """A manual correction (M8-T2): a new ledger row, never an edit."""
+    from app.models import Customer
+    from app.services.customers import customer_view
+    from app.services.points import InsufficientPoints, PointsInvalid, adjust_points
+
+    row = await ctx.session.get(Customer, customer_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
+    try:
+        await adjust_points(ctx.session, ctx.business_id, row, payload.points_delta, staff_id=ctx.staff_id, notes=payload.notes)
+    except PointsInvalid:
+        raise HTTPException(status_code=422, detail="Perubahan poin tidak boleh nol")
+    except InsufficientPoints as exc:
+        raise HTTPException(status_code=409, detail=f"Poin tidak cukup — tersedia {exc.available}")
     return CustomerOut(**await customer_view(ctx.session, row))
 
 

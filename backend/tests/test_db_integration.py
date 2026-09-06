@@ -634,3 +634,29 @@ async def test_rls_isolates_customers(session_factory, two_tenants):
         session.add(Customer(business_id=b.id, name="smuggled", phone=None))
         with pytest.raises(Exception):
             await session.commit()
+
+
+async def test_rls_isolates_points_and_loyalty_settings(session_factory, two_tenants):
+    """M8-T2 / roadmap §2."""
+    from app.models import Customer, LoyaltySettings, PointsMovement
+
+    a, b = two_tenants
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        cust = Customer(business_id=a.id, name="Andi")
+        session.add(cust)
+        await session.flush()
+        row = PointsMovement(business_id=a.id, customer_id=cust.id, points_delta=5, reason="adjust")
+        session.add(row)
+        await session.commit()
+        row_id, cust_id = row.id, cust.id
+    async with session_factory() as session:
+        await _set_tenant(session, b.id)
+        assert await session.get(PointsMovement, row_id) is None
+        assert (await session.execute(select(PointsMovement))).scalars().all() == []
+        assert (await session.execute(select(LoyaltySettings))).scalars().all() == []   # B has no row yet: nothing leaks
+    async with session_factory() as session:
+        await _set_tenant(session, a.id)
+        session.add(PointsMovement(business_id=b.id, customer_id=cust_id, points_delta=1, reason="adjust"))
+        with pytest.raises(Exception):
+            await session.commit()

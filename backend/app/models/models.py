@@ -64,6 +64,9 @@ shift_status = Enum("open", "closed", name="shift_status", create_type=False)
 cash_movement_kind = Enum(
     "cash_in", "petty_cash", "supplier_payment", "bank_drop", name="cash_movement_kind", create_type=False
 )
+points_reason = Enum(
+    "earn", "redeem", "adjust", "reversal", "expire", name="points_reason", create_type=False
+)
 
 
 class Business(Base):
@@ -797,5 +800,45 @@ class Customer(Base):
     birthday: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    points_balance: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")  # cached SUM (M8-T2)
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
+
+
+class LoyaltySettings(Base):
+    """The points programme of one business (migration 0022, roadmap M8-T2).
+    Off by default; one row per business."""
+
+    __tablename__ = "loyalty_settings"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    rupiah_per_point: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="1000")
+    point_value: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="100")
+    min_redeem_points: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
+class PointsMovement(Base):
+    """Append-only points ledger (migration 0022, roadmap M8-T2). One signed row
+    per change; `customers.points_balance` is the cached SUM(points_delta)."""
+
+    __tablename__ = "points_movements"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False)
+    points_delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(points_reason, nullable=False)
+    source_type: Mapped[str | None] = mapped_column(Text)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
