@@ -48,6 +48,7 @@ type Ticket = {
   rounding: string;
   total: string;
   is_estimate: boolean;
+  kitchen_state: "new" | "preparing" | "ready" | "done" | null;
 };
 type OrderType = "dine_in" | "takeaway";
 
@@ -116,9 +117,12 @@ export default function MenuPage() {
       });
   }, [token, storageKey]);
 
-  // Watch the ticket until the cashier has dealt with it.
+  // Watch the ticket until the cashier has dealt with it, then until the
+  // kitchen has: "siap" is worth a refresh.
   useEffect(() => {
-    if (!ticket || ticket.status !== "open") return;
+    if (!ticket) return;
+    const watching = ticket.status === "open" || (ticket.status === "completed" && ticket.kitchen_state !== "done");
+    if (!watching) return;
     const id = setInterval(() => {
       api<Ticket>(`/menu/${token}/orders/${ticket.id}`).then(setTicket).catch(() => undefined);
     }, 8000);
@@ -481,7 +485,13 @@ function TicketView({ ticket, businessName, onAgain }: { ticket: Ticket; busines
           {waiting
             ? "Tunjukkan kode ini ke kasir untuk membayar. Pesanan mulai disiapkan setelah dibayar."
             : paid
-              ? "Terima kasih! Pesanan sedang disiapkan."
+              ? ticket.kitchen_state === "ready"
+                ? "Pesanan siap — silakan ambil di kasir ya."
+                : ticket.kitchen_state === "done"
+                  ? "Selesai. Terima kasih, sampai jumpa lagi!"
+                  : ticket.kitchen_state === "preparing"
+                    ? "Terima kasih! Dapur sedang menyiapkan pesananmu."
+                    : "Terima kasih! Pesanan sudah masuk ke dapur."
               : "Kasir tidak bisa memproses pesanan ini — silakan tanya di kasir."}
         </p>
         {ticket.table_label && <p className="ink-faint mt-2 text-xs">{ticket.table_label}{ticket.guest_name ? ` · ${ticket.guest_name}` : ""}</p>}

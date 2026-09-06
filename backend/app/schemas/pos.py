@@ -368,3 +368,33 @@ class CashMovementOut(BaseModel):
     supplier_name: str | None
     expense_id: uuid.UUID | None
     occurred_at: datetime
+
+
+# ── Kitchen display (M11-T2) ─────────────────────────────────────────────────
+
+KitchenState = Literal["new", "preparing", "ready", "done"]
+
+
+class KitchenLineOut(BaseModel):
+    name: str
+    quantity: Decimal
+    modifiers: list[str] = []
+    notes: str | None = None
+
+
+class KitchenTicketOut(BaseModel):
+    order_id: uuid.UUID
+    code: str
+    source: str
+    order_type: str
+    table_label: str | None
+    guest_name: str | None
+    note: str | None = None
+    sold_at: datetime
+    state: KitchenState
+    state_since: datetime | None
+    lines: list[KitchenLineOut]
+
+
+class KitchenStateIn(BaseModel):
+    state: KitchenState

@@ -18,6 +18,7 @@ from app.core.db import tenant_session
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
 from app.schemas.menu import PosTicketOut, TicketCancelIn, TicketSettleIn
+from app.schemas.pos import KitchenLineOut, KitchenStateIn, KitchenTicketOut
 from app.core.security import create_token, decode_token, verify_pin
 from app.models import Business, Item, ItemVariant, Modifier, RequestLog, Staff
 from app.schemas.pos import (
@@ -819,3 +820,42 @@ async def pos_cash_movements(ctx: PosCtx):
     if shift is None:
         return []
     return [CashMovementOut(**await cash_movement_view(ctx.session, r)) for r in await list_cash_movements(ctx.session, shift_id=shift.id)]
+
+
+# ── Kitchen display (M11-T2) ─────────────────────────────────────────────────
+#
+# Every paid order is a kitchen ticket; the board is what is not yet bumped.
+# State changes append to kitchen_events and only move forward.
+
+
+def _kitchen_out(t) -> KitchenTicketOut:
+    return KitchenTicketOut(
+        order_id=t.order_id, code=t.code, source=t.source, order_type=t.order_type, table_label=t.table_label,
+        guest_name=t.guest_name, note=t.note, sold_at=t.sold_at, state=t.state, state_since=t.state_since,
+        lines=[KitchenLineOut(name=l.name, quantity=l.quantity, modifiers=l.modifiers, notes=l.notes) for l in t.lines],
+    )
+
+
+@router.get("/kitchen", response_model=list[KitchenTicketOut])
+async def pos_kitchen(ctx: PosCtx):
+    from app.services.kitchen import board
+
+    return [_kitchen_out(t) for t in await board(ctx.session)]
+
+
+@router.post("/kitchen/{order_id}/state", response_model=KitchenTicketOut)
+async def pos_kitchen_state(order_id: uuid.UUID, payload: KitchenStateIn, ctx: PosCtx):
+    from app.services.kitchen import STATE_LABEL_ID, KitchenInvalid, set_state
+
+    try:
+        t = await set_state(ctx.session, business_id=ctx.business_id, order_id=order_id, state=payload.state, staff_id=ctx.staff_id)
+    except KitchenInvalid as exc:
+        if exc.code == "not_found":
+            raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+        if exc.code == "not_paid":
+            raise HTTPException(status_code=409, detail="Pesanan belum dibayar — dapur hanya menyiapkan pesanan yang sudah dibayar")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Pesanan sudah {STATE_LABEL_ID.get(exc.current or '', exc.current)} — tidak bisa diubah ke {STATE_LABEL_ID.get(exc.wanted or '', exc.wanted)}",
+        )
+    return _kitchen_out(t)

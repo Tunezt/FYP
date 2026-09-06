@@ -270,6 +270,7 @@ export default function PosPage() {
   return (
     <SellScreen
       posToken={posToken}
+      pairingToken={pairingToken}
       staffName={screen.staffName}
       businessName={screen.businessName}
       onLock={() => {
@@ -369,11 +370,13 @@ function PinKey({ label, onPress }: { label: string; onPress: () => void }) {
 
 function SellScreen({
   posToken,
+  pairingToken,
   staffName,
   businessName,
   onLock,
 }: {
   posToken: string | null;
+  pairingToken: string;
   staffName: string;
   businessName: string;
   onLock: () => void;
@@ -841,6 +844,9 @@ function SellScreen({
           <button onClick={openCashSheet} className="btn-quiet px-4 py-2 text-sm" title="Kas masuk / keluar">
             Kas
           </button>
+          <a href={`/kitchen/${pairingToken}`} target="_blank" rel="noreferrer" className="btn-quiet px-4 py-2 text-sm" title="Layar dapur (M11-T2)">
+            Dapur ↗
+          </a>
           <button onClick={onLock} className="btn-quiet px-4 py-2 text-sm">
             🔒 Kunci
           </button>

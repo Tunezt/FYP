@@ -76,6 +76,7 @@ class TicketOut(BaseModel):
     rounding: Decimal
     total: Decimal
     is_estimate: bool
+    kitchen_state: str | None = None   # once paid: new · preparing · ready · done (M11-T2)
 
 
 class PosTicketOut(TicketOut):

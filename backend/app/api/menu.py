@@ -36,9 +36,10 @@ def _menu_business_id(menu_token: str) -> uuid.UUID:
     return uuid.UUID(claims["business_id"])
 
 
-def ticket_out(order: Order, model=TicketOut) -> TicketOut:
+def ticket_out(order: Order, model=TicketOut, kitchen_state: str | None = None) -> TicketOut:
     cart = order.cart or {"lines": []}
     return model(
+        kitchen_state=kitchen_state,
         id=order.id,
         code=ticket_code(order.id),
         status=order.status,
@@ -152,4 +153,9 @@ async def watch(menu_token: str, order_id: uuid.UUID):
             ticket = await get_ticket(session, order_id)
         except TicketNotFound:
             raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
-        return ticket_out(ticket)
+        kitchen_state = None
+        if ticket.status == "completed":
+            from app.services.kitchen import current_state
+
+            kitchen_state, _since = await current_state(session, ticket.id)
+        return ticket_out(ticket, kitchen_state=kitchen_state)

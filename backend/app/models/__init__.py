@@ -10,6 +10,7 @@ from app.models.models import (  # noqa: F401
     ItemVariant,
     JournalEntry,
     JournalLine,
+    KitchenEvent,
     LoginOtp,
     MetricBaseline,
     Modifier,

@@ -31,6 +31,7 @@ POS_ROUTES = [
     ("GET", "/pos/items"),
     ("POST", "/pos/sales"),
     ("GET", "/pos/tickets"),
+    ("GET", "/pos/kitchen"),
 ]
 
 

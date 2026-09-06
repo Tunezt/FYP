@@ -505,7 +505,11 @@ export default function SettingsPage() {
             membuka layar kasir — bukan dashboard ini.
           </p>
           {pairing ? (
-            <CopyField value={pairing} />
+            <div className="space-y-2">
+              <CopyField value={pairing} />
+              <p className="ink-faint text-xs">Layar dapur (tiket pesanan yang sudah dibayar, dengan tombol selesai) — tautan yang sama, halaman berbeda:</p>
+              <CopyField value={pairing.replace("/pos/", "/kitchen/")} />
+            </div>
           ) : (
             <button onClick={generatePairing} disabled={pairingBusy} className="btn-accent px-5 py-2.5 text-sm">
               {pairingBusy ? "Membuat…" : "Buat tautan kasir"}

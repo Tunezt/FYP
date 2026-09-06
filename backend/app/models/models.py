@@ -52,6 +52,7 @@ stock_movement_reason = Enum(
 )
 order_type = Enum("dine_in", "takeaway", "delivery", "pickup", name="order_type", create_type=False)
 order_status = Enum("open", "completed", "voided", "refunded", name="order_status", create_type=False)
+kitchen_state = Enum("new", "preparing", "ready", "done", name="kitchen_state", create_type=False)  # M11-T2, migration 0027
 payment_method = Enum(
     "cash", "qris", "transfer", "card", "ewallet", "points", "other",
     name="payment_method", create_type=False,
@@ -968,4 +969,21 @@ class VoucherRedemption(Base):
     customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"))
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     reversal_of: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("voucher_redemptions.id"))
+    created_at: Mapped[datetime] = _now()
+
+
+class KitchenEvent(Base):
+    """Kitchen display (M11-T2, migration 0027): one row per state change of a
+    paid order — `preparing`, `ready`, `done`; `new` is no rows. Append-only:
+    the latest row is the state, the rows are the history."""
+
+    __tablename__ = "kitchen_events"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
+    state: Mapped[str] = mapped_column(kitchen_state, nullable=False)
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
     created_at: Mapped[datetime] = _now()
