@@ -43,7 +43,7 @@ def _now() -> Mapped[datetime]:
 
 staff_role = Enum("owner", "staff", name="staff_role", create_type=False)
 expense_source = Enum("manual", "receipt", name="expense_source", create_type=False)
-alert_type = Enum("anomaly", "low_stock", "margin_drop", "stockout_risk", "void_rate", "supplier_price", name="alert_type", create_type=False)  # M10-T1 adds four
+alert_type = Enum("anomaly", "low_stock", "margin_drop", "stockout_risk", "void_rate", "supplier_price", "backup_failed", name="alert_type", create_type=False)  # M10-T1 adds four, M15-T1 one
 alert_severity = Enum("low", "medium", "high", name="alert_severity", create_type=False)
 stock_movement_reason = Enum(
     "sale", "sale_void", "refund", "purchase", "waste",

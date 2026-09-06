@@ -33,3 +33,7 @@ htmlcov/
 
 # Docker-less local Postgres (scripts/local-pg.py): binaries + cluster data
 .pg16/
+
+# Local database dumps (app.jobs.backup, roadmap M15-T1). The development
+# default destination; production writes off-host via BACKUP_DIR.
+.backups/

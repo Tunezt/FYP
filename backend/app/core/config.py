@@ -50,6 +50,20 @@ class Settings(BaseSettings):
     # baseline for comparison. Never read by the WhatsApp path.
     eval_text_to_sql: bool = False
 
+    # Backups (roadmap M15-T1). `backup_dir` is where dumps land and it must
+    # not be on the database's own host — that is the whole point, and in
+    # production it is checked rather than trusted (see app/jobs/backup.py).
+    # `backup_database_url` needs a role that can read every tenant's rows:
+    # pg_dump runs with row_security off and a restricted role therefore
+    # *fails* rather than quietly dumping an empty database, which is why the
+    # elevated migration role is the fallback and `database_url` is not.
+    backup_dir: str | None = None
+    backup_database_url: str | None = None
+    backup_keep_daily: int = 30
+    backup_keep_monthly: int = 6
+    backup_min_bytes: int = 4096          # a dump smaller than this is not a dump
+    pg_bin_dir: str | None = None         # where pg_dump/pg_restore live, if not on PATH
+
 
 @lru_cache
 def get_settings() -> Settings:
