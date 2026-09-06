@@ -43,12 +43,13 @@ export default function MoneyPage() {
   const cash = useOwnerData<CashMovementRow[]>("/api/cash-movements?limit=200");
   const business = useOwnerData<Business>("/api/business");
   const tz = business.data?.timezone;
+  const dayStart = business.data?.day_start_hour ?? 0;
 
   const current = pnl.data?.[pnl.data.length - 1];
   const expenseTotalPages = expenses.data
     ? Math.max(1, Math.ceil(expenses.data.total / expenses.data.page_size))
     : 1;
-  const expenseGroups = groupByDay(expenses.data?.rows ?? [], (e) => new Date(e.occurred_at), tz);
+  const expenseGroups = groupByDay(expenses.data?.rows ?? [], (e) => new Date(e.occurred_at), tz, dayStart);
 
   return (
     <div className="animate-fade-up space-y-7">
@@ -178,7 +179,7 @@ export default function MoneyPage() {
                   <div className="flex items-baseline justify-between gap-3">
                     <p className="truncate text-sm font-semibold">{shift.staff_name}</p>
                     <p className="ink-faint shrink-0 text-xs">
-                      {dayLabel(new Date(shift.opened_at), tz)} · {timeLabel(new Date(shift.opened_at), tz)}
+                      {dayLabel(new Date(shift.opened_at), tz, dayStart)} · {timeLabel(new Date(shift.opened_at), tz)}
                       {shift.closed_at ? `–${timeLabel(new Date(shift.closed_at), tz)}` : ""}
                     </p>
                   </div>
@@ -285,7 +286,7 @@ export default function MoneyPage() {
                   <div key={group.key}>
                     <DayHeader
                       label={group.label}
-                      sub={daySubLabel(group.date, tz)}
+                      sub={daySubLabel(group.date, tz, dayStart)}
                       meta={`− ${formatRupiah(dayTotal)}`}
                     />
                     <ul>

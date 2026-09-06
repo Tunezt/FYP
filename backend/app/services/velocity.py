@@ -91,13 +91,13 @@ async def check_low_stock_for_item(
 
     # Same subject as the nightly stockout_risk rule (M10-T2), so an item
     # running low is one conversation, not two.
-    from zoneinfo import ZoneInfo
-
+    from app.ai.periods import business_day
     from app.models import Business
 
     business = await session.get(Business, business_id)
     tz = business.timezone if business is not None else "Asia/Jakarta"
-    local_day = datetime.now(timezone.utc).astimezone(ZoneInfo(tz)).date().isoformat()
+    start_hour = business.day_start_hour if business is not None else 0
+    local_day = business_day(datetime.now(timezone.utc), tz, start_hour).isoformat()
     alert = Alert(
         business_id=business_id,
         type="low_stock",

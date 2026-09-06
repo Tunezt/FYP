@@ -38,12 +38,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.periods import period_range
+from app.ai.periods import business_day, period_range
 from app.metrics import compute, local_day_windows, series
 from app.models import Alert, Business, GoodsReceipt, GoodsReceiptLine, Order, Staff
 
@@ -75,8 +74,11 @@ def _rp(v) -> str:
 
 
 def local_day(business: Business, now: datetime | None = None) -> str:
+    """The business day a rule fired on — the dedup key's date half. Honours
+    `day_start_hour` (M15-T4), so a job that runs at 00:30 does not open a
+    second day's worth of alerts for the night it is still reporting on."""
     moment = now or datetime.now(timezone.utc)
-    return moment.astimezone(ZoneInfo(business.timezone)).date().isoformat()
+    return business_day(moment, business.timezone, business.day_start_hour).isoformat()
 
 
 
@@ -86,7 +88,9 @@ def local_day(business: Business, now: datetime | None = None) -> str:
 
 async def rule_margin_drop(session: AsyncSession, business: Business, now: datetime | None = None) -> list[RuleAlert]:
     moment = now or datetime.now(timezone.utc)
-    today_start, today_end, _ = period_range("today", business.timezone, now=moment)
+    today_start, today_end, _ = period_range(
+        "today", business.timezone, now=moment, day_start_hour=business.day_start_hour
+    )
     recent_since = today_start - timedelta(days=6)
     before_since = recent_since - timedelta(days=30)
     recent = await compute(session, business, "gross_margin_pct", since=recent_since, until=today_end)

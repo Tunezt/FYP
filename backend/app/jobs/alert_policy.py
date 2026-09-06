@@ -82,7 +82,9 @@ async def apply_policy(session: AsyncSession, business: Business, findings: list
     # re-run after a crash must not say ten things where one run would say five.
     from app.ai.periods import period_range
 
-    day_start, _day_end, _ = period_range("today", business.timezone, now=moment)
+    day_start, _day_end, _ = period_range(
+        "today", business.timezone, now=moment, day_start_hour=business.day_start_hour
+    )
     already_today = int((await session.execute(
         select(func.count(Alert.id)).where(Alert.rule_key.is_not(None), Alert.created_at >= day_start, Alert.created_at <= moment)
     )).scalar_one())

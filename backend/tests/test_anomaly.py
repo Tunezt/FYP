@@ -1,5 +1,6 @@
 import statistics
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from app.services.anomaly import (
     BASELINE_DAYS,
@@ -44,9 +45,20 @@ def test_severity_tiers():
 
 
 def test_fenceposts_cover_30_full_days_plus_today():
-    business = SimpleNamespace(timezone="Asia/Jakarta")
+    business = SimpleNamespace(timezone="Asia/Jakarta", day_start_hour=0)
     posts = _day_fenceposts(business, BASELINE_DAYS)
     # 30 history days need 31 fenceposts; +1 more for today's end.
     assert len(posts) == BASELINE_DAYS + 2
     deltas = [(posts[i + 1] - posts[i]).total_seconds() for i in range(len(posts) - 1)]
     assert all(d == 86400 for d in deltas)
+    assert all(p.astimezone(ZoneInfo("Asia/Jakarta")).hour == 0 for p in posts)
+
+
+def test_fenceposts_follow_the_business_day_boundary():
+    """M15-T4: the baseline a late-closing café learns from is split on its own
+    boundary, so a night that ends at 00:15 is one day's takings, not two."""
+    business = SimpleNamespace(timezone="Asia/Jakarta", day_start_hour=4)
+    posts = _day_fenceposts(business, BASELINE_DAYS)
+    assert len(posts) == BASELINE_DAYS + 2
+    assert all((posts[i + 1] - posts[i]).total_seconds() == 86400 for i in range(len(posts) - 1))
+    assert all(p.astimezone(ZoneInfo("Asia/Jakarta")).hour == 4 for p in posts)

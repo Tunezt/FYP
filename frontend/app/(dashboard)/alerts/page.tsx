@@ -21,6 +21,7 @@ export default function AlertsPage() {
   const alerts = useOwnerData<AlertRow[]>("/api/alerts?limit=100");
   const business = useOwnerData<Business>("/api/business");
   const tz = business.data?.timezone;
+  const dayStart = business.data?.day_start_hour ?? 0;
   const mutate = useOwnerMutation();
   const [acking, setAcking] = useState<string | null>(null);
 
@@ -36,7 +37,7 @@ export default function AlertsPage() {
 
   const open = (alerts.data ?? []).filter((a) => !a.is_acknowledged);
   const done = (alerts.data ?? []).filter((a) => a.is_acknowledged);
-  const openGroups = groupByDay(open, (a) => new Date(a.created_at), tz);
+  const openGroups = groupByDay(open, (a) => new Date(a.created_at), tz, dayStart);
 
   return (
     <div className="animate-fade-up space-y-7">
@@ -77,7 +78,7 @@ export default function AlertsPage() {
               </div>
               {openGroups.map((group) => (
                 <div key={group.key}>
-                  <DayHeader label={group.label} sub={daySubLabel(group.date, tz)} />
+                  <DayHeader label={group.label} sub={daySubLabel(group.date, tz, dayStart)} />
                   <ul>
                     {group.rows.map((alert) => (
                       <li key={alert.id} className="list-row">

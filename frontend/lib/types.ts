@@ -78,6 +78,8 @@ export type Business = {
   owner_phone: string;
   language_preference: string;
   timezone: string;
+  /** M15-T4: the hour the business day starts (0..23). 0 = calendar day. */
+  day_start_hour: number;
   onboarding_completed_at: string | null;
 };
 

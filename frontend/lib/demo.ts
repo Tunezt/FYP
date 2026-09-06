@@ -338,6 +338,7 @@ const BUSINESS: Business = {
   owner_phone: "628120001111",
   language_preference: "id",
   timezone: "Asia/Jakarta",
+  day_start_hour: 0,
   onboarding_completed_at: jktIso(120, 9),
 };
 

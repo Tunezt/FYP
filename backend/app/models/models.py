@@ -19,6 +19,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
+    SmallInteger,
     Text,
     Time,
     text,
@@ -90,6 +91,9 @@ class Business(Base):
     whatsapp_number: Mapped[str | None] = mapped_column(Text)
     language_preference: Mapped[str] = mapped_column(Text, nullable=False, server_default="id")
     timezone: Mapped[str] = mapped_column(Text, nullable=False, server_default="Asia/Jakarta")
+    # M15-T4: the hour the business day starts. 0 = calendar day; 4 means a bill
+    # settled at 00:15 belongs to the night before. Constrained 0..23 in the DDL.
+    day_start_hour: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
 

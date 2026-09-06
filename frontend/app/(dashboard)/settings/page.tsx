@@ -58,7 +58,7 @@ export default function SettingsPage() {
   const loyalty = useOwnerData<LoyaltySettings>("/api/loyalty-settings");
   const mutate = useOwnerMutation();
 
-  const [profileDraft, setProfileDraft] = useState<{ name: string; business_type: string } | null>(null);
+  const [profileDraft, setProfileDraft] = useState<{ name: string; business_type: string; day_start_hour: number } | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [staffSheet, setStaffSheet] = useState(false);
   const [staffDraft, setStaffDraft] = useState({ name: "", pin: "" });
@@ -111,7 +111,11 @@ export default function SettingsPage() {
   }
 
   const b = business.data;
-  const draft = profileDraft ?? { name: b?.name ?? "", business_type: b?.business_type ?? "cafe" };
+  const draft = profileDraft ?? {
+    name: b?.name ?? "",
+    business_type: b?.business_type ?? "cafe",
+    day_start_hour: b?.day_start_hour ?? 0,
+  };
   const pricingForm: PricingForm = pricingDraft ?? toForm(pricing.data);
   const loyaltyForm: LoyaltyForm = loyaltyDraft ?? toLoyaltyForm(loyalty.data);
 
@@ -250,6 +254,28 @@ export default function SettingsPage() {
                 onChange={(e) => setProfileDraft({ ...draft, business_type: e.target.value })}
                 placeholder="cafe / warung / toko"
               />
+            </label>
+            <label className="block">
+              <span className="ink-soft mb-1.5 flex items-center gap-2 text-xs font-medium">
+                Hari usaha dimulai jam
+                <HelpTip title="Kalau tutup lewat tengah malam">
+                  Kalau warung tutup jam 23.30 dan struk terakhir baru selesai jam 00.15, penjualan
+                  itu masuk hitungan besok — padahal itu hasil semalam. Setel jam mulai hari ke 04.00
+                  dan semua laporan (hari ini, shift, laporan malam) menghitung dari jam 04.00 sampai
+                  jam 04.00 keesokan harinya. Pilih 00.00 kalau tutup sebelum tengah malam.
+                </HelpTip>
+              </span>
+              <select
+                className="field"
+                value={String(draft.day_start_hour)}
+                onChange={(e) => setProfileDraft({ ...draft, day_start_hour: Number(e.target.value) })}
+              >
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {String(h).padStart(2, "0")}.00{h === 0 ? " (hari kalender)" : ""}
+                  </option>
+                ))}
+              </select>
             </label>
             <div className="ink-soft flex flex-wrap gap-x-6 gap-y-1 pt-1 text-xs">
               <span>WhatsApp: +{b?.owner_phone}</span>

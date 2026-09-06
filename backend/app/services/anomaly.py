@@ -79,9 +79,13 @@ async def _daily_totals(
 
 
 def _day_fenceposts(business: Business, days: int) -> list:
-    """UTC datetimes marking local-midnight boundaries for the trailing `days`
-    full local days (excluding today), oldest→newest, plus today's bounds."""
-    today_start, today_end, _ = period_range("today", business.timezone)
+    """UTC datetimes marking business-day boundaries for the trailing `days`
+    full business days (excluding today), oldest→newest, plus today's bounds.
+    The boundary is `day_start_hour`, not midnight (M15-T4), so a baseline for a
+    late-closing café is not learned from nights cut in half."""
+    today_start, today_end, _ = period_range(
+        "today", business.timezone, day_start_hour=business.day_start_hour
+    )
     posts = [today_start - timedelta(days=offset) for offset in range(days, 0, -1)]
     posts.append(today_start)
     posts.append(today_end)
@@ -124,7 +128,9 @@ async def refresh_baselines(session: AsyncSession, business: Business) -> dict[s
 async def detect_anomalies(session: AsyncSession, business: Business) -> list[AnomalyFinding]:
     """Compare today (business-local) against the cached baselines; |z| > 3
     inserts an alert. De-duped: one anomaly alert per metric per local day."""
-    today_start, today_end, _ = period_range("today", business.timezone)
+    today_start, today_end, _ = period_range(
+        "today", business.timezone, day_start_hour=business.day_start_hour
+    )
     findings: list[AnomalyFinding] = []
 
     for metric in METRICS:

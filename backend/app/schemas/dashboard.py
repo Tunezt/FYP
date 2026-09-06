@@ -521,6 +521,10 @@ class BusinessUpdateIn(BaseModel):
     business_type: str | None = None
     language_preference: str | None = None
     timezone: str | None = None
+    # M15-T4. 0 is the plain calendar day; 4 puts a bill settled at 00:15 on the
+    # night before. Bounded here as well as by the DDL check constraint, so a
+    # bad value is a 422 in Indonesian rather than a database error.
+    day_start_hour: int | None = Field(default=None, ge=0, le=23)
 
 
 # ── Pricing settings (M7-T4b): tax, service charge, rounding, discount gate ──

@@ -29,6 +29,7 @@ class BusinessOut(BaseModel):
     owner_phone: str
     language_preference: str
     timezone: str
+    day_start_hour: int          # M15-T4: the hour the business day starts, 0..23
     onboarding_completed_at: datetime | None
 
     model_config = {"from_attributes": True}

@@ -30,6 +30,7 @@ export default function CustomersPage() {
   const business = useOwnerData<Business>("/api/business");
   const mutate = useOwnerMutation();
   const tz = business.data?.timezone;
+  const dayStart = business.data?.day_start_hour ?? 0;
 
   const [editing, setEditing] = useState<CustomerRow | "new" | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY);
@@ -186,7 +187,7 @@ export default function CustomersPage() {
                     </div>
                     <div>
                       <dt className="ink-faint">Terakhir</dt>
-                      <dd className="font-semibold">{c.last_visit ? dayLabel(new Date(c.last_visit), tz) : "—"}</dd>
+                      <dd className="font-semibold">{c.last_visit ? dayLabel(new Date(c.last_visit), tz, dayStart) : "—"}</dd>
                     </div>
                   </dl>
                   {(c.address || c.birthday || c.notes) && (
@@ -275,7 +276,7 @@ export default function CustomersPage() {
                       <li key={m.id} className="flex justify-between gap-2">
                         <span className="ink-soft truncate">
                           {{ earn: "dapat", redeem: "dipakai", adjust: "penyesuaian", reversal: "dibatalkan", expire: "kedaluwarsa" }[m.reason]}
-                          {m.notes ? ` — ${m.notes}` : ""} · {dayLabel(new Date(m.created_at), tz)}
+                          {m.notes ? ` — ${m.notes}` : ""} · {dayLabel(new Date(m.created_at), tz, dayStart)}
                         </span>
                         <span className={`shrink-0 tabular-nums ${m.points_delta < 0 ? "" : "font-semibold"}`}>
                           {m.points_delta > 0 ? "+" : ""}

@@ -159,7 +159,7 @@ def resolve_window(
     if period:
         if period not in PERIODS:
             raise MetricArgumentInvalid("period", period)
-        start, end, label = period_range(period, business.timezone, now=now)
+        start, end, label = period_range(period, business.timezone, now=now, day_start_hour=business.day_start_hour)
         return start, end, period, label
     if since is None or until is None:
         raise MetricArgumentInvalid("range", "since and until are required without a period")
@@ -169,11 +169,15 @@ def resolve_window(
 
 
 def local_day_windows(business: Business, days: int, *, now: datetime | None = None) -> list[tuple[str, datetime, datetime]]:
-    """The last `days` business-local calendar days, oldest first, as
-    (YYYY-MM-DD, since_utc, until_utc)."""
+    """The last `days` business days, oldest first, as
+    (YYYY-MM-DD, since_utc, until_utc). Each is keyed by the date it starts on,
+    so under `day_start_hour = 4` the window labelled 2026-09-03 runs from
+    03/09 04:00 to 04/09 04:00 (M15-T4)."""
     from datetime import timedelta
 
-    today_start, today_end, _ = period_range("today", business.timezone, now=now)
+    today_start, today_end, _ = period_range(
+        "today", business.timezone, now=now, day_start_hour=business.day_start_hour
+    )
     out = []
     for offset in range(days - 1, -1, -1):
         start, end = today_start - timedelta(days=offset), today_end - timedelta(days=offset)
@@ -187,10 +191,16 @@ def local_month_windows(business: Business, months: int, *, now: datetime | None
     from datetime import timedelta
 
     tz = ZoneInfo(business.timezone)
-    this_start, this_end, _ = period_range("this_month", business.timezone, now=now)
+    this_start, this_end, _ = period_range(
+        "this_month", business.timezone, now=now, day_start_hour=business.day_start_hour
+    )
     starts = [this_start.astimezone(tz)]
     for _ in range(months - 1):
-        prev = (starts[0] - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # `hour` is the month's own start hour, not 0: under M15-T4 a month runs
+        # from the 1st at `day_start_hour` to the next 1st at the same hour.
+        prev = (starts[0] - timedelta(days=1)).replace(
+            day=1, hour=this_start.astimezone(tz).hour, minute=0, second=0, microsecond=0
+        )
         starts.insert(0, prev)
     out = []
     for i, start in enumerate(starts):

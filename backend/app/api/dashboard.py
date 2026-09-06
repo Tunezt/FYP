@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 
-from app.ai.periods import period_range
+from app.ai.periods import business_day
 from app.core.deps import OwnerCtx
 from app.models import (
     Account, Alert, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PostingRule,
@@ -759,9 +759,12 @@ async def edit_posting_rule(rule_id: uuid.UUID, payload: PostingRuleUpdateIn, ct
 # ── Statements (M6-T5) ──────────────────────────────────────────────────────
 
 
-def _local_day_bounds(tz: ZoneInfo, day: date) -> tuple[datetime, datetime]:
-    """[start, next day start) of a business-local calendar day, in UTC."""
-    start = datetime.combine(day, time.min, tzinfo=tz)
+def _local_day_bounds(tz: ZoneInfo, day: date, day_start_hour: int = 0) -> tuple[datetime, datetime]:
+    """[start, next day start) of one business day, in UTC. `day_start_hour`
+    (M15-T4) moves the boundary off midnight, so a statement covering "3 Sept"
+    for a 4am café runs 03/09 04:00 → 04/09 04:00 and includes the bill settled
+    at 00:15 that night."""
+    start = datetime.combine(day, time(hour=day_start_hour), tzinfo=tz)
     return start.astimezone(timezone.utc), (start + timedelta(days=1)).astimezone(timezone.utc)
 
 
@@ -778,12 +781,12 @@ async def statement_profit_loss(
 
     business = await _business(ctx)
     tz = ZoneInfo(business.timezone)
-    until = until or datetime.now(tz).date()
+    until = until or business_day(datetime.now(timezone.utc), business.timezone, business.day_start_hour)
     since = since or until.replace(day=1)
     if until < since:
         raise HTTPException(status_code=422, detail="Tanggal akhir tidak boleh sebelum tanggal awal")
-    start_utc, _ = _local_day_bounds(tz, since)
-    _, end_utc = _local_day_bounds(tz, until)
+    start_utc, _ = _local_day_bounds(tz, since, business.day_start_hour)
+    _, end_utc = _local_day_bounds(tz, until, business.day_start_hour)
     report = await profit_and_loss(ctx.session, since=start_utc, until=end_utc)
     return ProfitAndLossOut(
         since=since, until=until,
@@ -800,8 +803,8 @@ async def statement_balance_sheet(ctx: OwnerCtx, as_of: date | None = Query(defa
 
     business = await _business(ctx)
     tz = ZoneInfo(business.timezone)
-    as_of = as_of or datetime.now(tz).date()
-    _, end_utc = _local_day_bounds(tz, as_of)
+    as_of = as_of or business_day(datetime.now(timezone.utc), business.timezone, business.day_start_hour)
+    _, end_utc = _local_day_bounds(tz, as_of, business.day_start_hour)
     sheet = await balance_sheet(ctx.session, until=end_utc)
     return BalanceSheetOut(
         as_of=as_of,

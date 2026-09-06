@@ -19,15 +19,17 @@ export default function SalesPage() {
   const [page, setPage] = useState(1);
   const trend = useOwnerData<TrendPoint[]>(`/api/sales-trend?days=${range}`);
   const sales = useOwnerData<Page<SaleRow>>(`/api/sales?page=${page}&page_size=40`);
-  // Day buckets must match the backend's business-timezone day boundaries.
+  // Day buckets must match the backend's business day: its timezone AND its
+  // day-start hour (M15-T4), or a 00:15 bill sits under the wrong header.
   const business = useOwnerData<Business>("/api/business");
   const tz = business.data?.timezone;
+  const dayStart = business.data?.day_start_hour ?? 0;
 
   const totalPages = sales.data ? Math.max(1, Math.ceil(sales.data.total / sales.data.page_size)) : 1;
   const rangeTotal = (trend.data ?? []).reduce((sum, p) => sum + p.revenue, 0);
   const rangeTx = (trend.data ?? []).reduce((sum, p) => sum + p.transactions, 0);
 
-  const groups = groupByDay(sales.data?.rows ?? [], (s) => new Date(s.sold_at), tz);
+  const groups = groupByDay(sales.data?.rows ?? [], (s) => new Date(s.sold_at), tz, dayStart);
 
   return (
     <div className="animate-fade-up space-y-7">
@@ -129,7 +131,7 @@ export default function SalesPage() {
                 <div key={group.key}>
                   <DayHeader
                     label={group.label}
-                    sub={daySubLabel(group.date, tz)}
+                    sub={daySubLabel(group.date, tz, dayStart)}
                     meta={`${group.rows.length} transaksi · ${formatRupiah(dayTotal)}`}
                   />
                   <ul>

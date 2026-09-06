@@ -431,10 +431,13 @@ def run_backup(now: datetime | None = None) -> BackupResult:
 # ── telling the owner ────────────────────────────────────────────────────────
 
 def alert_rule_key(result: BackupResult, business: Business) -> str:
-    """`backup:<business-local day>` — one alert per day, so a retry after a
-    failure does not say it twice."""
-    tz = ZoneInfo(business.timezone or "Asia/Jakarta")
-    return f"backup:{result.started_at.astimezone(tz).date().isoformat()}"
+    """`backup:<business day>` — one alert per day, so a retry after a failure
+    does not say it twice. The business day is the owner's (M15-T4): a 02:00
+    backup under `day_start_hour = 4` belongs to the night it backed up, not to
+    the morning it finished in."""
+    from app.ai.periods import business_day
+
+    return f"backup:{business_day(result.started_at, business.timezone or 'Asia/Jakarta', business.day_start_hour).isoformat()}"
 
 
 def alert_message(result: BackupResult, business: Business) -> str:

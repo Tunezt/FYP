@@ -25,6 +25,19 @@ dashboard, or photograph it.
 Run it twice with the same number and it refuses: bootstrap makes a new business,
 it does not reset an existing one.
 
+**Then set when the day starts.** Dashboard → Pengaturan → Profil usaha → "Hari
+usaha dimulai jam". If the cafe closes after midnight, set it to an hour after
+the last bill is normally settled — 04.00 is the usual answer. Leave it at 00.00
+only for a shop that shuts before midnight.
+
+This is the single setting that decides what "today" means: the owner's daily
+number, the shift reconciliation, the nightly alert baselines and the profit and
+loss statement all use it. Get it wrong and a 00.15 bill is counted as tomorrow's
+takings, which makes both days wrong and teaches the anomaly detector nonsense.
+Changing it later is safe — nothing is rewritten, every report simply re-cuts the
+same sales on the new boundary — but the daily numbers either side of the change
+will not line up with the ones printed before it, so do it once, at setup.
+
 **`python -m app.seed` is the demo cafe, not this.** It invents a month of sales
 and deletes and recreates what it made last time. It refuses to run with
 `ENVIRONMENT=production`, and asks before touching any database that is not on
