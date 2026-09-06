@@ -61,6 +61,7 @@ class KitchenTicket:
     table_label: str | None
     guest_name: str | None
     note: str | None
+    delivery_address: str | None
     sold_at: datetime
     state: str
     state_since: datetime | None
@@ -91,9 +92,16 @@ async def current_state(session: AsyncSession, order_id: uuid.UUID) -> tuple[str
 
 
 async def _lines_of(session: AsyncSession, order: Order) -> list[KitchenLine]:
-    lines = (await session.execute(
-        select(OrderLine).where(OrderLine.order_id == order.id).order_by(OrderLine.created_at, OrderLine.id)
-    )).scalars().all()
+    # By item name, not by insertion: `order_lines.created_at` is the
+    # transaction's clock, identical for every line of one sale, so any
+    # "insertion order" would really be the random uuid order. A cook reading
+    # the same ticket twice must see the same list.
+    rows = (await session.execute(
+        select(OrderLine, Item.name).join(Item, Item.id == OrderLine.item_id)
+        .where(OrderLine.order_id == order.id).order_by(Item.name, OrderLine.id)
+    )).all()
+    lines = [row[0] for row in rows]
+    names = {row[0].id: row[1] for row in rows}
     if not lines:
         return []
     mods = (await session.execute(
@@ -104,8 +112,7 @@ async def _lines_of(session: AsyncSession, order: Order) -> list[KitchenLine]:
         mods_by_line.setdefault(m.order_line_id, []).append(m.name)
     out: list[KitchenLine] = []
     for l in lines:
-        item = await session.get(Item, l.item_id)
-        name = item.name if item is not None else "?"
+        name = names[l.id]
         if l.variant_id is not None:
             variant = await session.get(ItemVariant, l.variant_id)
             if variant is not None and not variant.is_default:
@@ -119,6 +126,7 @@ async def ticket_view(session: AsyncSession, order: Order, event: KitchenEvent |
     return KitchenTicket(
         order_id=order.id, code=order_code(order), source=order.source, order_type=order.order_type,
         table_label=order.table_label, guest_name=order.guest_name, note=cart.get("note"),
+        delivery_address=order.delivery_address,
         sold_at=order.sold_at,
         state=event.state if event is not None else "new",
         state_since=event.created_at if event is not None else None,

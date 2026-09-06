@@ -132,6 +132,15 @@ export type PricingSettings = {
   rounding_unit: string;
   rounding_mode: "nearest" | "up" | "down";
   discount_requires_pin: boolean;
+  service_applies_to: OrderType[]; // M11-T3: where the service charge applies
+  delivery_fee: string;                    // flat fee on delivery orders
+};
+export type OrderType = "dine_in" | "takeaway" | "delivery" | "pickup";
+export const ORDER_TYPE_LABEL: Record<OrderType, string> = {
+  dine_in: "Makan di tempat",
+  takeaway: "Bawa pulang",
+  delivery: "Antar",
+  pickup: "Ambil sendiri",
 };
 
 // Customers (M8-T1). History is derived from orders by the API.

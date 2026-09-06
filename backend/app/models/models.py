@@ -366,6 +366,9 @@ class Order(Base):
     guest_name: Mapped[str | None] = mapped_column(Text)
     guest_phone: Mapped[str | None] = mapped_column(Text)
     cart: Mapped[dict | None] = mapped_column(JSONB)
+    # Order type routing (M11-T3, migration 0028).
+    delivery_fee: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
+    delivery_address: Mapped[str | None] = mapped_column(Text)
 
 
 class OrderLine(Base):
@@ -800,6 +803,14 @@ class PricingSettings(Base):
     service_before_tax: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     rounding_unit: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     rounding_mode: Mapped[str] = mapped_column(Text, nullable=False, server_default="nearest")
+    # Order type routing (M11-T3, migration 0028): where the service charge
+    # applies, and the flat fee a delivery carries.
+    # Named for what it holds (order types), not for the charge it governs: a
+    # column whose name says "charge" must hold rupiah (test_no_float_money).
+    service_applies_to: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, server_default=text("'{dine_in,takeaway,delivery,pickup}'")
+    )
+    delivery_fee: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     discount_requires_pin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()

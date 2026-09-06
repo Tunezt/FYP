@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError, POS_PAIRING_KEY, POS_TOKEN_KEY } from "@/lib/api";
 import { formatQty, formatRupiah, initials } from "@/lib/format";
+import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 
 type StaffLite = { id: string; name: string; role: string };
 type PosBusiness = { business_name: string; staff: StaffLite[] };
@@ -38,6 +39,10 @@ type Receipt = {
   points_earned: number;
   points_redeemed: number;
   status: string;
+  order_type: string;
+  table_label: string | null;
+  delivery_address: string | null;
+  delivery_fee: string;
   sold_at: string;
   lines: {
     name: string;
@@ -84,6 +89,7 @@ type Quote = {
   voucher_error: string | null;
   lines: { item_id: string; quantity: string; is_bonus: boolean; promo_name: string | null; promo_discount: string }[];
   service_charge: string;
+  delivery_fee: string;
   tax_total: string;
   tax_inclusive: boolean;
   rounding: string;
@@ -393,6 +399,13 @@ function SellScreen({
   const [cartOpen, setCartOpen] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payMode, setPayMode] = useState<PayMode>("cash");
+  // Order type routing (M11-T3): the type decides the service charge and the
+  // delivery fee (the server prices it), and what the till must collect.
+  const [orderType, setOrderType] = useState<OrderType>("takeaway");
+  const [tableLabel, setTableLabel] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryName, setDeliveryName] = useState("");
+  const [deliveryPhone, setDeliveryPhone] = useState("");
   // Discounts and the priced bill (M7-T4b).
   const [billDiscount, setBillDiscount] = useState("");
   const [voucherCode, setVoucherCode] = useState("");
@@ -645,6 +658,7 @@ function SellScreen({
           })),
           bill_discount: Number(billDiscount || 0),
           voucher_code: voucherCode.trim() || null,
+          order_type: orderType,
         },
       })
         .then((q) => {
@@ -657,7 +671,7 @@ function SellScreen({
         });
     }, 150);
     return () => clearTimeout(handle);
-  }, [cart, billDiscount, voucherCode, token]);
+  }, [cart, billDiscount, voucherCode, token, orderType]);
 
   const stockCap = (item: Item) => (item.made_to_order ? 999 : Number(item.current_stock));
 
@@ -740,6 +754,14 @@ function SellScreen({
 
   async function confirmOrder() {
     if (cart.length === 0 || busy || !splitValid) return;
+    if (orderType === "delivery" && !deliveryAddress.trim()) {
+      setError("Pesanan antar perlu alamat pengantaran.");
+      return;
+    }
+    if (orderType === "delivery" && !deliveryPhone.trim() && !customer?.phone) {
+      setError("Pesanan antar perlu nomor HP penerima.");
+      return;
+    }
     if (needsPin && managerPin.length < 4) {
       setError("Diskon perlu PIN pemilik — minta pemilik memasukkan PIN-nya.");
       return;
@@ -763,7 +785,11 @@ function SellScreen({
             line_discount: l.discount,
           })),
           payments,
-          order_type: "takeaway",
+          order_type: orderType,
+          table_label: orderType === "dine_in" ? tableLabel.trim() || null : null,
+          delivery_address: orderType === "delivery" ? deliveryAddress.trim() || null : null,
+          guest_name: orderType === "delivery" ? deliveryName.trim() || null : null,
+          guest_phone: orderType === "delivery" ? deliveryPhone.trim() || null : null,
           bill_discount: Number(billDiscount || 0),
           manager_pin: needsPin ? managerPin || null : null,
           customer_id: customer?.id ?? null,
@@ -784,6 +810,10 @@ function SellScreen({
       setPaying(false);
       setPayMode("cash");
       setCashPart("");
+      setTableLabel("");
+      setDeliveryAddress("");
+      setDeliveryName("");
+      setDeliveryPhone("");
       loadItems();
       loadShift();
       setTimeout(() => setFlash(null), 2600);
@@ -1456,6 +1486,51 @@ function SellScreen({
               {cartCount} item
             </p>
             <p className="text-3xl font-bold tabular-nums">{formatRupiah(cartTotal)}</p>
+            {/* Order type (M11-T3): routes service charge / delivery fee and what to collect */}
+            <div className="mt-3 grid grid-cols-4 gap-1.5">
+              {(Object.keys(ORDER_TYPE_LABEL) as OrderType[]).map((kind) => (
+                <button
+                  key={kind}
+                  onClick={() => setOrderType(kind)}
+                  className={`rounded-2xl px-2 py-2 text-xs font-semibold transition-colors ${
+                    orderType === kind ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                  }`}
+                >
+                  {ORDER_TYPE_LABEL[kind]}
+                </button>
+              ))}
+            </div>
+            {orderType === "dine_in" && (
+              <input
+                value={tableLabel}
+                onChange={(e) => setTableLabel(e.target.value.slice(0, 20))}
+                className="glass-card mt-2 w-full rounded-2xl px-3 py-2 text-sm"
+                placeholder="Nomor meja (opsional)"
+              />
+            )}
+            {orderType === "delivery" && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <input
+                  value={deliveryName}
+                  onChange={(e) => setDeliveryName(e.target.value.slice(0, 60))}
+                  className="glass-card rounded-2xl px-3 py-2 text-sm"
+                  placeholder="Nama penerima"
+                />
+                <input
+                  inputMode="tel"
+                  value={deliveryPhone}
+                  onChange={(e) => setDeliveryPhone(e.target.value.slice(0, 32))}
+                  className="glass-card rounded-2xl px-3 py-2 text-sm tabular-nums"
+                  placeholder={customer?.phone ? `HP: ${customer.phone}` : "Nomor HP penerima"}
+                />
+                <input
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value.slice(0, 300))}
+                  className="glass-card col-span-2 rounded-2xl px-3 py-2 text-sm"
+                  placeholder="Alamat pengantaran"
+                />
+              </div>
+            )}
             {/* The bill as the server priced it (M7-T4b) */}
             {quote && (
               <dl className="mt-3 space-y-0.5 text-sm">
@@ -1488,6 +1563,12 @@ function SellScreen({
                   <div className="flex justify-between">
                     <dt className="ink-soft">Service charge</dt>
                     <dd className="tabular-nums">+ {formatRupiah(quote.service_charge)}</dd>
+                  </div>
+                )}
+                {Number(quote.delivery_fee) > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="ink-soft">Ongkos kirim</dt>
+                    <dd className="tabular-nums">+ {formatRupiah(quote.delivery_fee)}</dd>
                   </div>
                 )}
                 {Number(quote.tax_total) > 0 && (
@@ -1772,6 +1853,11 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
           {receipt.customer_name ? ` · utk ${receipt.customer_name}` : ""}
           {receipt.status !== "completed" ? ` · ${receipt.status === "voided" ? "DIBATALKAN" : "DIKEMBALIKAN"}` : ""}
         </p>
+        <p className="text-center">
+          {ORDER_TYPE_LABEL[receipt.order_type as OrderType] ?? receipt.order_type}
+          {receipt.table_label ? ` · ${receipt.table_label}` : ""}
+          {receipt.delivery_address ? ` · ${receipt.delivery_address}` : ""}
+        </p>
         <hr className="my-3 border-dashed border-black" />
         {receipt.lines.map((l, i) => (
           <div key={i} className="mb-2">
@@ -1796,6 +1882,7 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
           Number(receipt.promo_total) > 0 ||
           Number(receipt.voucher_total) > 0 ||
           Number(receipt.service_charge) > 0 ||
+          Number(receipt.delivery_fee) > 0 ||
           Number(receipt.tax_total) > 0 ||
           Number(receipt.rounding) !== 0) && (
           <div className="space-y-0.5">
@@ -1825,6 +1912,12 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
               <div className="flex justify-between">
                 <span>Service</span>
                 <span>{formatRupiah(receipt.service_charge)}</span>
+              </div>
+            )}
+            {Number(receipt.delivery_fee) > 0 && (
+              <div className="flex justify-between">
+                <span>Ongkos kirim</span>
+                <span>{formatRupiah(receipt.delivery_fee)}</span>
               </div>
             )}
             {Number(receipt.tax_total) > 0 && (

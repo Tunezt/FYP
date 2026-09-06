@@ -37,6 +37,7 @@ STANDARD_RULES: list[tuple[str, str, str | None, str | None, str]] = [
     ("OrderCompleted", "voucher", "4250", "4100", "Voucher dipakai (kontra pendapatan)"),   # M8-T4, migration 0024
     ("OrderCompleted", "tax", "4100", "2200", "Pajak yang dipungut dipisahkan dari pendapatan"),
     ("OrderCompleted", "service_charge", "4100", "4900", "Service charge diakui sebagai pendapatan lain"),
+    ("OrderCompleted", "delivery_fee", "4100", "4910", "Ongkos kirim diakui sebagai pendapatan lain"),   # M11-T3, migration 0028
     ("OrderCompleted", "cogs", "5100", "1300", "Harga pokok penjualan"),
     # Rupiah rounding at the total (M7-T4b); backfilled by migration 0020.
     ("OrderCompleted", "rounding_up", "4100", "4900", "Pembulatan ke atas (pendapatan lain)"),
@@ -57,6 +58,7 @@ STANDARD_RULES: list[tuple[str, str, str | None, str | None, str]] = [
     ("OrderRefunded", "voucher_reversal", "4100", "4250", "Retur: voucher dibatalkan"),   # M8-T4
     ("OrderRefunded", "tax_reversal", "2200", "4100", "Retur: pajak yang dipungut dikembalikan"),
     ("OrderRefunded", "service_charge_reversal", "4900", "4100", "Retur: service charge dibatalkan"),
+    ("OrderRefunded", "delivery_fee_reversal", "4910", "4100", "Retur: ongkos kirim dikembalikan"),   # M11-T3
     ("OrderRefunded", "rounding_up_reversal", "4900", "4100", "Retur: pembulatan ke atas dibatalkan"),
     ("OrderRefunded", "rounding_down_reversal", "4100", "4900", "Retur: pembulatan ke bawah dibatalkan"),
     # Purchasing.

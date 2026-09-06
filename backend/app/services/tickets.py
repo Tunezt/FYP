@@ -121,7 +121,7 @@ async def place_ticket(
             "quantity": str(quantity), "base_price": str(base), "unit_price": str(unit_price),
             "line_total": str(line_total), "notes": spec.notes,
         })
-    bill = price_order(inputs, config)
+    bill = price_order(inputs, config, order_type=order_type)
     ticket = Order(
         business_id=business_id,
         staff_id=None,

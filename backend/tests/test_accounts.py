@@ -30,7 +30,7 @@ DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
 def test_standard_chart_is_well_formed():
     codes = [c for c, _, _ in STANDARD_CHART]
-    assert len(codes) == len(set(codes)) == 27   # 26 + 4250 Diskon promo (M8-T3)
+    assert len(codes) == len(set(codes)) == 28   # 26 + 4250 Diskon promo (M8-T3) + 4910 Pendapatan ongkos kirim (M11-T3)
     assert all(t in ACCOUNT_TYPES for _, _, t in STANDARD_CHART)
     by_type = {t: [c for c, _, tt in STANDARD_CHART if tt == t] for t in ACCOUNT_TYPES}
     assert all(c.startswith("1") for c in by_type["asset"]) and all(c.startswith("2") for c in by_type["liability"])
@@ -81,9 +81,9 @@ async def test_chart_is_seeded_idempotently_and_extendable(session_factory, shop
     async with session_factory() as s:
         await _set_tenant(s, shop)
         chart = await ensure_standard_chart(s, shop)
-        assert len(chart) == 27 and all(a.is_system for a in chart.values())
+        assert len(chart) == 28 and all(a.is_system for a in chart.values())
         await ensure_standard_chart(s, shop)
-        assert (await s.execute(select(func.count(Account.id)))).scalar_one() == 27
+        assert (await s.execute(select(func.count(Account.id)))).scalar_one() == 28
         kas = await account_by_code(s, "1100")
         assert kas.name == "Kas" and kas.type == "asset"
         custom = await create_account(s, shop, code="5910", name="Langganan internet", type="expense")
@@ -115,7 +115,7 @@ async def test_owner_endpoints(session_factory, shop):
         await ensure_standard_chart(s, shop)
         ctx = SimpleNamespace(session=s, business_id=shop, staff_id=None)
         rows = await list_accounts(ctx, include_inactive=False)
-        assert [r.code for r in rows][:3] == ["1100", "1110", "1120"] and len(rows) == 27
+        assert [r.code for r in rows][:3] == ["1100", "1110", "1120"] and len(rows) == 28
         created = await add_account(AccountCreateIn(code="1150", name="Dompet digital", type="asset"), ctx)
         assert created.is_system is False
         with pytest.raises(HTTPException) as exc:
@@ -125,6 +125,6 @@ async def test_owner_endpoints(session_factory, shop):
             await edit_account(rows[0].id, AccountUpdateIn(is_active=False), ctx)
         assert exc.value.status_code == 409 and "bawaan" in exc.value.detail
         await edit_account(created.id, AccountUpdateIn(is_active=False), ctx)
-        assert len(await list_accounts(ctx, include_inactive=False)) == 27
-        assert len(await list_accounts(ctx, include_inactive=True)) == 28   # 27 standard + the one created above
+        assert len(await list_accounts(ctx, include_inactive=False)) == 28
+        assert len(await list_accounts(ctx, include_inactive=True)) == 29   # 28 standard + the one created above
         await s.commit()

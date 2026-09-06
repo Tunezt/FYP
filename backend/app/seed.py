@@ -220,10 +220,16 @@ async def seed() -> None:
                 total = unit_price * qty
                 staff_id = rng.choice(staff_ids)
                 regular = rng.choice(regulars) if rng.random() < 0.18 else None   # about one sale in six is a known customer
+                # Order types (M11-T3): mostly eaten in at a numbered table, some
+                # carried out, one in ten sent (no fee in the demo settings).
+                order_type = rng.choices(["dine_in", "takeaway", "delivery"], weights=[5, 4, 1])[0]
                 order = Order(
-                    business_id=business_id, staff_id=staff_id, order_type="takeaway",
+                    business_id=business_id, staff_id=staff_id, order_type=order_type,
                     status="completed", subtotal=total, total=total, sold_at=sold_at,
                     created_at=sold_at, customer_id=regular.id if regular is not None else None,
+                    table_label=f"Meja {rng.randint(1, 8)}" if order_type == "dine_in" else None,
+                    delivery_address="Jl. Kenanga 12, Senja" if order_type == "delivery" else None,
+                    guest_phone="0812-0000-1111" if order_type == "delivery" else None,
                 )
                 session.add(order)
                 await session.flush()

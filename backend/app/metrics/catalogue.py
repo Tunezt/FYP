@@ -201,6 +201,24 @@ async def discount_cost(session: AsyncSession, ctx: MetricContext) -> MetricResu
     return MetricResult(name="discount_cost", unit="rupiah", value=await _order_sum(session, ctx, Order.discount_total))
 
 
+@metric("revenue_by_order_type", description_id="Total tagihan per jenis pesanan (makan di tempat, bawa pulang, antar, ambil sendiri) dalam periode",
+        description_en="Bill totals by order type (dine-in, takeaway, delivery, pickup) in the period", unit="rupiah")
+async def revenue_by_order_type(session: AsyncSession, ctx: MetricContext) -> MetricResult:
+    """Routing by order type (M11-T3), read back: how much of the day was
+    eaten in, carried out or sent — `total` as paid, delivery fees shown apart."""
+    rows = (await session.execute(
+        select(Order.order_type, func.count(Order.id), func.coalesce(func.sum(Order.total), 0), func.coalesce(func.sum(Order.delivery_fee), 0))
+        .where(Order.status == "completed", Order.sold_at >= ctx.since, Order.sold_at < ctx.until)
+        .group_by(Order.order_type)
+        .order_by(desc(func.sum(Order.total)))
+    )).all()
+    out = [
+        {"order_type": kind, "orders": int(n), "total": float(_money(total)), "delivery_fees": float(_money(fees))}
+        for kind, n, total, fees in rows
+    ]
+    return MetricResult(name="revenue_by_order_type", unit="rupiah", value=_money(sum((Decimal(r["total"]) for r in out), Decimal(0))), rows=out)
+
+
 @metric("promo_cost", description_id="Total biaya promo dan voucher dalam periode",
         description_en="Total cost of promos and vouchers in the period", unit="rupiah")
 async def promo_cost(session: AsyncSession, ctx: MetricContext) -> MetricResult:

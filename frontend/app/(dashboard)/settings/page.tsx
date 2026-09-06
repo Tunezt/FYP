@@ -3,7 +3,7 @@
 import { useState } from "react";
 import QRCode from "qrcode";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
-import type { Business, LoyaltySettings, PricingSettings, StaffMember } from "@/lib/types";
+import { ORDER_TYPE_LABEL, type Business, type LoyaltySettings, type OrderType, type PricingSettings, type StaffMember } from "@/lib/types";
 import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
@@ -17,6 +17,8 @@ type PricingForm = {
   rounding_unit: string;
   rounding_mode: "nearest" | "up" | "down";
   discount_requires_pin: boolean;
+  service_types: OrderType[]; // M11-T3: which order types carry the service charge
+  delivery_fee: string;
 };
 
 const pct = (fraction: string | undefined) => {
@@ -33,6 +35,8 @@ function toForm(p: PricingSettings | null | undefined): PricingForm {
     rounding_unit: String(Math.round(Number(p?.rounding_unit ?? 0))),
     rounding_mode: p?.rounding_mode ?? "nearest",
     discount_requires_pin: p?.discount_requires_pin ?? true,
+    service_types: p?.service_applies_to ?? ["dine_in", "takeaway", "delivery", "pickup"],
+    delivery_fee: String(Math.round(Number(p?.delivery_fee ?? 0))),
   };
 }
 
@@ -157,6 +161,8 @@ export default function SettingsPage() {
           rounding_unit: unit.toFixed(2),
           rounding_mode: pricingForm.rounding_mode,
           discount_requires_pin: pricingForm.discount_requires_pin,
+          service_applies_to: pricingForm.service_types,
+          delivery_fee: Math.max(0, Number(pricingForm.delivery_fee) || 0).toFixed(2),
         },
         "PATCH",
       );
@@ -324,6 +330,51 @@ export default function SettingsPage() {
                   Dicentang: pajak dihitung dari harga + service. Tidak dicentang: service dihitung
                   setelah pajak dan tidak dipajaki.
                 </span>
+              </span>
+            </label>
+            {/* Order type routing (M11-T3) */}
+            <div>
+              <span className="ink-soft mb-1.5 block text-xs font-medium">Service charge berlaku untuk</span>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(ORDER_TYPE_LABEL) as OrderType[]).map((kind) => {
+                  const on = pricingForm.service_types.includes(kind);
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() =>
+                        setPricingDraft({
+                          ...pricingForm,
+                          service_types: on
+                            ? pricingForm.service_types.filter((k) => k !== kind)
+                            : [...pricingForm.service_types, kind],
+                        })
+                      }
+                      className={`rounded-2xl px-3 py-1.5 text-xs font-semibold ${
+                        on ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                      }`}
+                    >
+                      {ORDER_TYPE_LABEL[kind]}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="ink-faint mt-1 block text-xs">
+                Kafe biasanya hanya memungut service charge untuk makan di tempat. Bawa pulang dan
+                antar tidak kena.
+              </span>
+            </div>
+            <label className="block sm:w-1/2">
+              <span className="ink-soft mb-1.5 block text-xs font-medium">Ongkos kirim pesanan antar (Rp)</span>
+              <input
+                className="field"
+                inputMode="numeric"
+                value={pricingForm.delivery_fee}
+                onChange={(e) => setPricingDraft({ ...pricingForm, delivery_fee: e.target.value.replace(/[^0-9]/g, "") })}
+                placeholder="0"
+              />
+              <span className="ink-faint mt-1 block text-xs">
+                Ditambahkan otomatis ke pesanan antar dan dicatat sebagai pendapatan ongkir.
               </span>
             </label>
             <div className="grid gap-3 sm:grid-cols-2">

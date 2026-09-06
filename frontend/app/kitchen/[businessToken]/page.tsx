@@ -23,6 +23,7 @@ type Ticket = {
   table_label: string | null;
   guest_name: string | null;
   note: string | null;
+  delivery_address: string | null;
   sold_at: string;
   state: State;
   state_since: string | null;
@@ -244,9 +245,16 @@ function Board({
                   <div>
                     <p className="text-2xl font-black tracking-tight">{t.code}</p>
                     <p className="ink-soft text-xs">
-                      {t.order_type === "dine_in" ? t.table_label || "Makan di sini" : t.order_type === "takeaway" ? "Bawa pulang" : t.order_type}
+                      {t.order_type === "dine_in" ? (
+                        t.table_label || "Makan di sini"
+                      ) : (
+                        <span className="font-bold uppercase" style={{ color: "var(--warn)" }}>
+                          {t.order_type === "delivery" ? "Antar" : t.order_type === "pickup" ? "Ambil sendiri" : "Bungkus"}
+                        </span>
+                      )}
                       {t.guest_name ? ` · ${t.guest_name}` : ""}
                     </p>
+                    {t.delivery_address && <p className="ink-soft text-xs">{t.delivery_address}</p>}
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold tabular-nums" style={late ? { color: "var(--warn)" } : undefined}>

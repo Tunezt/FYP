@@ -534,6 +534,8 @@ class PricingSettingsOut(BaseModel):
     rounding_unit: Decimal
     rounding_mode: Literal["nearest", "up", "down"]
     discount_requires_pin: bool
+    service_applies_to: list[str] = ["dine_in", "takeaway", "delivery", "pickup"]   # M11-T3
+    delivery_fee: Decimal = Decimal(0)
 
     model_config = {"from_attributes": True}
 
@@ -549,6 +551,8 @@ class PricingSettingsPatch(BaseModel):
     rounding_unit: Decimal | None = Field(default=None, ge=0, le=Decimal("100000"))
     rounding_mode: Literal["nearest", "up", "down"] | None = None
     discount_requires_pin: bool | None = None
+    service_applies_to: list[Literal["dine_in", "takeaway", "delivery", "pickup"]] | None = Field(default=None, max_length=4)   # M11-T3
+    delivery_fee: Decimal | None = Field(default=None, ge=0, le=Decimal("9999999"))
 
 
 # ── Customers (M8-T1) ───────────────────────────────────────────────────────

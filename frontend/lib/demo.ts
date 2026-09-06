@@ -479,6 +479,8 @@ const PRICING: PricingSettings = {
   tax_inclusive: true,
   service_charge_rate: "0.0000",
   service_before_tax: true,
+  service_applies_to: ["dine_in", "takeaway", "delivery", "pickup"],
+  delivery_fee: "0.00",
   rounding_unit: "100.00",
   rounding_mode: "nearest",
   discount_requires_pin: true,

@@ -121,6 +121,14 @@ class EmptyOrder(Exception):
     pass
 
 
+class OrderTypeInvalid(Exception):
+    """What the order type demands is missing (M11-T3): a delivery needs an
+    address and a phone to reach the receiver."""
+
+    def __init__(self, code: str):
+        self.code = code
+
+
 class TicketNotOpen(Exception):
     """The ticket was settled or cancelled already — by this till or another."""
 
@@ -180,6 +188,10 @@ async def create_order(
     customer_id: uuid.UUID | None = None,
     voucher_code: str | None = None,
     ticket: Order | None = None,
+    table_label: str | None = None,
+    delivery_address: str | None = None,
+    guest_name: str | None = None,
+    guest_phone: str | None = None,
 ) -> CreatedOrder:
     """`ticket` (M11-T1): an open e-menu row to fulfil. The sale is written on
     that row — its status flips open → completed under an atomic claim, so two
@@ -200,6 +212,23 @@ async def create_order(
             raise TicketNotOpen(ticket.status)
     shift_id = await open_shift_id(session, staff_id)  # the cashier's open till, if any (M7-T1)
     customer = await require_customer(session, customer_id)  # must be this business's, and active (M8-T1)
+
+    # Routing by order type (M11-T3): what the type demands is checked before
+    # any stock moves. A ticket brings its own table and guest.
+    if ticket is not None:
+        table_label = table_label or ticket.table_label
+        delivery_address = delivery_address or ticket.delivery_address
+        guest_name = guest_name or ticket.guest_name
+        guest_phone = guest_phone or ticket.guest_phone
+    table_label = (table_label or "").strip() or None
+    delivery_address = (delivery_address or "").strip() or None
+    guest_name = (guest_name or "").strip() or None
+    guest_phone = (guest_phone or "").strip() or None
+    if order_type == "delivery":
+        if delivery_address is None:
+            raise OrderTypeInvalid("address")
+        if guest_phone is None and not (customer is not None and (customer.phone or "").strip()):
+            raise OrderTypeInvalid("phone")
 
     # 0. The discount gate (M7-T4b): when the settings say so, nobody discounts
     #    anything without the manager's PIN — checked before any stock moves.
@@ -303,11 +332,12 @@ async def create_order(
     # exists, with the atomic guard — a refused use rolls the whole sale back.
     voucher_quote = None
     if voucher_code:
-        before_voucher = price_order(line_inputs, config, bill_discount=bill_discount, promo_bill_discount=promo_result.bill_discount)
+        before_voucher = price_order(line_inputs, config, bill_discount=bill_discount, promo_bill_discount=promo_result.bill_discount, order_type=order_type)
         voucher_quote = check_voucher(await voucher_by_code(session, voucher_code), base=before_voucher.net, at=sold_at)
     bill = price_order(
         line_inputs, config, bill_discount=bill_discount, promo_bill_discount=promo_result.bill_discount,
         voucher_discount=voucher_quote.amount if voucher_quote is not None else Decimal(0),
+        order_type=order_type,
     )
     subtotal, total = bill.subtotal, bill.total
 
@@ -328,6 +358,9 @@ async def create_order(
         order.promo_total, order.voucher_total = bill.promo_total, bill.voucher_total
         order.tax_total, order.service_charge, order.rounding = bill.tax_total, bill.service_charge, bill.rounding
         order.total, order.sold_at = total, sold_at
+        order.delivery_fee = bill.delivery_fee
+        order.table_label, order.delivery_address = table_label, delivery_address
+        order.guest_name, order.guest_phone = guest_name, guest_phone
     else:
         order = Order(
             shift_id=shift_id,
@@ -345,6 +378,11 @@ async def create_order(
             rounding=bill.rounding,
             total=total,
             sold_at=sold_at,
+            delivery_fee=bill.delivery_fee,
+            table_label=table_label,
+            delivery_address=delivery_address,
+            guest_name=guest_name,
+            guest_phone=guest_phone,
         )
         session.add(order)
     await session.flush()
@@ -664,7 +702,7 @@ async def _reverse(
     return reversal
 
 
-FISCAL_COMPONENTS = ("discount", "promo", "voucher", "tax", "service_charge", "rounding_up", "rounding_down")
+FISCAL_COMPONENTS = ("discount", "promo", "voucher", "tax", "service_charge", "delivery_fee", "rounding_up", "rounding_down")
 
 
 async def _evaluate_promos(session: AsyncSession, business_id: uuid.UUID, priced: list[tuple], sold_at: datetime, bill_discount: Decimal):

@@ -128,6 +128,11 @@ class OrderIn(BaseModel):
     manager_pin: str | None = Field(default=None, min_length=4, max_length=6)  # required for a discount when the settings say so
     customer_id: uuid.UUID | None = None  # M8-T1: attach the customer
     voucher_code: str | None = Field(default=None, max_length=40)  # M8-T4
+    # Order type routing (M11-T3): a table for dine-in; an address and a phone for delivery.
+    table_label: str | None = Field(default=None, max_length=20)
+    delivery_address: str | None = Field(default=None, max_length=300)
+    guest_name: str | None = Field(default=None, max_length=60)
+    guest_phone: str | None = Field(default=None, max_length=32)
 
 
 # ── Customers at the till (M8-T1) ───────────────────────────────────────────
@@ -163,6 +168,7 @@ class QuoteIn(BaseModel):
     lines: list[OrderLineIn] = Field(min_length=1, max_length=50)
     bill_discount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))
     voucher_code: str | None = Field(default=None, max_length=40)  # M8-T4
+    order_type: PosOrderType = "takeaway"  # M11-T3: the type routes service charge and delivery fee
 
 
 class QuoteLineOut(BaseModel):
@@ -193,6 +199,7 @@ class QuoteOut(BaseModel):
     voucher_code: str | None = None
     voucher_error: str | None = None     # the code was given but cannot be used: why, in Indonesian
     service_charge: Decimal
+    delivery_fee: Decimal = Decimal(0)   # M11-T3
     tax_total: Decimal
     tax_inclusive: bool
     rounding: Decimal
@@ -224,6 +231,9 @@ class PaymentOut(BaseModel):
 class OrderOut(BaseModel):
     id: uuid.UUID
     order_type: str
+    table_label: str | None = None        # M11-T3
+    delivery_address: str | None = None
+    delivery_fee: Decimal = Decimal(0)
     customer_id: uuid.UUID | None = None
     points_earned: int = 0
     points_redeemed: int = 0
@@ -260,6 +270,9 @@ class ReceiptOut(BaseModel):
     points_redeemed: int = 0
     status: str
     order_type: str
+    table_label: str | None = None        # M11-T3
+    delivery_address: str | None = None
+    delivery_fee: Decimal = Decimal(0)
     sold_at: datetime
     lines: list[ReceiptLineOut]
     subtotal: Decimal
@@ -390,6 +403,7 @@ class KitchenTicketOut(BaseModel):
     table_label: str | None
     guest_name: str | None
     note: str | None = None
+    delivery_address: str | None = None   # M11-T3
     sold_at: datetime
     state: KitchenState
     state_since: datetime | None

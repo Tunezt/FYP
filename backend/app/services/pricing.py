@@ -60,6 +60,9 @@ class PricingInvalid(Exception):
         super().__init__(code)
 
 
+ALL_ORDER_TYPES = ("dine_in", "takeaway", "delivery", "pickup")
+
+
 @dataclass(frozen=True)
 class PricingConfig:
     """The business's settings, detached from the ORM row so `price_order`
@@ -72,6 +75,10 @@ class PricingConfig:
     rounding_unit: Decimal = Decimal(0)
     rounding_mode: str = "nearest"
     discount_requires_pin: bool = True
+    # Order type routing (M11-T3): the service charge only on these types; a
+    # flat fee on `delivery`, added after tax, never taxed.
+    service_applies_to: tuple[str, ...] = ALL_ORDER_TYPES
+    delivery_fee: Decimal = Decimal(0)
 
     @classmethod
     def from_row(cls, row: PricingSettings) -> "PricingConfig":
@@ -83,6 +90,8 @@ class PricingConfig:
             rounding_unit=Decimal(row.rounding_unit),
             rounding_mode=row.rounding_mode,
             discount_requires_pin=bool(row.discount_requires_pin),
+            service_applies_to=tuple(row.service_applies_to or ALL_ORDER_TYPES),
+            delivery_fee=Decimal(row.delivery_fee or 0),
         )
 
 
@@ -119,6 +128,7 @@ class PricedOrder:
     service_tax: Decimal = Decimal("0.00")   # the part of service_charge that is tax (inclusive + taxed only)
     promo_total: Decimal = Decimal("0.00")   # what promos gave away (M8-T3), kept apart from discount_total
     voucher_total: Decimal = Decimal("0.00") # what a voucher code took off (M8-T4)
+    delivery_fee: Decimal = Decimal("0.00")  # the flat fee a delivery carries (M11-T3); inside `total`, outside `net`
 
     @property
     def net(self) -> Decimal:
@@ -139,6 +149,7 @@ class PricedOrder:
             "voucher": self.voucher_total,
             "tax": self.tax_total,
             "service_charge": q(self.service_charge - self.service_tax),
+            "delivery_fee": self.delivery_fee,
             "rounding_up": self.rounding if self.rounding > 0 else Decimal("0.00"),
             "rounding_down": -self.rounding if self.rounding < 0 else Decimal("0.00"),
         }
@@ -170,6 +181,7 @@ def price_order(
     bill_discount: Decimal = Decimal(0),
     promo_bill_discount: Decimal = Decimal(0),
     voucher_discount: Decimal = Decimal(0),
+    order_type: str = "takeaway",
 ) -> PricedOrder:
     """Price one bill. Raises rather than silently clamping: a discount larger
     than the bill, a negative quantity or an unknown rounding mode is a bug in
@@ -218,7 +230,14 @@ def price_order(
         raise PricingInvalid("voucher")
 
     net = q(subtotal - discount_total - promo_total - voucher_total)
-    tax_rate, sc_rate = Decimal(config.tax_rate), Decimal(config.service_charge_rate)
+    tax_rate = Decimal(config.tax_rate)
+    # Routing by order type (M11-T3): the service charge only where the
+    # settings put it (a café: dine-in only); a flat delivery fee on delivery,
+    # added after tax and not taxed.
+    sc_rate = Decimal(config.service_charge_rate) if order_type in config.service_applies_to else Decimal(0)
+    delivery_fee = q(config.delivery_fee) if order_type == "delivery" else Decimal("0.00")
+    if delivery_fee < 0:
+        raise PricingInvalid("rate")
 
     service_tax = Decimal("0.00")
     if not config.tax_inclusive:
@@ -247,6 +266,7 @@ def price_order(
             tax = contained
         before_rounding = q(net + service)
 
+    before_rounding = q(before_rounding + delivery_fee)
     total = round_total(before_rounding, config.rounding_unit, config.rounding_mode)
     return PricedOrder(
         subtotal=subtotal,
@@ -260,6 +280,7 @@ def price_order(
         service_tax=service_tax,
         promo_total=promo_total,
         voucher_total=voucher_total,
+        delivery_fee=delivery_fee,
     )
 
 

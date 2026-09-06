@@ -57,6 +57,7 @@ from app.services.orders import (
     ModifierSelectionInvalid,
     OrderLineSpec,
     OrderNotFound,
+    OrderTypeInvalid,
     OrderNotReversible,
     PaymentMismatch,
     PaymentSpec,
@@ -216,6 +217,11 @@ def _rp(amount) -> str:
     return f"Rp {amount:,.0f}".replace(",", ".")
 
 
+_ORDER_TYPE_ERRORS = {   # M11-T3
+    "address": "Pesanan antar perlu alamat pengantaran",
+    "phone": "Pesanan antar perlu nomor HP penerima — isi nomornya atau pilih pelanggan yang punya nomor",
+}
+
 _PRICING_ERRORS = {
     "quantity": "Jumlah harus lebih dari nol",
     "price": "Harga tidak boleh negatif",
@@ -287,14 +293,14 @@ async def pos_quote(payload: QuoteIn, ctx: PosCtx):
     voucher_amount, voucher_error = Decimal(0), None
     if payload.voucher_code:
         try:
-            before = price_order(all_inputs, config, bill_discount=payload.bill_discount, promo_bill_discount=promo.bill_discount)
+            before = price_order(all_inputs, config, bill_discount=payload.bill_discount, promo_bill_discount=promo.bill_discount, order_type=payload.order_type)
             voucher_amount = check_voucher(await voucher_by_code(ctx.session, payload.voucher_code), base=before.net, at=datetime.now(_tz.utc)).amount
         except VoucherInvalid as exc:
             voucher_error = _voucher_message(exc)
         except PricingInvalid as exc:
             raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
     try:
-        bill = price_order(all_inputs, config, bill_discount=payload.bill_discount, promo_bill_discount=promo.bill_discount, voucher_discount=voucher_amount)
+        bill = price_order(all_inputs, config, bill_discount=payload.bill_discount, promo_bill_discount=promo.bill_discount, voucher_discount=voucher_amount, order_type=payload.order_type)
     except PricingInvalid as exc:
         raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
     item_ids = [l.item_id for l in payload.lines] + [b.item_id for b in promo.bonus_lines]
@@ -304,7 +310,7 @@ async def pos_quote(payload: QuoteIn, ctx: PosCtx):
         promos=[QuotePromoOut(promo_id=a.promo_id, name=a.promo_name, amount=a.amount, bonus_quantity=a.bonus_quantity) for a in promo.applications],
         voucher_total=bill.voucher_total, voucher_code=normalize_code(payload.voucher_code) if payload.voucher_code and not voucher_error else None,
         voucher_error=voucher_error,
-        service_charge=bill.service_charge,
+        service_charge=bill.service_charge, delivery_fee=bill.delivery_fee,
         tax_total=bill.tax_total, tax_inclusive=bill.tax_inclusive, rounding=bill.rounding, total=bill.total,
         discount_requires_pin=config.discount_requires_pin,
         lines=[
@@ -338,7 +344,13 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             manager_pin=payload.manager_pin,
             customer_id=payload.customer_id,
             voucher_code=payload.voucher_code,
+            table_label=payload.table_label,
+            delivery_address=payload.delivery_address,
+            guest_name=payload.guest_name,
+            guest_phone=payload.guest_phone,
         )
+    except OrderTypeInvalid as exc:
+        raise HTTPException(status_code=422, detail=_ORDER_TYPE_ERRORS[exc.code])
     except VoucherInvalid as exc:
         raise HTTPException(status_code=409 if exc.code == "used_up" else 422, detail=_voucher_message(exc))
     except CustomerInvalid:
@@ -404,6 +416,9 @@ async def _order_out(session, created) -> OrderOut:
     return OrderOut(
         id=order.id,
         order_type=order.order_type,
+        table_label=order.table_label,
+        delivery_address=order.delivery_address,
+        delivery_fee=order.delivery_fee,
         customer_id=order.customer_id,
         points_earned=earned,
         points_redeemed=redeemed,
@@ -465,6 +480,8 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
         raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
     except TicketNotOpen as exc:
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
+    except OrderTypeInvalid as exc:
+        raise HTTPException(status_code=422, detail=_ORDER_TYPE_ERRORS[exc.code])
     except VoucherInvalid as exc:
         raise HTTPException(status_code=409 if exc.code == "used_up" else 422, detail=_voucher_message(exc))
     except CustomerInvalid:
@@ -562,6 +579,9 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
         points_redeemed=redeemed,
         status=order.status,
         order_type=order.order_type,
+        table_label=order.table_label,
+        delivery_address=order.delivery_address,
+        delivery_fee=order.delivery_fee,
         sold_at=order.sold_at,
         lines=[
             ReceiptLineOut(
@@ -831,7 +851,8 @@ async def pos_cash_movements(ctx: PosCtx):
 def _kitchen_out(t) -> KitchenTicketOut:
     return KitchenTicketOut(
         order_id=t.order_id, code=t.code, source=t.source, order_type=t.order_type, table_label=t.table_label,
-        guest_name=t.guest_name, note=t.note, sold_at=t.sold_at, state=t.state, state_since=t.state_since,
+        guest_name=t.guest_name, note=t.note, delivery_address=t.delivery_address,
+        sold_at=t.sold_at, state=t.state, state_since=t.state_since,
         lines=[KitchenLineOut(name=l.name, quantity=l.quantity, modifiers=l.modifiers, notes=l.notes) for l in t.lines],
     )
 
