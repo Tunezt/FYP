@@ -26,7 +26,9 @@ Rules and their thresholds (deterministic; the model only narrates):
                    rebuilt on the registry's daily series)
 
 Every threshold is a module constant so a test can manufacture the condition
-exactly; every message is Indonesian.
+exactly; every message is Indonesian. Writing goes through `alert_policy`
+(M10-T2): dedup by rule_key, suppress a subject alerted in the last week,
+at most MAX_NEW_PER_NIGHT new alerts a night.
 """
 from __future__ import annotations
 
@@ -77,25 +79,6 @@ def local_day(business: Business, now: datetime | None = None) -> str:
     return moment.astimezone(ZoneInfo(business.timezone)).date().isoformat()
 
 
-async def _already(session: AsyncSession, rule_key: str) -> bool:
-    return (await session.execute(select(Alert.id).where(Alert.rule_key == rule_key))).first() is not None
-
-
-async def _write(session: AsyncSession, business: Business, found: list[RuleAlert]) -> list[Alert]:
-    """At most one alert per rule_key, ever — the same finding on the same day is
-    one alert however many times the job runs."""
-    written: list[Alert] = []
-    for f in found:
-        if await _already(session, f.rule_key):
-            continue
-        alert = Alert(
-            business_id=business.id, type=f.type, metric=f.metric, severity=f.severity, message=f.message,
-            related_item_id=f.related_item_id, rule_key=f.rule_key, details=f.details,
-        )
-        session.add(alert)
-        written.append(alert)
-    await session.flush()
-    return written
 
 
 # ── the rules ────────────────────────────────────────────────────────────────
@@ -149,7 +132,7 @@ async def rule_stockout_risk(session: AsyncSession, business: Business, now: dat
         if days >= horizon:
             continue
         found.append(RuleAlert(
-            type="stockout_risk", rule_key=f"stockout_risk:{r['item_id']}:{local_day(business, moment)}", metric="days_remaining",
+            type="stockout_risk", rule_key=f"stock:{r['item_id']}:{local_day(business, moment)}", metric="days_remaining",
             related_item_id=r["item_id"], severity="high" if days <= horizon / 2 else "medium",
             message=f"{r['name']}: stok habis dalam ±{days:g} hari, pengiriman berikutnya biasanya {horizon} hari lagi ({r['stock']:g} {r['unit']} @ {r['daily_usage']:g}/hari). Pesan sekarang.",
             details={"days_remaining": days, "delivery_days": horizon, "stock": r["stock"], "daily_usage": r["daily_usage"]},
@@ -209,36 +192,50 @@ async def rule_supplier_price(session: AsyncSession, business: Business, now: da
     return found
 
 
+_ANOMALY_SERIES = (("daily_revenue", "revenue", "Penjualan"), ("daily_expenses", "expense_total", "Pengeluaran"))
+
+
 async def rule_takings_anomaly(session: AsyncSession, business: Business, now: datetime | None = None) -> list[RuleAlert]:
-    """The 30-day z-score, on the registry's daily revenue series."""
+    """The 30-day z-score on the registry's daily series — revenue and
+    recorded expenses (the two the legacy detector watched), one alert each."""
     moment = now or datetime.now(timezone.utc)
     windows = local_day_windows(business, BASELINE_DAYS + 1, now=moment)
-    daily = await series(session, business, "revenue", windows)
-    history = [float(r.value or 0) for _k, r in daily[:-1]]
-    today = float(daily[-1][1].value or 0)
-    if len(history) < 2:
-        return []
-    mean, stddev = statistics.fmean(history), statistics.stdev(history)
-    if stddev <= 0:
-        return []
-    z = (today - mean) / stddev
-    if abs(z) <= Z_THRESHOLD:
-        return []
-    direction = "di atas" if z > 0 else "di bawah"
-    return [RuleAlert(
-        type="anomaly", rule_key=f"takings_anomaly:{local_day(business, moment)}", metric="daily_revenue",
-        severity="high" if abs(z) > 4 else "medium",
-        message=f"Penjualan hari ini {_rp(today)} — jauh {direction} normal (rata-rata 30 hari {_rp(mean)}, z={z:.1f})",
-        details={"today": today, "mean": round(mean, 2), "stddev": round(stddev, 2), "z": round(z, 2)},
-    )]
+    found: list[RuleAlert] = []
+    for metric_name, registry_metric, label in _ANOMALY_SERIES:
+        daily = await series(session, business, registry_metric, windows)
+        history = [float(r.value or 0) for _k, r in daily[:-1]]
+        today = float(daily[-1][1].value or 0)
+        if len(history) < 2:
+            continue
+        mean, stddev = statistics.fmean(history), statistics.stdev(history)
+        if stddev <= 0:
+            continue
+        z = (today - mean) / stddev
+        if abs(z) <= Z_THRESHOLD:
+            continue
+        direction = "di atas" if z > 0 else "di bawah"
+        found.append(RuleAlert(
+            type="anomaly", rule_key=f"anomaly:{metric_name}:{local_day(business, moment)}", metric=metric_name,
+            severity="high" if abs(z) > 4 else "medium",
+            message=f"{label} hari ini {_rp(today)} — jauh {direction} normal (rata-rata 30 hari {_rp(mean)}, z={z:.1f})",
+            details={"today": today, "mean": round(mean, 2), "stddev": round(stddev, 2), "z": round(z, 2)},
+        ))
+    return found
 
 
 RULES = (rule_margin_drop, rule_stockout_risk, rule_void_rate, rule_supplier_price, rule_takings_anomaly)
 
 
-async def run_rules(session: AsyncSession, business: Business, now: datetime | None = None) -> list[Alert]:
-    """Every rule, one pass; returns the alerts actually written (new today)."""
+async def collect_findings(session: AsyncSession, business: Business, now: datetime | None = None) -> list[RuleAlert]:
     found: list[RuleAlert] = []
     for rule in RULES:
         found.extend(await rule(session, business, now))
-    return await _write(session, business, found)
+    return found
+
+
+async def run_rules(session: AsyncSession, business: Business, now: datetime | None = None) -> list[Alert]:
+    """Every rule, one pass, through the alert policy; returns what was written."""
+    from app.jobs.alert_policy import apply_policy
+
+    result = await apply_policy(session, business, await collect_findings(session, business, now), now=now)
+    return result.written

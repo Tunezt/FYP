@@ -1088,3 +1088,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Four new `alert_type` values (an enum can only grow in Postgres; the downgrade keeps them and drops the two columns), Indonesian messages, `details` with the figures for M10-T2's dedup and the owner's alert page, which now labels the new kinds.
 **Deviation:** none.
 **Next:** M10-T2 (alert quality). Canary due after 5 tasks (last at M9-T4: M9-T5, M9-T6, M10-T1 = 3 so far).
+
+### [M10-T2] Alert quality, not quantity
+**Date:** 2026-09-06
+**Status:** done
+**Changed:** backend/app/jobs/alert_policy.py (new), backend/app/jobs/rules.py (writes through the policy; `stock:` subject shared with the till; anomaly rule covers revenue and expenses), backend/app/jobs/nightly.py (`nightly_pass`; legacy z-score detector no longer called), backend/app/services/velocity.py (low-stock alerts carry `rule_key = stock:<item>:<day>`), backend/tests/test_alert_quality.py (new, 5 tests)
+**Gates:** pytest 364 passed 0 skipped · migrations round-trip ok (0025 unchanged) · frontend build ok · seed ok
+**Notes:**
+- **The done-when**: `test_a_simulated_stable_week_produces_zero_alerts` runs the full nightly pass (baselines, the per-item stock sweep, the five rules through the policy) seven nights in a row on seven ordinary days of a stable café — each day's sales rung up with the same post-sale low-stock check the POS runs — and asserts every night wrote nothing and the alerts table is empty at the end. Silence when nothing is wrong.
+- `app/jobs/alert_policy.py` sits between a rule's finding and an `alerts` row with three policies. **Deduplicate**: one alert per `rule_key` (rule, subject, local day), ever. **Suppress the same alert as yesterday**: the *subject* — the key without its day — that alerted within the last 7 days, acknowledged or not, is not said again; when the window passes and the condition still holds it is said once more (tested: Roti short of stock all week → one alert on night one, silence on six nights, and again a week and an hour later). **Rate limit**: at most 5 new alerts per business per *local day*, highest severity first — per day rather than per run so a job re-run after a crash cannot double it; what does not fit is deferred and, if still true, written the next night (tested with a burst of eight: 5, then 0 on a re-run the same night, then 3).
+- One conversation per item: the till's synchronous `low_stock` alert now carries `stock:<item>:<day>` and the nightly `stockout_risk` rule uses the same subject, so an item that dropped under the threshold at 14:00 is not alerted about again at 23:30 (tested).
+- The legacy `detect_anomalies` is no longer called by the job — it and `rule_takings_anomaly` would have written two alerts for one spike. The rule now covers both daily revenue and daily expenses (what the legacy detector watched) under keys `anomaly:daily_revenue:<day>` / `anomaly:daily_expenses:<day>`; `refresh_baselines` still runs to keep the cached rolling mean/stddev current. The anomaly math tests are untouched.
+- `nightly_pass(session, business, now)` is the job minus the WhatsApp send, so the simulated week runs the real thing with a moving clock; `process_business` calls it and then delivers, as before, through the approved template.
+**Deviation:** none. No schema change.
+**Next:** tag `checkpoint/M10`. M0–M10 are complete; M11 (channels) is optional per the roadmap and starts with M11-T1. Canary due after M11-T1 (tasks since M9-T4: M9-T5, M9-T6, M10-T1, M10-T2 = 4).
