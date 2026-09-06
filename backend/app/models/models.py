@@ -43,7 +43,7 @@ def _now() -> Mapped[datetime]:
 
 staff_role = Enum("owner", "staff", name="staff_role", create_type=False)
 expense_source = Enum("manual", "receipt", name="expense_source", create_type=False)
-alert_type = Enum("anomaly", "low_stock", name="alert_type", create_type=False)
+alert_type = Enum("anomaly", "low_stock", "margin_drop", "stockout_risk", "void_rate", "supplier_price", name="alert_type", create_type=False)  # M10-T1 adds four
 alert_severity = Enum("low", "medium", "high", name="alert_severity", create_type=False)
 stock_movement_reason = Enum(
     "sale", "sale_void", "refund", "purchase", "waste",
@@ -236,6 +236,8 @@ class Alert(Base):
     is_acknowledged: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    rule_key: Mapped[str | None] = mapped_column(Text)        # rule:subject:local-day (M10-T1)
+    details: Mapped[dict | None] = mapped_column(JSONB)        # the figures behind the message
     created_at: Mapped[datetime] = _now()
 
 

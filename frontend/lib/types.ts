@@ -52,7 +52,7 @@ export type PnlMonth = { month: string; revenue: number; expenses: number; net: 
 
 export type AlertRow = {
   id: string;
-  type: "anomaly" | "low_stock";
+  type: "anomaly" | "low_stock" | "margin_drop" | "stockout_risk" | "void_rate" | "supplier_price";
   metric: string | null;
   severity: "low" | "medium" | "high";
   message: string;

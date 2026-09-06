@@ -5,7 +5,10 @@ never a cross-tenant query):
   1. refresh 30-day metric baselines (the cache dashboards/queries read)
   2. z-score anomaly detection on today's revenue/expenses
   3. stock-velocity sweep over every item
-  4. deliver unsent alerts via the approved WhatsApp Utility TEMPLATE
+  4. the exception rules over the registry (M10-T1): margin drop, stock-out
+     before the next likely delivery, a cashier's void rate, a supplier price
+     move, takings anomaly — each at most one alert per subject per day
+  5. deliver unsent alerts via the approved WhatsApp Utility TEMPLATE
 
 Delivery MUST use the template: this job runs unprompted, almost certainly
 outside the 24-hour session window, and Meta rejects free-form messages there.
@@ -21,6 +24,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.db import engine, plain_session, tenant_session
 from app.models import Alert, Business, Item
+from app.jobs.rules import run_rules
 from app.services.anomaly import detect_anomalies, refresh_baselines
 from app.services.velocity import check_low_stock_for_item
 from app.whatsapp.client import send_template
@@ -30,7 +34,10 @@ logger = logging.getLogger("jobs.nightly")
 
 MAX_DETAIL_CHARS = 550  # keep well inside template-parameter limits
 
-ALERT_KIND_LABEL = {"anomaly": "anomali penjualan", "low_stock": "stok menipis"}
+ALERT_KIND_LABEL = {
+    "anomaly": "anomali penjualan", "low_stock": "stok menipis", "margin_drop": "margin turun",
+    "stockout_risk": "stok habis sebelum kiriman", "void_rate": "pembatalan kasir", "supplier_price": "harga supplier berubah",
+}
 
 
 async def process_business(business: Business) -> int:
@@ -44,6 +51,10 @@ async def process_business(business: Business) -> int:
         item_ids = (await session.execute(select(Item.id))).scalars().all()
         for item_id in item_ids:
             await check_low_stock_for_item(session, business.id, item_id)
+
+        written = await run_rules(session, business)
+        if written:
+            logger.info("business=%s rules fired: %s", business.id, [a.type for a in written])
 
         unsent = (
             (

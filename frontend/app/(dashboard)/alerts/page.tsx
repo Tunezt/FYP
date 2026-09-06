@@ -8,6 +8,15 @@ import { DayHeader, EmptyState, ErrorState, Glass, SeverityBadge, Skeleton } fro
 import { HelpTip } from "@/components/HelpTip";
 import { IconBell, IconBox, IconCheck, IconTrendUp } from "@/components/icons";
 
+const ALERT_LABEL: Record<string, string> = {
+  anomaly: "anomali penjualan",
+  low_stock: "stok menipis",
+  margin_drop: "margin turun",
+  stockout_risk: "stok habis sebelum kiriman",
+  void_rate: "pembatalan kasir",
+  supplier_price: "harga supplier berubah",
+};
+
 export default function AlertsPage() {
   const alerts = useOwnerData<AlertRow[]>("/api/alerts?limit=100");
   const business = useOwnerData<Business>("/api/business");
@@ -89,7 +98,7 @@ export default function AlertsPage() {
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">{alert.message}</p>
                           <p className="ink-faint mt-0.5 text-xs">
-                            {alert.type === "low_stock" ? "stok menipis" : "anomali penjualan"}
+                            {ALERT_LABEL[alert.type] ?? alert.type}
                           </p>
                         </div>
                         <SeverityBadge severity={alert.severity} />

@@ -1070,3 +1070,21 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **Deviation:** none.
 **NEEDS HUMAN (non-blocking):** finishing the live comparison — questions 16–30 for the tools and a baseline run on a Postgres with tzdata — needs either a paid Gemini tier or more free-tier days; the commands are in `docs/evaluation.md`. The harness, its tests and today's evidence are complete, so the build continues.
 **Next:** tag `checkpoint/M9`; M10-T1 (exception rules over metrics). Canary due after 5 tasks (last at M9-T4: M9-T5, M9-T6 = 2 so far).
+
+### [M10-T1] Exception rules over metrics
+**Date:** 2026-09-06
+**Status:** done
+**Changed:** backend/alembic/versions/0025_alert_rules.py (new: four `alert_type` values, `alerts.rule_key`, `alerts.details`), backend/app/models/models.py, backend/app/jobs/rules.py (new), backend/app/jobs/nightly.py (runs the rules; labels), backend/app/services/anomaly.py (daily totals from the registry), backend/tests/test_exception_rules.py (new, 6 tests), frontend/lib/types.ts, frontend/app/(dashboard)/alerts/page.tsx
+**Gates:** pytest 359 passed 0 skipped · migrations round-trip ok (0025 → 0024 → 0025) · frontend build ok · seed ok
+**Notes:**
+- The nightly job is rebuilt on the registry. `app/jobs/rules.py` holds five rules, each a function that reads `compute`/`series` and returns findings; the job writes them as alerts with a **`rule_key`** — rule, subject, business-local day — and never writes the same key twice, so running the job again on the same data writes nothing (every test asserts exactly one alert, then runs the rules again and asserts none). `anomaly.py`'s own sums are gone: its daily totals are `revenue` / `expense_total` per local day from the registry.
+- **margin_drop**: gross margin over the last 7 days at least 10 points under the 30 days before, with ≥ Rp 500.000 revenue in each window (otherwise the margin is noise). Manufactured by raising Kopi's cost so the same sales earn 25 points less.
+- **stockout_risk**: an item's days remaining (the locked velocity formula) shorter than its next likely delivery — the median gap between its last goods receipts, or 7 days when it has none. Manufactured with deliveries every 10 days and 3 days of Roti left.
+- **void_rate**: a cashier with ≥ 3 voids, ≥ 10 orders, a void rate ≥ 10 % and ≥ 2× the rest of the team's, over 30 days. Manufactured with Budi voiding 8 of his 40 orders while Sari voids none.
+- **supplier_price**: the last price paid for an item to a supplier, bought within the last day, moved ≥ 10 % from the price before it (the `supplier_prices` metric's `change_pct`). Manufactured with Kopi at 8.000 then 9.600 today.
+- **takings anomaly** (the z-score rule, now over the registry's daily series): today's revenue more than 3σ from the 30-day daily mean. Manufactured with twenty 100.000 sales on a 110.000-a-day shop.
+- A quiet shop — 41 days of two steady sales a day with a realistic day-to-day spread, no voids, no receipts — produces **zero** rule alerts, which is the property M10-T2 will extend to a simulated week. (A perfectly flat history has zero variance and the z-score rule stays silent by design; the fixture alternates 110.000 and 150.000 days so the baseline is real.)
+- Two things the tests caught while manufacturing conditions: a sale snapshots cost from the item's *default variant*, so a margin test must move the variant's cost, not only the item's; and voiding a cashier's most recent orders also empties *today's* takings, which correctly trips the anomaly rule — the void test now voids yesterday's and older.
+- Four new `alert_type` values (an enum can only grow in Postgres; the downgrade keeps them and drops the two columns), Indonesian messages, `details` with the figures for M10-T2's dedup and the owner's alert page, which now labels the new kinds.
+**Deviation:** none.
+**Next:** M10-T2 (alert quality). Canary due after 5 tasks (last at M9-T4: M9-T5, M9-T6, M10-T1 = 3 so far).
