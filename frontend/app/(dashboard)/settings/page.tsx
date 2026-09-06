@@ -2,15 +2,43 @@
 
 import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
-import type { Business, StaffMember } from "@/lib/types";
+import type { Business, PricingSettings, StaffMember } from "@/lib/types";
 import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
 import { initials } from "@/lib/format";
 
+type PricingForm = {
+  tax_percent: string;
+  tax_inclusive: boolean;
+  service_percent: string;
+  service_before_tax: boolean;
+  rounding_unit: string;
+  rounding_mode: "nearest" | "up" | "down";
+  discount_requires_pin: boolean;
+};
+
+const pct = (fraction: string | undefined) => {
+  const n = Number(fraction ?? 0) * 100;
+  return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : "0";
+};
+
+function toForm(p: PricingSettings | null | undefined): PricingForm {
+  return {
+    tax_percent: pct(p?.tax_rate),
+    tax_inclusive: p?.tax_inclusive ?? true,
+    service_percent: pct(p?.service_charge_rate),
+    service_before_tax: p?.service_before_tax ?? true,
+    rounding_unit: String(Math.round(Number(p?.rounding_unit ?? 0))),
+    rounding_mode: p?.rounding_mode ?? "nearest",
+    discount_requires_pin: p?.discount_requires_pin ?? true,
+  };
+}
+
 export default function SettingsPage() {
   const business = useOwnerData<Business>("/api/business");
   const staff = useOwnerData<StaffMember[]>("/auth/staff");
+  const pricing = useOwnerData<PricingSettings>("/api/pricing-settings");
   const mutate = useOwnerMutation();
 
   const [profileDraft, setProfileDraft] = useState<{ name: string; business_type: string } | null>(null);
@@ -23,6 +51,10 @@ export default function SettingsPage() {
   const [pairingBusy, setPairingBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importResult, setImportResult] = useState<{ ok: boolean; message: string } | null>(null);
+  // Pricing (M7-T4): the form edits percentages and whole rupiah; the API speaks fractions.
+  const [pricingDraft, setPricingDraft] = useState<PricingForm | null>(null);
+  const [pricingBusy, setPricingBusy] = useState(false);
+  const [pricingError, setPricingError] = useState<string | null>(null);
 
   async function importCatalog(file: File) {
     setImportBusy(true);
@@ -55,6 +87,40 @@ export default function SettingsPage() {
 
   const b = business.data;
   const draft = profileDraft ?? { name: b?.name ?? "", business_type: b?.business_type ?? "cafe" };
+  const pricingForm: PricingForm = pricingDraft ?? toForm(pricing.data);
+
+  async function savePricing() {
+    setPricingBusy(true);
+    setPricingError(null);
+    try {
+      const tax = Number(pricingForm.tax_percent);
+      const service = Number(pricingForm.service_percent);
+      const unit = Number(pricingForm.rounding_unit);
+      if (!(tax >= 0 && tax < 100) || !(service >= 0 && service < 100) || !(unit >= 0)) {
+        setPricingError("Persentase harus 0–99 dan pembulatan tidak boleh negatif.");
+        return;
+      }
+      await mutate(
+        "/api/pricing-settings",
+        {
+          tax_rate: (tax / 100).toFixed(4),
+          tax_inclusive: pricingForm.tax_inclusive,
+          service_charge_rate: (service / 100).toFixed(4),
+          service_before_tax: pricingForm.service_before_tax,
+          rounding_unit: unit.toFixed(2),
+          rounding_mode: pricingForm.rounding_mode,
+          discount_requires_pin: pricingForm.discount_requires_pin,
+        },
+        "PATCH",
+      );
+      setPricingDraft(null);
+      pricing.reload();
+    } catch {
+      setPricingError("Gagal menyimpan — coba lagi.");
+    } finally {
+      setPricingBusy(false);
+    }
+  }
 
   async function saveProfile() {
     setSavingProfile(true);
@@ -127,6 +193,128 @@ export default function SettingsPage() {
             {profileDraft && (
               <button onClick={saveProfile} disabled={savingProfile} className="btn-accent px-5 py-2.5 text-sm">
                 {savingProfile ? "Menyimpan…" : "Simpan perubahan"}
+              </button>
+            )}
+          </Plate>
+        )}
+      </section>
+
+
+      {/* Pricing (M7-T4): tax, service charge, rounding, discount gate */}
+      <section>
+        <h2 className="mb-2 flex items-center gap-2 text-base font-bold">
+          Pajak, service &amp; pembulatan
+          <HelpTip title="Cara struk dihitung">
+            Pajak bisa sudah termasuk di harga menu (harga yang tertulis = yang dibayar) atau
+            ditambahkan di struk. Service charge bisa ikut kena pajak atau tidak. Pembulatan
+            berlaku pada total akhir. Semua berlaku untuk transaksi berikutnya — yang sudah
+            tercatat tidak berubah.
+          </HelpTip>
+        </h2>
+        {pricing.loading ? (
+          <Skeleton className="h-56" />
+        ) : (
+          <Plate className="space-y-4 px-6 py-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Pajak (%)</span>
+                <input
+                  className="field"
+                  inputMode="decimal"
+                  value={pricingForm.tax_percent}
+                  onChange={(e) => setPricingDraft({ ...pricingForm, tax_percent: e.target.value })}
+                  placeholder="0"
+                />
+              </label>
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Service charge (%)</span>
+                <input
+                  className="field"
+                  inputMode="decimal"
+                  value={pricingForm.service_percent}
+                  onChange={(e) => setPricingDraft({ ...pricingForm, service_percent: e.target.value })}
+                  placeholder="0"
+                />
+              </label>
+            </div>
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={pricingForm.tax_inclusive}
+                onChange={(e) => setPricingDraft({ ...pricingForm, tax_inclusive: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium">Harga menu sudah termasuk pajak</span>
+                <span className="ink-faint block text-xs">
+                  Dicentang: pelanggan bayar sesuai harga menu, pajak dipisahkan di pembukuan. Tidak
+                  dicentang: pajak ditambahkan di struk.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={pricingForm.service_before_tax}
+                onChange={(e) => setPricingDraft({ ...pricingForm, service_before_tax: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium">Service charge ikut kena pajak</span>
+                <span className="ink-faint block text-xs">
+                  Dicentang: pajak dihitung dari harga + service. Tidak dicentang: service dihitung
+                  setelah pajak dan tidak dipajaki.
+                </span>
+              </span>
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Pembulatan total (Rp)</span>
+                <select
+                  className="field"
+                  value={pricingForm.rounding_unit}
+                  onChange={(e) => setPricingDraft({ ...pricingForm, rounding_unit: e.target.value })}
+                >
+                  <option value="0">Tidak dibulatkan</option>
+                  <option value="50">Ke Rp 50</option>
+                  <option value="100">Ke Rp 100</option>
+                  <option value="500">Ke Rp 500</option>
+                  <option value="1000">Ke Rp 1.000</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="ink-soft mb-1.5 block text-xs font-medium">Arah pembulatan</span>
+                <select
+                  className="field"
+                  value={pricingForm.rounding_mode}
+                  onChange={(e) =>
+                    setPricingDraft({ ...pricingForm, rounding_mode: e.target.value as PricingForm["rounding_mode"] })
+                  }
+                >
+                  <option value="nearest">Terdekat</option>
+                  <option value="up">Selalu ke atas</option>
+                  <option value="down">Selalu ke bawah</option>
+                </select>
+              </label>
+            </div>
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={pricingForm.discount_requires_pin}
+                onChange={(e) => setPricingDraft({ ...pricingForm, discount_requires_pin: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium">Diskon perlu PIN pemilik</span>
+                <span className="ink-faint block text-xs">
+                  Kasir harus minta PIN kamu sebelum memberi diskon per barang atau per struk.
+                </span>
+              </span>
+            </label>
+            {pricingError && <p className="text-sm text-red-600">{pricingError}</p>}
+            {pricingDraft && (
+              <button onClick={savePricing} disabled={pricingBusy} className="btn-accent px-5 py-2.5 text-sm">
+                {pricingBusy ? "Menyimpan…" : "Simpan perubahan"}
               </button>
             )}
           </Plate>

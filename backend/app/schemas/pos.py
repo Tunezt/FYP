@@ -106,6 +106,7 @@ class OrderLineIn(BaseModel):
     quantity: Decimal = Field(gt=0, le=Decimal("999999"))
     unit_price: Decimal | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=200)
+    line_discount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))  # rupiah off (M7-T4b)
 
 
 class LineModifierOut(BaseModel):
@@ -123,6 +124,36 @@ class OrderIn(BaseModel):
     lines: list[OrderLineIn] = Field(min_length=1, max_length=50)
     payments: list[PaymentIn] = Field(min_length=1, max_length=10)
     order_type: PosOrderType = "takeaway"
+    bill_discount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))  # M7-T4b
+    manager_pin: str | None = Field(default=None, min_length=4, max_length=6)  # required for a discount when the settings say so
+
+
+class QuoteIn(BaseModel):
+    """The cart, priced but not sold (M7-T4b): what the kiosk shows before payment."""
+
+    lines: list[OrderLineIn] = Field(min_length=1, max_length=50)
+    bill_discount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))
+
+
+class QuoteLineOut(BaseModel):
+    item_id: uuid.UUID
+    unit_price: Decimal
+    quantity: Decimal
+    gross: Decimal
+    line_discount: Decimal
+    line_total: Decimal
+
+
+class QuoteOut(BaseModel):
+    subtotal: Decimal
+    discount_total: Decimal
+    service_charge: Decimal
+    tax_total: Decimal
+    tax_inclusive: bool
+    rounding: Decimal
+    total: Decimal
+    discount_requires_pin: bool
+    lines: list[QuoteLineOut]
 
 
 class OrderLineOut(BaseModel):
@@ -132,6 +163,7 @@ class OrderLineOut(BaseModel):
     item_name: str
     quantity: Decimal
     unit_price: Decimal
+    line_discount: Decimal = Decimal(0)
     line_total: Decimal
     remaining_stock: Decimal
     modifiers: list[LineModifierOut] = []
@@ -148,6 +180,10 @@ class OrderOut(BaseModel):
     id: uuid.UUID
     order_type: str
     subtotal: Decimal
+    discount_total: Decimal = Decimal(0)
+    service_charge: Decimal = Decimal(0)
+    tax_total: Decimal = Decimal(0)
+    rounding: Decimal = Decimal(0)
     total: Decimal
     sold_at: datetime
     lines: list[OrderLineOut]
@@ -174,6 +210,11 @@ class ReceiptOut(BaseModel):
     sold_at: datetime
     lines: list[ReceiptLineOut]
     subtotal: Decimal
+    discount_total: Decimal = Decimal(0)
+    service_charge: Decimal = Decimal(0)
+    tax_total: Decimal = Decimal(0)
+    tax_inclusive: bool = True        # true → tax_total is contained in the prices ("termasuk pajak")
+    rounding: Decimal = Decimal(0)
     total: Decimal
     payments: list[PaymentOut]
 

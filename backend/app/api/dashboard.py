@@ -25,6 +25,8 @@ from app.schemas.dashboard import (
     StatementLineOut,
     AlertRow,
     BusinessUpdateIn,
+    PricingSettingsOut,
+    PricingSettingsPatch,
     ExpensesPage,
     InventoryItem,
     ItemCreateIn,
@@ -1168,6 +1170,29 @@ async def update_business(payload: BusinessUpdateIn, ctx: OwnerCtx):
         setattr(business, field, value)
     await ctx.session.flush()
     return BusinessOut.model_validate(business)
+
+
+@router.get("/pricing-settings", response_model=PricingSettingsOut)
+async def get_pricing_settings(ctx: OwnerCtx):
+    """How this business builds a bill (M7-T4b): tax, service charge, rupiah
+    rounding, and whether a discount needs the manager PIN."""
+    from app.services.pricing import ensure_pricing_settings
+
+    return PricingSettingsOut.model_validate(await ensure_pricing_settings(ctx.session, ctx.business_id))
+
+
+@router.patch("/pricing-settings", response_model=PricingSettingsOut)
+async def update_pricing_settings(payload: PricingSettingsPatch, ctx: OwnerCtx):
+    """Takes effect on the next sale; nothing already sold is repriced, and a
+    refund undoes what its sale posted, not what today's settings would."""
+    from app.services.pricing import ensure_pricing_settings
+
+    row = await ensure_pricing_settings(ctx.session, ctx.business_id)
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(row, field, value)
+    row.updated_at = datetime.now(timezone.utc)
+    await ctx.session.flush()
+    return PricingSettingsOut.model_validate(row)
 
 
 @router.post("/business/complete-onboarding", response_model=BusinessOut)

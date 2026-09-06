@@ -46,6 +46,11 @@ type Receipt = {
     notes: string | null;
   }[];
   subtotal: string;
+  discount_total: string;
+  service_charge: string;
+  tax_total: string;
+  tax_inclusive: boolean;
+  rounding: string;
   total: string;
   payments: { method: string; amount: string }[];
 };
@@ -57,7 +62,19 @@ type OrderResult = {
 };
 // A cart line is an item at one size (variant) with a set of chosen modifiers;
 // stock is the item's. Same item + size + modifiers merge into one line.
-type CartLine = { item: Item; variant: Variant | null; modifiers: Modifier[]; qty: number };
+type CartLine = { item: Item; variant: Variant | null; modifiers: Modifier[]; qty: number; discount: number };
+// What the server says the cart comes to (M7-T4b) — the kiosk never adds tax
+// or rounding itself, so the screen and the ledger cannot disagree.
+type Quote = {
+  subtotal: string;
+  discount_total: string;
+  service_charge: string;
+  tax_total: string;
+  tax_inclusive: boolean;
+  rounding: string;
+  total: string;
+  discount_requires_pin: boolean;
+};
 type PayMode = "cash" | "qris" | "split";
 // Till session (M7-T1). Money as strings straight from the API (numeric(12,2)).
 type Shift = {
@@ -339,6 +356,12 @@ function SellScreen({
   const [cartOpen, setCartOpen] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payMode, setPayMode] = useState<PayMode>("cash");
+  // Discounts and the priced bill (M7-T4b).
+  const [billDiscount, setBillDiscount] = useState("");
+  const [managerPin, setManagerPin] = useState("");
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [lineDiscountFor, setLineDiscountFor] = useState<string | null>(null);
+  const [lineDiscountDraft, setLineDiscountDraft] = useState("");
   const [cashPart, setCashPart] = useState("");
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<OrderResult | null>(null);
@@ -459,7 +482,44 @@ function SellScreen({
   // Units of one item across all its sizes — stock is shared by the parent.
   const cartQty = (itemId: string) => cart.filter((l) => l.item.id === itemId).reduce((n, l) => n + l.qty, 0);
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
-  const cartTotal = cart.reduce((s, l) => s + linePrice(l) * l.qty, 0);
+  const cartGross = cart.reduce((s, l) => s + linePrice(l) * l.qty, 0);
+  const anyDiscount = Number(billDiscount || 0) > 0 || cart.some((l) => l.discount > 0);
+  // What the customer pays: the server's priced total when we have it, else the plain sum.
+  const cartTotal = quote ? Number(quote.total) : cartGross;
+  const needsPin = anyDiscount && (quote?.discount_requires_pin ?? true);
+
+  // Re-price whenever the cart or a discount changes. Debounced a touch so a
+  // quick run of taps is one request.
+  useEffect(() => {
+    if (cart.length === 0) {
+      setQuote(null);
+      return;
+    }
+    const handle = setTimeout(() => {
+      api<Quote>("/pos/quote", {
+        token,
+        body: {
+          lines: cart.map((l) => ({
+            item_id: l.item.id,
+            variant_id: l.variant?.id ?? null,
+            modifier_ids: l.modifiers.map((m) => m.id),
+            quantity: l.qty,
+            line_discount: l.discount,
+          })),
+          bill_discount: Number(billDiscount || 0),
+        },
+      })
+        .then((q) => {
+          setQuote(q);
+          setError(null);
+        })
+        .catch((e: unknown) => {
+          setQuote(null);
+          setError(e instanceof ApiError ? e.detail : "Tidak bisa menghitung total.");
+        });
+    }, 150);
+    return () => clearTimeout(handle);
+  }, [cart, billDiscount, token]);
 
   const stockCap = (item: Item) => (item.made_to_order ? 999 : Number(item.current_stock));
 
@@ -475,7 +535,7 @@ function SellScreen({
           lineKey(l.item.id, l.variant, l.modifiers) === key ? { ...l, qty: Math.min(room, l.qty + n) } : l
         );
       }
-      return [...c, { item, variant: v, modifiers: mods, qty: Math.min(room, n) }];
+      return [...c, { item, variant: v, modifiers: mods, qty: Math.min(room, n), discount: 0 }];
     });
   }
 
@@ -490,6 +550,12 @@ function SellScreen({
           return { ...l, qty: Math.min(room, l.qty + delta) };
         })
         .filter((l) => l.qty > 0)
+    );
+  }
+
+  function setLineDiscount(key: string, amount: number) {
+    setCart((c) =>
+      c.map((l) => (lineKey(l.item.id, l.variant, l.modifiers) === key ? { ...l, discount: Math.max(0, amount) } : l))
     );
   }
 
@@ -527,6 +593,10 @@ function SellScreen({
 
   async function confirmOrder() {
     if (cart.length === 0 || busy || !splitValid) return;
+    if (needsPin && managerPin.length < 4) {
+      setError("Diskon perlu PIN pemilik — minta pemilik memasukkan PIN-nya.");
+      return;
+    }
     setBusy(true);
     setError(null);
     const payments = [
@@ -542,13 +612,19 @@ function SellScreen({
             variant_id: l.variant?.id ?? null,
             modifier_ids: l.modifiers.map((m) => m.id),
             quantity: l.qty,
+            line_discount: l.discount,
           })),
           payments,
           order_type: "takeaway",
+          bill_discount: Number(billDiscount || 0),
+          manager_pin: needsPin ? managerPin || null : null,
         },
       });
       setFlash(res);
       setCart([]);
+      setBillDiscount("");
+      setManagerPin("");
+      setQuote(null);
       setCartOpen(false);
       setPaying(false);
       setPayMode("cash");
@@ -1008,9 +1084,21 @@ function SellScreen({
                           +
                         </button>
                       </div>
-                      <span className="w-24 text-right text-sm font-semibold tabular-nums">
-                        {formatRupiah(linePrice(l) * l.qty)}
-                      </span>
+                      <button
+                        onClick={() => {
+                          setLineDiscountFor(key);
+                          setLineDiscountDraft(l.discount ? String(l.discount) : "");
+                        }}
+                        className="w-28 text-right"
+                        title="Diskon baris"
+                      >
+                        <span className="block text-sm font-semibold tabular-nums">
+                          {formatRupiah(linePrice(l) * l.qty - l.discount)}
+                        </span>
+                        <span className="ink-faint block text-[10px]">
+                          {l.discount > 0 ? `diskon ${formatRupiah(l.discount)}` : "diskon"}
+                        </span>
+                      </button>
                     </li>
                   );
                 })}
@@ -1040,6 +1128,50 @@ function SellScreen({
         </div>
       )}
 
+      {/* Line discount (M7-T4b) */}
+      {lineDiscountFor && (
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          onClick={() => setLineDiscountFor(null)}
+        >
+          <div
+            className="glass-card glass-strong w-full max-w-sm animate-fade-up rounded-b-none rounded-t-4xl px-8 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-xl font-bold">Diskon baris</p>
+            <p className="ink-soft text-sm">Potongan dalam rupiah untuk baris ini saja.</p>
+            <input
+              autoFocus
+              inputMode="numeric"
+              value={lineDiscountDraft}
+              onChange={(e) => setLineDiscountDraft(e.target.value.replace(/[^0-9]/g, ""))}
+              className="glass-card mt-4 w-full rounded-2xl px-4 py-3 text-2xl font-bold tabular-nums"
+              placeholder="0"
+            />
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => {
+                  setLineDiscount(lineDiscountFor, 0);
+                  setLineDiscountFor(null);
+                }}
+                className="btn-quiet flex-1 py-3"
+              >
+                Hapus
+              </button>
+              <button
+                onClick={() => {
+                  setLineDiscount(lineDiscountFor, Number(lineDiscountDraft || 0));
+                  setLineDiscountFor(null);
+                }}
+                className="btn-accent flex-1 py-3"
+              >
+                Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Payment sheet */}
       {paying && (
         <div
@@ -1054,6 +1186,70 @@ function SellScreen({
               {cartCount} item
             </p>
             <p className="text-3xl font-bold tabular-nums">{formatRupiah(cartTotal)}</p>
+            {/* The bill as the server priced it (M7-T4b) */}
+            {quote && (
+              <dl className="mt-3 space-y-0.5 text-sm">
+                <div className="flex justify-between">
+                  <dt className="ink-soft">Subtotal</dt>
+                  <dd className="tabular-nums">{formatRupiah(quote.subtotal)}</dd>
+                </div>
+                {Number(quote.discount_total) > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="ink-soft">Diskon</dt>
+                    <dd className="tabular-nums">− {formatRupiah(quote.discount_total)}</dd>
+                  </div>
+                )}
+                {Number(quote.service_charge) > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="ink-soft">Service charge</dt>
+                    <dd className="tabular-nums">+ {formatRupiah(quote.service_charge)}</dd>
+                  </div>
+                )}
+                {Number(quote.tax_total) > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="ink-soft">{quote.tax_inclusive ? "Pajak (sudah termasuk)" : "Pajak"}</dt>
+                    <dd className="tabular-nums">
+                      {quote.tax_inclusive ? "" : "+ "}
+                      {formatRupiah(quote.tax_total)}
+                    </dd>
+                  </div>
+                )}
+                {Number(quote.rounding) !== 0 && (
+                  <div className="flex justify-between">
+                    <dt className="ink-soft">Pembulatan</dt>
+                    <dd className="tabular-nums">
+                      {Number(quote.rounding) > 0 ? "+ " : "− "}
+                      {formatRupiah(Math.abs(Number(quote.rounding)))}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            )}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">Diskon struk (Rp)</span>
+                <input
+                  inputMode="numeric"
+                  value={billDiscount}
+                  onChange={(e) => setBillDiscount(e.target.value.replace(/[^0-9]/g, ""))}
+                  className="glass-card mt-1 w-full rounded-2xl px-3 py-2 text-sm tabular-nums"
+                  placeholder="0"
+                />
+              </label>
+              {needsPin && (
+                <label className="block">
+                  <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">PIN pemilik</span>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    value={managerPin}
+                    onChange={(e) => setManagerPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                    className="glass-card mt-1 w-full rounded-2xl px-3 py-2 text-sm tabular-nums"
+                    placeholder="••••"
+                  />
+                </label>
+              )}
+            </div>
 
             <div className="mt-5 grid grid-cols-3 gap-2">
               {(
@@ -1190,6 +1386,44 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
           </div>
         ))}
         <hr className="my-3 border-dashed border-black" />
+        {(Number(receipt.discount_total) > 0 ||
+          Number(receipt.service_charge) > 0 ||
+          Number(receipt.tax_total) > 0 ||
+          Number(receipt.rounding) !== 0) && (
+          <div className="space-y-0.5">
+            <div className="flex justify-between">
+              <span>Subtotal</span>
+              <span>{formatRupiah(receipt.subtotal)}</span>
+            </div>
+            {Number(receipt.discount_total) > 0 && (
+              <div className="flex justify-between">
+                <span>Diskon</span>
+                <span>-{formatRupiah(receipt.discount_total)}</span>
+              </div>
+            )}
+            {Number(receipt.service_charge) > 0 && (
+              <div className="flex justify-between">
+                <span>Service</span>
+                <span>{formatRupiah(receipt.service_charge)}</span>
+              </div>
+            )}
+            {Number(receipt.tax_total) > 0 && (
+              <div className="flex justify-between">
+                <span>{receipt.tax_inclusive ? "Pajak (termasuk)" : "Pajak"}</span>
+                <span>{formatRupiah(receipt.tax_total)}</span>
+              </div>
+            )}
+            {Number(receipt.rounding) !== 0 && (
+              <div className="flex justify-between">
+                <span>Pembulatan</span>
+                <span>
+                  {Number(receipt.rounding) < 0 ? "-" : ""}
+                  {formatRupiah(Math.abs(Number(receipt.rounding)))}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex justify-between font-bold">
           <span>TOTAL</span>
           <span>{formatRupiah(receipt.total)}</span>

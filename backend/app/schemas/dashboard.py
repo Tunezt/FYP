@@ -521,3 +521,31 @@ class BusinessUpdateIn(BaseModel):
     business_type: str | None = None
     language_preference: str | None = None
     timezone: str | None = None
+
+
+# ── Pricing settings (M7-T4b): tax, service charge, rounding, discount gate ──
+
+
+class PricingSettingsOut(BaseModel):
+    tax_rate: Decimal
+    tax_inclusive: bool
+    service_charge_rate: Decimal
+    service_before_tax: bool
+    rounding_unit: Decimal
+    rounding_mode: Literal["nearest", "up", "down"]
+    discount_requires_pin: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PricingSettingsPatch(BaseModel):
+    """Rates are fractions (0.11 = 11%), never percentages; the kiosk and the
+    ledger read them as-is."""
+
+    tax_rate: Decimal | None = Field(default=None, ge=0, lt=1)
+    tax_inclusive: bool | None = None
+    service_charge_rate: Decimal | None = Field(default=None, ge=0, lt=1)
+    service_before_tax: bool | None = None
+    rounding_unit: Decimal | None = Field(default=None, ge=0, le=Decimal("100000"))
+    rounding_mode: Literal["nearest", "up", "down"] | None = None
+    discount_requires_pin: bool | None = None

@@ -20,6 +20,7 @@ import type {
   Overview,
   Page,
   PnlMonth,
+  PricingSettings,
   ReceiptRow,
   SaleRow,
   ShiftRow,
@@ -469,6 +470,16 @@ const CASH_MOVEMENTS: CashMovementRow[] = [
   },
 ];
 
+const PRICING: PricingSettings = {
+  tax_rate: "0.1000",
+  tax_inclusive: true,
+  service_charge_rate: "0.0000",
+  service_before_tax: true,
+  rounding_unit: "100.00",
+  rounding_mode: "nearest",
+  discount_requires_pin: true,
+};
+
 function paginate<T>(rows: T[], page: number, pageSize: number, inflateTotal = 0): Page<T> {
   const start = (page - 1) * pageSize;
   return {
@@ -501,6 +512,7 @@ export function demoData(path: string): unknown {
   if (pathname === "/api/receipts") {
     return paginate(RECEIPTS, num("page", 1), num("page_size", 6));
   }
+  if (pathname === "/api/pricing-settings") return PRICING;
   if (pathname === "/api/shifts") return SHIFTS.slice(0, num("limit", 30));
   if (pathname === "/api/cash-movements") return CASH_MOVEMENTS.slice(0, num("limit", 50));
   return null;

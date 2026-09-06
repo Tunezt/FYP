@@ -30,6 +30,7 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | GET | `/api/alerts?limit=` · POST `/api/alerts/{id}/ack` | |
 | GET | `/api/receipts?page=` | paginated, short-lived signed image URLs |
 | GET/PATCH | `/api/business` · POST `/api/business/complete-onboarding` | |
+| GET/PATCH | `/api/pricing-settings` | owner | how a bill is built (M7-T4): `tax_rate` (fraction), `tax_inclusive`, `service_charge_rate`, `service_before_tax`, `rounding_unit`, `rounding_mode` (nearest/up/down), `discount_requires_pin`; takes effect on the next sale, nothing already sold is repriced |
 | GET | `/api/stock-template` | template-stok.xlsx download |
 
 ## POS
@@ -40,10 +41,11 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | POST | `/pos/login` | pairing token in body | `{staff_id, pin}` → pos JWT |
 | GET | `/pos/items` | pos | |
 | POST | `/pos/sales` | pos | atomic decrement; 409 on insufficient stock; triggers velocity check |
-| POST | `/pos/orders` | pos | multi-line order + payments (cash/qris/transfer/card/ewallet/other); payments must equal total (422); per-line atomic stock guard, all-or-nothing (409); writes order, lines with `unit_cost_at_sale`, payments, stock movements |
+| POST | `/pos/orders` | pos | multi-line order + payments (cash/qris/transfer/card/ewallet/other); per-line atomic stock guard, all-or-nothing (409); writes order, lines with `unit_cost_at_sale`, payments, stock movements. M7-T4b: lines take `line_discount` (Rp), the body takes `bill_discount` and `manager_pin`; any discount needs the PIN when `pricing_settings.discount_requires_pin` (403 otherwise); the bill is priced by `services/pricing` (tax, service charge, rounding) and payments must equal the **rounded** total (422); response carries `discount_total`, `service_charge`, `tax_total`, `rounding` |
+| POST | `/pos/quote` | pos | price the cart without selling it (M7-T4b): same lines shape and `bill_discount`, returns subtotal / discount / service charge / tax (`tax_inclusive` says whether it is contained) / rounding / total plus `discount_requires_pin` so the kiosk asks for the PIN — the same pure function the sale uses, so screen and ledger agree |
 | POST | `/pos/orders/{id}/void` | pos | `{manager_pin, note?}` — owner PIN; reversing lines, payments and `sale_void` stock movements; original untouched; 403 wrong PIN, 409 already reversed |
 | POST | `/pos/orders/{id}/refund` | pos | `{manager_pin, restock?, note?}` — like void with `refund` movements; `restock=false` reverses money only |
-| GET | `/pos/orders/{id}/receipt` | pos | printable receipt: lines with size + modifiers as sold (snapshots), payments, totals; voided orders include reversing lines |
+| GET | `/pos/orders/{id}/receipt` | pos | printable receipt: lines with size + modifiers as sold (snapshots), payments, totals incl. `discount_total`, `service_charge`, `tax_total` (+ `tax_inclusive`), `rounding`; voided orders include reversing lines |
 | GET | `/pos/shift` · POST `/pos/shift/open` · POST `/pos/shift/close` | pos | the cashier's till session (M7-T1): open with `{opening_float}` (one open shift per cashier, 409 otherwise); read it with live `expected_cash` = float + cash payments − cash refunds + cash in − cash out attributed to the shift (M7-T3); close with `{counted_cash, notes?}` → expected, counted and variance written once, and a non-zero variance posts `ShiftClosed` (`variance_short` / `variance_over`) in the same transaction — if the ledger refuses, the shift stays open |
 | GET | `/pos/suppliers` · POST `/pos/cash` · GET `/pos/cash` | pos | cash in and out (M7-T2): `{kind: cash_in|petty_cash|supplier_payment|bank_drop, amount, reason, via?, category?, supplier_id?}` — posts to the ledger (petty cash through the expense writer) and is stamped with the cashier's open shift; GET lists the open shift's movements |
 | GET | `/api/items/{id}/variants` · POST same · PATCH `/api/variants/{id}` | owner | sizes/options with own prices; exactly one default per item, default mirrors the item's prices both ways |

@@ -9,7 +9,11 @@ has always used (`current_stock >= qty`), so two kiosks racing for the last unit
 still resolve at the database, line by line. `unit_cost_at_sale` snapshots the
 item's cost at this moment so historical margin never moves.
 
-No tax, discount, service charge or rounding yet (M7-T4): subtotal == total.
+Discounts, tax, service charge and rounding (M7-T4b) come from the pure pricing
+engine in services/pricing, driven by the business's pricing_settings. A discount
+needs the manager PIN when the settings say so; payments must equal the priced,
+rounded total exactly; and what the sale reclassifies out of revenue is posted
+from the same priced figures, so the order row and the journal cannot disagree.
 """
 from __future__ import annotations
 
@@ -20,13 +24,14 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models import (
     Item, ItemVariant, Modifier, ModifierGroup, Order, OrderLine, OrderLineModifier, Payment, RecipeLine,
     StockMovement,
 )
 from app.services.catalog import default_variant
+from app.services.pricing import LineInput, price_order, pricing_config
 from app.services.sales import ATOMIC_DECREMENT, InsufficientStock, ItemNotFound
 from app.services.stock import record_movement
 from app.services.units import convert_quantity, to_ledger_precision
@@ -110,6 +115,10 @@ class EmptyOrder(Exception):
     pass
 
 
+class DiscountNeedsManager(Exception):
+    """The settings require a manager PIN before any discount and none was given."""
+
+
 @dataclass
 class OrderLineSpec:
     item_id: uuid.UUID
@@ -118,6 +127,7 @@ class OrderLineSpec:
     notes: str | None = None
     variant_id: uuid.UUID | None = None  # None → the item's default variant (M4-T1)
     modifier_ids: list[uuid.UUID] = field(default_factory=list)  # "extra shot, less sugar" (M4-T2)
+    line_discount: Decimal = Decimal(0)  # rupiah off this line (M7-T4b); gated like the bill discount
 
 
 @dataclass
@@ -151,6 +161,8 @@ async def create_order(
     payments: list[PaymentSpec],
     order_type: str = "takeaway",
     sold_at: datetime | None = None,
+    bill_discount: Decimal = Decimal(0),
+    manager_pin: str | None = None,
 ) -> CreatedOrder:
     if not lines:
         raise EmptyOrder()
@@ -158,6 +170,16 @@ async def create_order(
         raise PaymentMismatch(Decimal(0), Decimal(0))
     sold_at = sold_at or datetime.now(timezone.utc)
     shift_id = await open_shift_id(session, staff_id)  # the cashier's open till, if any (M7-T1)
+
+    # 0. The discount gate (M7-T4b): when the settings say so, nobody discounts
+    #    anything without the manager's PIN — checked before any stock moves.
+    config = await pricing_config(session, business_id)
+    bill_discount = Decimal(bill_discount or 0)
+    if bill_discount > 0 or any(Decimal(l.line_discount or 0) > 0 for l in lines):
+        if config.discount_requires_pin:
+            if not manager_pin:
+                raise DiscountNeedsManager()
+            await verify_manager_pin(session, manager_pin)
 
     # 1. Price every line and take its stock, atomically, before any row exists.
     #    Price and cost come from the variant (explicit, else the item's default);
@@ -220,22 +242,36 @@ async def create_order(
         line_total = (price * quantity).quantize(TWO_PLACES)
         priced.append((spec, item, variant, modifiers, price, cost, line_total, Decimal(remaining), consumed))
 
-    subtotal = sum((p[6] for p in priced), Decimal(0)).quantize(TWO_PLACES)
-    total = subtotal  # discounts, tax, service charge, rounding: M7-T4
+    # 2. Price the bill (M7-T4b): discounts, tax, service charge, rounding —
+    #    one pure function, the same one the kiosk quotes from. PricingInvalid
+    #    (a discount bigger than its line or the bill) propagates: nothing has
+    #    been written yet and the stock decrements roll back with the caller.
+    bill = price_order(
+        [
+            LineInput(unit_price=p[4], quantity=Decimal(p[0].quantity), line_discount=Decimal(p[0].line_discount or 0))
+            for p in priced
+        ],
+        config, bill_discount=bill_discount,
+    )
+    subtotal, total = bill.subtotal, bill.total
 
-    # 2. Payments must cover the total exactly — a till does not close on a guess.
+    # Payments must cover the total exactly — a till does not close on a guess.
     paid = sum((Decimal(p.amount) for p in payments), Decimal(0)).quantize(TWO_PLACES)
     if paid != total:
         raise PaymentMismatch(total, paid)
 
     # 3. Write the order, its lines, payments and ledger rows.
     order = Order(
-            shift_id=shift_id,
+        shift_id=shift_id,
         business_id=business_id,
         staff_id=staff_id,
         order_type=order_type,
         status="completed",
         subtotal=subtotal,
+        discount_total=bill.discount_total,
+        tax_total=bill.tax_total,
+        service_charge=bill.service_charge,
+        rounding=bill.rounding,
         total=total,
         sold_at=sold_at,
     )
@@ -243,7 +279,7 @@ async def create_order(
     await session.flush()
 
     created = CreatedOrder(order=order)
-    for spec, item, variant, modifiers, price, cost, line_total, remaining, consumed in priced:
+    for (spec, item, variant, modifiers, price, cost, _gross, remaining, consumed), pl in zip(priced, bill.lines):
         line = OrderLine(
             business_id=business_id,
             order_id=order.id,
@@ -251,7 +287,8 @@ async def create_order(
             variant_id=variant.id if variant is not None else None,
             quantity=Decimal(spec.quantity),
             unit_price=price,
-            line_total=line_total,
+            line_discount=pl.line_discount,
+            line_total=pl.line_total,
             unit_cost_at_sale=cost,
             notes=spec.notes,
         )
@@ -311,9 +348,7 @@ async def create_order(
     for p in payments:
         key = f"payment:{p.method}"
         components[key] = components.get(key, Decimal(0)) + Decimal(p.amount)
-    components["discount"] = order.discount_total
-    components["tax"] = order.tax_total
-    components["service_charge"] = order.service_charge
+    components.update(bill.fiscal_components())   # discount, tax, service charge ex-tax, rounding up/down
     components["cogs"] = sum(
         ((Decimal(cl.line.unit_cost_at_sale or 0) * Decimal(cl.line.quantity)) for cl in created.lines), Decimal(0)
     ).quantize(TWO_PLACES)
@@ -503,11 +538,44 @@ async def _reverse(
             components["cogs_reversal"] = sum(
                 ((Decimal(l.unit_cost_at_sale or 0) * Decimal(-l.quantity)) for l in reversal.reversing_lines), Decimal(0)
             ).quantize(TWO_PLACES)
+        # Undo what the sale reclassified (M7-T4b) — read back from the sale's
+        # own journal lines, never re-derived from today's settings, so a refund
+        # after a rate change still undoes exactly what was posted.
+        for component, amount in (await _fiscal_lines_of_sale(session, order_id)).items():
+            components[f"{component}_reversal"] = amount
         await post_event(
             session, business_id, "OrderRefunded", components, source_type="order", source_id=order_id,
             memo=tag, posted_at=now, created_by=staff_id,
         )
     return reversal
+
+
+FISCAL_COMPONENTS = ("discount", "tax", "service_charge", "rounding_up", "rounding_down")
+
+
+async def _fiscal_lines_of_sale(session: AsyncSession, order_id: uuid.UUID) -> dict[str, Decimal]:
+    """component -> amount the sale's OrderCompleted entry posted for it (the
+    debit side; every component is one balanced Dr/Cr pair)."""
+    from app.models import JournalEntry, JournalLine
+
+    entry = (
+        await session.execute(
+            select(JournalEntry).where(
+                JournalEntry.source_type == "order", JournalEntry.source_id == order_id,
+                JournalEntry.event_type == "OrderCompleted",
+            )
+        )
+    ).scalar_one_or_none()
+    if entry is None:
+        return {}
+    rows = (
+        await session.execute(
+            select(JournalLine.memo, func.sum(JournalLine.debit))
+            .where(JournalLine.entry_id == entry.id, JournalLine.memo.in_(FISCAL_COMPONENTS))
+            .group_by(JournalLine.memo)
+        )
+    ).all()
+    return {memo: Decimal(amount).quantize(TWO_PLACES) for memo, amount in rows if Decimal(amount) > 0}
 
 
 async def load_receipt(session: AsyncSession, *, business_id: uuid.UUID, order_id: uuid.UUID) -> dict:

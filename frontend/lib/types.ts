@@ -122,3 +122,14 @@ export type CashMovementRow = {
   supplier_name: string | null;
   occurred_at: string;
 };
+
+// How a bill is built (M7-T4). Rates are fractions (0.11 = 11%).
+export type PricingSettings = {
+  tax_rate: string;
+  tax_inclusive: boolean;
+  service_charge_rate: string;
+  service_before_tax: boolean;
+  rounding_unit: string;
+  rounding_mode: "nearest" | "up" | "down";
+  discount_requires_pin: boolean;
+};

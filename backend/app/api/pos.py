@@ -7,6 +7,7 @@ Three access levels, escalating:
    staff management, and WhatsApp flows all require scope="owner".
 """
 import time
+from decimal import Decimal
 import uuid
 
 import jwt as pyjwt
@@ -17,12 +18,15 @@ from app.core.db import tenant_session
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
 from app.core.security import create_token, decode_token, verify_pin
-from app.models import Business, Item, ItemVariant, RequestLog, Staff
+from app.models import Business, Item, ItemVariant, Modifier, RequestLog, Staff
 from app.schemas.pos import (
     ItemOut,
     OrderIn,
     OrderLineOut,
     OrderOut,
+    QuoteIn,
+    QuoteLineOut,
+    QuoteOut,
     PaymentOut,
     LineModifierOut,
     PosBusinessOut,
@@ -42,6 +46,7 @@ from app.schemas.pos import (
     SaleOut,
 )
 from app.services.orders import (
+    DiscountNeedsManager,
     ManagerPinRejected,
     ModifierSelectionInvalid,
     OrderLineSpec,
@@ -57,6 +62,7 @@ from app.services.orders import (
     refund_order,
     void_order,
 )
+from app.services.pricing import PricingInvalid
 from app.services.sales import InsufficientStock, ItemNotFound, record_sale
 from app.services.velocity import check_low_stock_for_item
 
@@ -201,6 +207,62 @@ def _rp(amount) -> str:
     return f"Rp {amount:,.0f}".replace(",", ".")
 
 
+_PRICING_ERRORS = {
+    "quantity": "Jumlah harus lebih dari nol",
+    "price": "Harga tidak boleh negatif",
+    "line_discount": "Diskon baris tidak boleh lebih besar dari harga barisnya",
+    "discount": "Diskon tidak boleh lebih besar dari total belanja",
+    "rate": "Pengaturan pajak / service charge tidak valid — periksa di dashboard",
+    "mode": "Pengaturan pembulatan tidak valid — periksa di dashboard",
+    "unit": "Pengaturan pembulatan tidak valid — periksa di dashboard",
+}
+
+
+@router.post("/quote", response_model=QuoteOut)
+async def pos_quote(payload: QuoteIn, ctx: PosCtx):
+    """Price the cart without selling it (M7-T4b): the kiosk shows the customer
+    exactly what `POST /pos/orders` will charge, from the same pure function,
+    so the screen and the ledger cannot disagree by a rupiah. Writes nothing."""
+    from app.services.catalog import default_variant
+    from app.services.pricing import LineInput, price_order, pricing_config
+
+    config = await pricing_config(ctx.session, ctx.business_id)
+    inputs: list[LineInput] = []
+    for l in payload.lines:
+        item = await ctx.session.get(Item, l.item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+        if l.variant_id is not None:
+            variant = await ctx.session.get(ItemVariant, l.variant_id)
+            if variant is None or variant.item_id != item.id or not variant.is_active:
+                raise HTTPException(status_code=404, detail="Varian barang tidak ditemukan atau sudah tidak aktif")
+        else:
+            variant = await default_variant(ctx.session, item.id)
+        base = Decimal(l.unit_price) if l.unit_price is not None else (
+            Decimal(variant.sell_price) if variant is not None else Decimal(item.sell_price)
+        )
+        extras = Decimal(0)
+        for mid in l.modifier_ids:
+            m = await ctx.session.get(Modifier, mid)
+            if m is not None:
+                extras += Decimal(m.price_delta)
+        inputs.append(LineInput(unit_price=(base + extras).quantize(Decimal("0.01")), quantity=l.quantity, line_discount=l.line_discount))
+    try:
+        bill = price_order(inputs, config, bill_discount=payload.bill_discount)
+    except PricingInvalid as exc:
+        raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
+    return QuoteOut(
+        subtotal=bill.subtotal, discount_total=bill.discount_total, service_charge=bill.service_charge,
+        tax_total=bill.tax_total, tax_inclusive=bill.tax_inclusive, rounding=bill.rounding, total=bill.total,
+        discount_requires_pin=config.discount_requires_pin,
+        lines=[
+            QuoteLineOut(item_id=l.item_id, unit_price=pl.unit_price, quantity=pl.quantity, gross=pl.gross,
+                         line_discount=pl.line_discount, line_total=pl.line_total)
+            for l, pl in zip(payload.lines, bill.lines)
+        ],
+    )
+
+
 @router.post("/orders", response_model=OrderOut, status_code=201)
 async def pos_create_order(payload: OrderIn, ctx: PosCtx):
     """A multi-line order with one or more payments (M3-T3). All-or-nothing:
@@ -214,11 +276,20 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             order_type=payload.order_type,
             lines=[
                 OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, modifier_ids=list(l.modifier_ids),
-                              quantity=l.quantity, unit_price=l.unit_price, notes=l.notes)
+                              quantity=l.quantity, unit_price=l.unit_price, notes=l.notes,
+                              line_discount=l.line_discount)
                 for l in payload.lines
             ],
             payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
+            bill_discount=payload.bill_discount,
+            manager_pin=payload.manager_pin,
         )
+    except DiscountNeedsManager:
+        raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik memasukkan PIN-nya")
+    except ManagerPinRejected:
+        raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik untuk memasukkan PIN-nya")
+    except PricingInvalid as exc:
+        raise HTTPException(status_code=422, detail=_PRICING_ERRORS.get(exc.code, "Perhitungan harga tidak valid"))
     except ItemNotFound:
         raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
     except VariantNotFound:
@@ -264,13 +335,18 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         id=order.id,
         order_type=order.order_type,
         subtotal=order.subtotal,
+        discount_total=order.discount_total,
+        service_charge=order.service_charge,
+        tax_total=order.tax_total,
+        rounding=order.rounding,
         total=order.total,
         sold_at=order.sold_at,
         lines=[
             OrderLineOut(
                 id=cl.line.id, item_id=cl.line.item_id, variant_id=cl.line.variant_id, item_name=cl.item_name,
                 quantity=cl.line.quantity,
-                unit_price=cl.line.unit_price, line_total=cl.line.line_total, remaining_stock=cl.remaining_stock,
+                unit_price=cl.line.unit_price, line_discount=cl.line.line_discount, line_total=cl.line.line_total,
+                remaining_stock=cl.remaining_stock,
                 modifiers=[LineModifierOut(name=m.name, price_delta=m.price_delta) for m in cl.modifiers],
             )
             for cl in created.lines
@@ -288,7 +364,10 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
         data = await load_receipt(ctx.session, business_id=ctx.business_id, order_id=order_id)
     except OrderNotFound:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
+    from app.services.pricing import pricing_config
+
     business = await ctx.session.get(Business, ctx.business_id)
+    config = await pricing_config(ctx.session, ctx.business_id)
     order = data["order"]
     return ReceiptOut(
         order_id=order.id,
@@ -308,6 +387,11 @@ async def pos_receipt(order_id: uuid.UUID, ctx: PosCtx):
             for entry in data["lines"]
         ],
         subtotal=order.subtotal,
+        discount_total=order.discount_total,
+        service_charge=order.service_charge,
+        tax_total=order.tax_total,
+        tax_inclusive=config.tax_inclusive,
+        rounding=order.rounding,
         total=order.total,
         payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in data["payments"]],
     )

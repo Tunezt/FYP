@@ -26,8 +26,9 @@ twelve combinations:
                   (tax_total is the tax *contained* in those figures, and is
                   reported so the ledger can move it out of revenue)
 
-Applying this at the till — the manager-PIN gate on discounts, the order rows,
-the journal entry and the UI — is M7-T4b. Nothing here writes anything.
+Applied at the till by `services/orders.create_order` (M7-T4b): the manager-PIN
+gate on discounts, the order rows, and the journal entry through
+`fiscal_components`. Nothing here writes anything.
 """
 from __future__ import annotations
 
@@ -113,11 +114,28 @@ class PricedOrder:
     total: Decimal
     tax_inclusive: bool
     lines: tuple[PricedLine, ...]
+    service_tax: Decimal = Decimal("0.00")   # the part of service_charge that is tax (inclusive + taxed only)
 
     @property
     def net(self) -> Decimal:
         """What the goods cost after discounts, at menu prices."""
         return q(self.subtotal - self.discount_total)
+
+    def fiscal_components(self) -> dict[str, Decimal]:
+        """What the sale reclassifies out of revenue, for the posting engine
+        (M7-T4b). `service_charge` is posted **ex-tax**: with inclusive prices
+        and a taxed service charge the customer-facing figure carries its own
+        tax, and that tax already sits in `tax_total` — posting it twice would
+        overstate other income by exactly the amount revenue was understated.
+        Rounding goes up or down as its own component because the engine
+        never posts a negative amount."""
+        return {
+            "discount": self.discount_total,
+            "tax": self.tax_total,
+            "service_charge": q(self.service_charge - self.service_tax),
+            "rounding_up": self.rounding if self.rounding > 0 else Decimal("0.00"),
+            "rounding_down": -self.rounding if self.rounding < 0 else Decimal("0.00"),
+        }
 
 
 def round_total(amount: Decimal, unit: Decimal, mode: str) -> Decimal:
@@ -180,6 +198,7 @@ def price_order(
     net = q(subtotal - discount_total)
     tax_rate, sc_rate = Decimal(config.tax_rate), Decimal(config.service_charge_rate)
 
+    service_tax = Decimal("0.00")
     if not config.tax_inclusive:
         # Menu prices exclude tax: service and tax are both added on top.
         if config.service_before_tax:
@@ -216,6 +235,7 @@ def price_order(
         total=total,
         tax_inclusive=config.tax_inclusive,
         lines=tuple(priced),
+        service_tax=service_tax,
     )
 
 
@@ -234,4 +254,9 @@ async def ensure_pricing_settings(session: AsyncSession, business_id: uuid.UUID)
 
 
 async def pricing_config(session: AsyncSession, business_id: uuid.UUID) -> PricingConfig:
-    return PricingConfig.from_row(await ensure_pricing_settings(session, business_id))
+    """Read-only: the sale path must never write the settings row (two
+    concurrent first sales would race on the unique key). Registration, the
+    seed and migration 0019 guarantee the row; a business somehow without one
+    is priced with the defaults, which is what the row would have said."""
+    row = (await session.execute(select(PricingSettings))).scalar_one_or_none()
+    return PricingConfig.from_row(row) if row is not None else PricingConfig()

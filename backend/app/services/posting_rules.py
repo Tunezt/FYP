@@ -36,6 +36,9 @@ STANDARD_RULES: list[tuple[str, str, str | None, str | None, str]] = [
     ("OrderCompleted", "tax", "4100", "2200", "Pajak yang dipungut dipisahkan dari pendapatan"),
     ("OrderCompleted", "service_charge", "4100", "4900", "Service charge diakui sebagai pendapatan lain"),
     ("OrderCompleted", "cogs", "5100", "1300", "Harga pokok penjualan"),
+    # Rupiah rounding at the total (M7-T4b); backfilled by migration 0020.
+    ("OrderCompleted", "rounding_up", "4100", "4900", "Pembulatan ke atas (pendapatan lain)"),
+    ("OrderCompleted", "rounding_down", "4900", "4100", "Pembulatan ke bawah"),
     # Undoing a sale.
     ("OrderVoided", "reversal", None, None, "Batalkan seluruh jurnal penjualan"),
     ("OrderRefunded", "refund:cash", "4300", "1100", "Retur, uang kembali tunai"),
@@ -46,6 +49,12 @@ STANDARD_RULES: list[tuple[str, str, str | None, str | None, str]] = [
     ("OrderRefunded", "refund:points", "4300", "2300", "Retur, poin dikembalikan"),
     ("OrderRefunded", "refund:other", "4300", "1200", "Retur, pembayaran lain"),
     ("OrderRefunded", "cogs_reversal", "1300", "5100", "Barang kembali ke persediaan"),
+    # A refund also undoes what the sale reclassified (M7-T4b); migration 0020.
+    ("OrderRefunded", "discount_reversal", "4100", "4200", "Retur: diskon penjualan dibatalkan"),
+    ("OrderRefunded", "tax_reversal", "2200", "4100", "Retur: pajak yang dipungut dikembalikan"),
+    ("OrderRefunded", "service_charge_reversal", "4900", "4100", "Retur: service charge dibatalkan"),
+    ("OrderRefunded", "rounding_up_reversal", "4900", "4100", "Retur: pembulatan ke atas dibatalkan"),
+    ("OrderRefunded", "rounding_down_reversal", "4100", "4900", "Retur: pembulatan ke bawah dibatalkan"),
     # Purchasing.
     ("GoodsReceived", "inventory", "1300", "2100", "Barang diterima, utang ke supplier"),
     ("SupplierPaid", "payment:cash", "2100", "1100", "Bayar supplier tunai"),
