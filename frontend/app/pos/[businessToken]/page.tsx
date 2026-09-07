@@ -177,7 +177,10 @@ type Screen =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "pick-staff"; business: PosBusiness }
-  | { kind: "pin"; business: PosBusiness; staff: StaffLite; pin: string; shake: boolean }
+  // `notice` (M15-T12) is why the last attempt failed when it was not simply
+  // the wrong PIN — a cooldown that says how long to wait. Shaking the pad
+  // silently for the fifth time is how a cashier decides the tablet is broken.
+  | { kind: "pin"; business: PosBusiness; staff: StaffLite; pin: string; shake: boolean; notice?: string }
   | { kind: "sell"; staffName: string; businessName: string };
 
 export default function PosPage() {
@@ -216,7 +219,11 @@ export default function PosPage() {
           setScreen({ kind: "error", message: e.detail });
           return;
         }
-        setScreen({ kind: "pin", business, staff, pin: "", shake: true });
+        // A cooldown (M15-T12) is not a wrong PIN, and the difference matters:
+        // the right PIN will not work either until the wait is over, so say so
+        // rather than letting the cashier keep trying the one they know.
+        const notice = e instanceof ApiError && e.status === 429 ? e.detail : undefined;
+        setScreen({ kind: "pin", business, staff, pin: "", shake: true, notice });
         setTimeout(
           () =>
             setScreen((s) => (s.kind === "pin" ? { ...s, shake: false } : s)),
@@ -288,6 +295,7 @@ export default function PosPage() {
         staff={screen.staff}
         pin={screen.pin}
         shake={screen.shake}
+        notice={screen.notice}
         onBack={() => setScreen({ kind: "pick-staff", business: screen.business })}
         onDigit={(d) => {
           const pin = screen.pin + d;
@@ -336,6 +344,7 @@ function PinPad({
   staff,
   pin,
   shake,
+  notice,
   onDigit,
   onDelete,
   onBack,
@@ -343,6 +352,7 @@ function PinPad({
   staff: StaffLite;
   pin: string;
   shake: boolean;
+  notice?: string;
   onDigit: (d: string) => void;
   onDelete: () => void;
   onBack: () => void;
@@ -354,7 +364,16 @@ function PinPad({
           {initials(staff.name)}
         </span>
         <h1 className="mt-4 text-2xl font-bold">Halo, {staff.name}</h1>
-        <p className="ink-soft mt-1">Masukkan PIN 4 angka</p>
+        {notice ? (
+          <p
+            className="mx-auto mt-3 max-w-xs rounded-2xl px-4 py-3 text-sm font-medium"
+            style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+          >
+            {notice}
+          </p>
+        ) : (
+          <p className="ink-soft mt-1">Masukkan PIN 4 angka</p>
+        )}
 
         <div
           className={`mt-6 flex justify-center gap-4 ${shake ? "animate-[shake_0.4s_ease-in-out]" : ""}`}

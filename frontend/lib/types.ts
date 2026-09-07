@@ -181,6 +181,20 @@ export type ReversalResult = {
   reversing_payments: { id: string; method: string; amount: string; reference: string | null }[];
 };
 
+/** M15-T12: one subject currently being counted for wrong PINs. `who` is
+ *  already resolved to a name by the server — a uuid in a list the owner is
+ *  meant to act on is not information. */
+export type PinLockoutRow = {
+  id: string;
+  scope: "pos_login" | "pos_device" | "manager_pin";
+  who: string;
+  failures: number;
+  first_failed_at: string;
+  last_failed_at: string;
+  locked_until: string | null;
+  locked_now: boolean;
+};
+
 export type CashMovementRow = {
   id: string;
   shift_id: string | null;

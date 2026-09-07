@@ -6,6 +6,7 @@ import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { ORDER_TYPE_LABEL, type Business, type LoyaltySettings, type OrderType, type PricingSettings, type StaffMember } from "@/lib/types";
 import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
+import { PinLockouts } from "@/components/PinLockouts";
 import { IconPlus } from "@/components/icons";
 import { initials } from "@/lib/format";
 
@@ -650,6 +651,9 @@ export default function SettingsPage() {
           </ul>
         )}
       </section>
+
+      {/* M15-T12 — who is being throttled, and the owner's override */}
+      <PinLockouts tz={b?.timezone} />
 
       {/* POS pairing */}
       <section>

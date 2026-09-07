@@ -246,7 +246,9 @@ async def create_order(
             if not manager_pin:
                 raise DiscountNeedsManager()
             # Held until the order exists, then written to the audit trail below.
-            discount_approver = await verify_manager_pin(session, manager_pin)
+            discount_approver = await verify_manager_pin(
+                session, manager_pin, business_id=business_id, acting_staff_id=staff_id
+            )
 
     # 1. Price every line and take its stock, atomically, before any row exists.
     #    Price and cost come from the variant (explicit, else the item's default);
@@ -538,6 +540,7 @@ from sqlalchemy import select, text as sql_text  # noqa: E402
 
 from app.core.security import verify_pin  # noqa: E402
 from app.models import Staff  # noqa: E402
+from app.services import pin_guard  # noqa: E402
 from app.services.shifts import open_shift_id
 
 
@@ -568,14 +571,37 @@ RESTOCK = sql_text(
 APPROVER_ROLES = ("owner", "manager")
 
 
-async def verify_manager_pin(session: AsyncSession, pin: str) -> Staff:
+class ManagerPinThrottled(Exception):
+    """Too many wrong manager PINs from this till (M15-T12). Carries the
+    cooldown so the HTTP layer can say how long to wait."""
+
+    def __init__(self, cooldown):
+        self.cooldown = cooldown
+        super().__init__(str(cooldown.until))
+
+
+async def verify_manager_pin(
+    session: AsyncSession, pin: str, *, business_id: uuid.UUID, acting_staff_id: uuid.UUID | None = None
+) -> Staff:
     """Who may authorise an override: any **active** owner or manager of the
     pinned business (M15-T7). Before M15-T7 only the owner could, which meant a
     cashier with a mistake and no owner on site had no legitimate way to fix it.
 
     A plain `staff` PIN is rejected, and so is a deactivated approver's — the
     role is checked on the row, not on the token, so revoking access is one
-    flag and takes effect on the next authorisation."""
+    flag and takes effect on the next authorisation.
+
+    Throttled since M15-T12, counted against whoever is *asking* rather than
+    against the approver, because on a failure there is no way to know which
+    approver was meant. `business_id` is required rather than optional: this is
+    the gate on voids, refunds and discounts, and a signature that lets a caller
+    quietly opt out of the guard is a guard that will eventually be opted out
+    of."""
+    subject = f"asked_by:{acting_staff_id or 'unknown'}"
+    cooling = await pin_guard.check(session, business_id, "manager_pin", subject, path="verify_manager_pin")
+    if cooling is not None:
+        raise ManagerPinThrottled(cooling)
+
     candidates = (
         await session.execute(
             select(Staff).where(Staff.role.in_(APPROVER_ROLES), Staff.is_active.is_(True))
@@ -583,7 +609,14 @@ async def verify_manager_pin(session: AsyncSession, pin: str) -> Staff:
     ).scalars().all()
     for approver in candidates:
         if verify_pin(pin, approver.pin_hash):
+            await pin_guard.clear(session, business_id, "manager_pin", subject)
             return approver
+
+    earned = await pin_guard.record_failure(
+        business_id, "manager_pin", subject, path="verify_manager_pin"
+    )
+    if earned is not None:
+        raise ManagerPinThrottled(earned)
     raise ManagerPinRejected()
 
 
@@ -940,7 +973,7 @@ async def void_order(
     staff_id: uuid.UUID | None, manager_pin: str, note: str | None = None,
 ) -> Reversal:
     """The order never happened: everything reversed, stock back on the shelf."""
-    manager = await verify_manager_pin(session, manager_pin)
+    manager = await verify_manager_pin(session, manager_pin, business_id=business_id, acting_staff_id=staff_id)
     return await _reverse(session, business_id=business_id, order_id=order_id, staff_id=staff_id,
                           manager=manager, kind="void", restock=True, note=note)
 
@@ -951,6 +984,6 @@ async def refund_order(
 ) -> Reversal:
     """Money back. `restock=False` when the goods are not coming back (eaten,
     spoiled): revenue and payments reverse, stock does not — no movement row."""
-    manager = await verify_manager_pin(session, manager_pin)
+    manager = await verify_manager_pin(session, manager_pin, business_id=business_id, acting_staff_id=staff_id)
     return await _reverse(session, business_id=business_id, order_id=order_id, staff_id=staff_id,
                           manager=manager, kind="refund", restock=restock, note=note)

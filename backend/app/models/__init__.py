@@ -20,6 +20,7 @@ from app.models.models import (  # noqa: F401
     OrderLine,
     OrderLineModifier,
     Payment,
+    PinAttempt,
     PendingConfirmation,
     PoLine,
     PostingRule,

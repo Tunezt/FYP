@@ -28,6 +28,7 @@ from app.schemas.pos import OrderSummaryOut, OrdersPage, ReceiptOut, RefundIn, R
 from app.schemas.dashboard import (
     ApprovalRow,
     BackdatedSaleIn,
+    PinLockoutRow,
     BalanceSheetOut,
     ProfitAndLossOut,
     StatementLineOut,
@@ -1603,6 +1604,66 @@ async def owner_refund_order(order_id: uuid.UUID, payload: RefundIn, ctx: OwnerC
         ctx, order_id, refund_order, "/api/orders/{id}/refund", channel="dashboard",
         manager_pin=payload.manager_pin, note=payload.note, restock=payload.restock,
     )
+
+
+# ── PIN brute-force protection (M15-T12) ────────────────────────────────────
+
+_SCOPE_LABEL = {
+    "pos_login": "PIN kasir",
+    "pos_device": "Perangkat kasir",
+    "manager_pin": "PIN manajer",
+}
+
+
+async def _lockout_who(ctx: OwnerCtx, row) -> str:
+    """The subject as a person, not a key. `staff:<uuid>` in a list the owner is
+    supposed to act on is not information."""
+    kind, _, value = row.subject.partition(":")
+    if kind in ("staff", "asked_by"):
+        try:
+            staff = await ctx.session.get(Staff, uuid.UUID(value))
+        except ValueError:
+            staff = None
+        name = staff.name if staff is not None else "staf yang sudah dihapus"
+        return name if kind == "staff" else f"diminta oleh {name}"
+    return "perangkat kasir ini"
+
+
+@router.get("/pin-lockouts", response_model=list[PinLockoutRow])
+async def list_pin_lockouts(ctx: OwnerCtx):
+    """Who is currently being throttled, and how close they are (M15-T12).
+
+    Only subjects still inside the counting window are listed — an expired
+    counter is history, and the history lives in `request_logs` where every
+    single failure is recorded whether or not it ever reached a threshold."""
+    from app.services.pin_guard import active
+
+    now = datetime.now(timezone.utc)
+    rows = await active(ctx.session, now=now)
+    return [
+        PinLockoutRow(
+            id=row.id, scope=row.scope, who=await _lockout_who(ctx, row), failures=row.failures,
+            first_failed_at=row.first_failed_at, last_failed_at=row.last_failed_at,
+            locked_until=row.locked_until,
+            locked_now=row.locked_until is not None and row.locked_until > now,
+        )
+        for row in rows
+    ]
+
+
+@router.delete("/pin-lockouts/{lockout_id}", status_code=204)
+async def clear_pin_lockout(lockout_id: uuid.UUID, ctx: OwnerCtx):
+    """Let somebody back in now. A cashier locked out of their own till at the
+    start of a rush cannot wait fifteen minutes, and the owner is the person who
+    can tell "forgot their PIN" from "trying everyone else's"."""
+    from app.models import PinAttempt
+
+    row = await ctx.session.get(PinAttempt, lockout_id)
+    if row is None or row.business_id != ctx.business_id:
+        raise HTTPException(status_code=404, detail="Data percobaan PIN tidak ditemukan")
+    await ctx.session.delete(row)
+    await ctx.session.flush()
+    return None
 
 
 # ── Backdated sale entry (M15-T10) ──────────────────────────────────────────

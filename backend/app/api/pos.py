@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from app.core.db import tenant_session
 from app.ai.periods import period_range
+from app.services import pin_guard
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
 from app.schemas.menu import PosTicketOut, TicketCancelIn, TicketSettleIn
@@ -56,6 +57,7 @@ from app.schemas.pos import (
 )
 from app.services.orders import (
     DiscountNeedsManager,
+    ManagerPinThrottled,
     list_orders,
     order_number,
     ManagerPinRejected,
@@ -132,15 +134,48 @@ async def pos_business(pairing_token: str):
         )
 
 
+def _cooldown_message(cooldown) -> str:
+    """M15-T12. Says how long to wait, because "salah" for the fourth time with
+    no explanation is how a cashier concludes the tablet is broken."""
+    seconds = cooldown.seconds
+    if seconds < 60:
+        wait = f"{seconds} detik"
+    else:
+        wait = f"{(seconds + 59) // 60} menit"
+    return f"Terlalu banyak PIN salah — tunggu {wait} lalu coba lagi"
+
+
 @router.post("/login", response_model=PosLoginOut)
 async def pos_login(payload: PosLoginIn):
+    """PIN entry is throttled per staff member and per device (M15-T12): an
+    escalating cooldown, never a lock, because a till that stops trading mid-rush
+    gets switched off and then nothing is protected."""
     business_id, generation = _pairing_claims(payload.pairing_token)
     async with tenant_session(business_id) as session:
         business = await _live_business(session, business_id, generation)
+        who = pin_guard.staff_subject(payload.staff_id)
+        device = pin_guard.device_subject(business.pairing_generation)
+        for scope, subject in (("pos_login", who), ("pos_device", device)):
+            cooling = await pin_guard.check(session, business_id, scope, subject, path="/pos/login")
+            if cooling is not None:
+                raise HTTPException(status_code=429, detail=_cooldown_message(cooling))
+
         staff = await session.get(Staff, payload.staff_id)
         if staff is None or not staff.is_active or not verify_pin(payload.pin, staff.pin_hash):
-            # One message for both wrong-person and wrong-PIN: no oracle.
+            # One message for both wrong-person and wrong-PIN: no oracle. The
+            # count is still kept against the id that was tried, so guessing
+            # against a staff member who does not exist is throttled too.
+            earned = None
+            for scope, subject in (("pos_login", who), ("pos_device", device)):
+                hit = await pin_guard.record_failure(business_id, scope, subject, path="/pos/login")
+                earned = earned or hit
+            if earned is not None:
+                raise HTTPException(status_code=429, detail=_cooldown_message(earned))
             raise HTTPException(status_code=401, detail="PIN salah — coba lagi")
+
+        # Right first time or right in the end: either way it is forgiven.
+        await pin_guard.clear(session, business_id, "pos_login", who)
+        await pin_guard.clear(session, business_id, "pos_device", device)
         token = create_token(
             business_id=str(business_id), scope="pos", staff_id=str(staff.id),
             generation=business.pairing_generation,
@@ -380,6 +415,8 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         raise HTTPException(status_code=422, detail=_POINTS_ERRORS.get(exc.code, "Pembayaran poin tidak valid").format(exc.detail))
     except DiscountNeedsManager:
         raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik atau manajer memasukkan PIN-nya")
+    except ManagerPinThrottled as exc:
+        raise HTTPException(status_code=429, detail=_cooldown_message(exc.cooldown))
     except ManagerPinRejected:
         raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik atau manajer untuk memasukkan PIN-nya")
     except PricingInvalid as exc:
@@ -511,6 +548,8 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
         raise HTTPException(status_code=422, detail=_POINTS_ERRORS.get(exc.code, "Pembayaran poin tidak valid").format(exc.detail))
     except DiscountNeedsManager:
         raise HTTPException(status_code=403, detail="Diskon perlu PIN manajer — minta pemilik atau manajer memasukkan PIN-nya")
+    except ManagerPinThrottled as exc:
+        raise HTTPException(status_code=429, detail=_cooldown_message(exc.cooldown))
     except ManagerPinRejected:
         raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik atau manajer untuk memasukkan PIN-nya")
     except PricingInvalid as exc:
@@ -681,6 +720,8 @@ async def run_reversal(ctx, order_id: uuid.UUID, fn, path: str, *, channel: str 
     start = time.perf_counter()
     try:
         rev = await fn(ctx.session, business_id=ctx.business_id, order_id=order_id, staff_id=ctx.staff_id, **kwargs)
+    except ManagerPinThrottled as exc:
+        raise HTTPException(status_code=429, detail=_cooldown_message(exc.cooldown))
     except ManagerPinRejected:
         raise HTTPException(status_code=403, detail="PIN manajer salah — minta pemilik atau manajer untuk memasukkan PIN-nya")
     except OrderNotFound:

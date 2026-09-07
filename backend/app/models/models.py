@@ -1037,3 +1037,29 @@ class Approval(Base):
     amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
+
+
+class PinAttempt(Base):
+    """Failed PIN entries in a rolling window (M15-T12, migration 0034).
+
+    One row per (scope, subject): a staff member's own PIN ('pos_login'), a
+    device generation ('pos_device'), or one cashier's attempts at somebody
+    else's manager PIN ('manager_pin'). A correct PIN deletes the row.
+
+    `locked_until` is the cooldown currently in force. It escalates rather than
+    locking permanently, because a till that stops trading during a rush is a
+    denial of service the owner will switch off — and then nothing is protected.
+    """
+
+    __tablename__ = "pin_attempts"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(Text, nullable=False)
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    first_failed_at: Mapped[datetime] = _now()
+    last_failed_at: Mapped[datetime] = _now()
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

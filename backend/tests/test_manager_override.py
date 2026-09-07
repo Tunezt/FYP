@@ -127,11 +127,11 @@ async def _sell(s, c, qty=D(2), paid=D(40000), **kw):
 async def test_a_manager_pin_authorises_and_a_plain_staff_pin_does_not(session_factory, cafe):
     async with session_factory() as s:
         await _set_tenant(s, cafe["bid"])
-        assert (await verify_manager_pin(s, PIN["manager"])).name == "Pak Yudi"
-        assert (await verify_manager_pin(s, PIN["owner"])).name == "Bu Ratna"
+        assert (await verify_manager_pin(s, PIN["manager"], business_id=cafe["bid"])).name == "Pak Yudi"
+        assert (await verify_manager_pin(s, PIN["owner"], business_id=cafe["bid"])).name == "Bu Ratna"
         for rejected in (PIN["cashier"], PIN["ex_manager"], "0000"):
             with pytest.raises(ManagerPinRejected):
-                await verify_manager_pin(s, rejected)
+                await verify_manager_pin(s, rejected, business_id=cafe["bid"])
         assert APPROVER_ROLES == ("owner", "manager")
 
 
@@ -144,7 +144,7 @@ async def test_a_deactivated_manager_can_no_longer_authorise(session_factory, ca
         yudi.is_active = False
         await s.flush()
         with pytest.raises(ManagerPinRejected):
-            await verify_manager_pin(s, PIN["manager"])
+            await verify_manager_pin(s, PIN["manager"], business_id=cafe["bid"])
         await s.rollback()
 
 

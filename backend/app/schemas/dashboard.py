@@ -801,3 +801,20 @@ class BackdatedSaleIn(BaseModel):
     payment_method: Literal["cash", "qris", "transfer", "card", "ewallet", "other"] = "cash"
     customer_id: uuid.UUID | None = None
     note: str | None = Field(default=None, max_length=200)
+
+
+# ── PIN brute-force protection (M15-T12) ────────────────────────────────────
+
+
+class PinLockoutRow(BaseModel):
+    """One subject currently being counted. `who` is resolved for the owner:
+    a staff name, "perangkat kasir", or the cashier who was asking."""
+
+    id: uuid.UUID
+    scope: Literal["pos_login", "pos_device", "manager_pin"]
+    who: str
+    failures: int
+    first_failed_at: datetime
+    last_failed_at: datetime
+    locked_until: datetime | None
+    locked_now: bool

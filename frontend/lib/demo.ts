@@ -23,6 +23,7 @@ import type {
   OrderRow,
   Overview,
   Page,
+  PinLockoutRow,
   PnlMonth,
   PricingSettings,
   PromoRow,
@@ -124,6 +125,16 @@ const STAFF: StaffMember[] = [
   { id: "demo-staff-1", name: "Ibu Ratna", role: "owner", is_active: true, created_at: jktIso(120, 9) },
   { id: "demo-staff-2", name: "Sari", role: "staff", is_active: true, created_at: jktIso(118, 10) },
   { id: "demo-staff-3", name: "Budi", role: "manager", is_active: true, created_at: jktIso(96, 11) },
+];
+
+// M15-T12: somebody is mistyping, and somebody else is trying manager PINs.
+const PIN_LOCKOUTS: PinLockoutRow[] = [
+  { id: "demo-lock-1", scope: "pos_login", who: "Sari", failures: 6,
+    first_failed_at: jktIso(0, 8, 12), last_failed_at: jktIso(0, 8, 14),
+    locked_until: new Date(Date.now() + 22_000).toISOString(), locked_now: true },
+  { id: "demo-lock-2", scope: "manager_pin", who: "diminta oleh Budi", failures: 3,
+    first_failed_at: jktIso(0, 7, 40), last_failed_at: jktIso(0, 7, 44),
+    locked_until: null, locked_now: false },
 ];
 
 // M15-T11: the orders the reversal screen searches.
@@ -614,6 +625,7 @@ export function demoData(path: string): unknown {
   }
   if (pathname === "/api/shifts") return SHIFTS.slice(0, num("limit", 30));
   if (pathname === "/api/cash-movements") return CASH_MOVEMENTS.slice(0, num("limit", 50));
+  if (pathname === "/api/pin-lockouts") return PIN_LOCKOUTS;
   if (pathname === "/api/orders") {
     const q = (params.get("q") ?? "").replace(/-/g, "").toUpperCase();
     return {
