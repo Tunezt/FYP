@@ -1388,3 +1388,21 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **RLS on `pin_attempts` in the same migration** (§1.1), with an isolation test proving business A cannot read or write business B's rows (§2).
 **Deviation:** none. Schema change is additive: one table with its policy. Worth flagging for the author rather than fixing silently — the roadmap header went from "Version 8" to "Version 10" in this revision, while `docs/progress.md` refers to a "roadmap v9" whose header bump never landed. Nothing depends on the number; the build order is what is read.
 **Next:** nothing buildable without credentials or hardware. M15-T12 was the last task in the roadmap's build order that needs neither. The queue is unchanged from the `[stop]` entry above: M12 (Supabase paid tier, Meta templates, Railway, Vercel), then M15-T5 and M15-T6 behind it, then M14 gated behind about two weeks of live use, and M1-T3 part 2 once Gemini billing is on.
+
+### [stop] Run ends again: M15-T12 was the last buildable task
+**Date:** 2026-09-07
+**Status:** stop condition (roadmap §3: every remaining task needs credentials, hardware, or live use)
+**Changed:** docs/progress.md only.
+**Gates:** canary (§0.3) from a clean state: `git stash list` empty · `alembic downgrade base` then `upgrade head` (0001 -> 0034 from nothing) · seed ok · pytest 514 passed 0 skipped.
+**Notes:**
+- **This run resumed mid-task.** M15-T12 was written but uncommitted, and the roadmap's v10 revision defining it was uncommitted too. Both are now in, as two commits: the roadmap revision, then the task with its four gates green. Nothing was rewritten; the tree is what was already there plus the progress entry.
+- **The canary above is the handover check**, run at the end rather than at the five-task mark it was due at, so the tree being handed over is verified from an empty database rather than from whatever state the session left behind.
+- **The queue is unchanged** from the previous `[stop]` entry, and the reasons are the same:
+  - **M12-T1 to M12-T4** need Supabase (paid tier), a Meta app with both templates submitted first, a real handset on the allow-list, and Railway/Vercel deploy tokens. None exist in this repository and none may be invented (§1, §3).
+  - **M15-T5** needs something deployed to watch and somewhere to send the alert, so it sits behind M12-T4 and M12-T2.
+  - **M15-T6** is a purchase decision before it is a task: the roadmap's preference order is an Android POS terminal with a built-in printer, then a 58mm Bluetooth thermal printer over Web Bluetooth, then browser print as a fallback that is unusable in a queue.
+  - **M14** is deliberately gated behind roughly two weeks of live use (roadmap v10, "Why M14 waits"), not blocked by anything technical.
+  - **M1-T3 part 2** needs Gemini billing enabled for the live evaluation of questions 16-30.
+- **One uncommitted file left alone on purpose:** `AGENTS.md` at the repo root, untracked, a copy of `CLAUDE.md`. It is not part of any task and committing it would batch unrelated work.
+**Deviation:** none.
+**Next:** nothing, until credentials, a printer, or two weeks of live trading arrive. The build is at `1a414fb`.
