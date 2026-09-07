@@ -1346,3 +1346,25 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **The item picker offers only what the café sells.** `/api/items` is the whole inventory and includes raw materials priced at zero; offering "Gula Aren · Rp 0" invites a zero-value order. Also found by opening the form.
 **Deviation:** none. The schema change is additive — one text column with a default and a check constraint, no data rewritten, downgrade drops it cleanly. `orders` already carries `tenant_isolation`, so no new policy is needed and M0-T5 is unaffected.
 **Next:** M14-T1 (`docs/offline-policy.md`), which §5's revised build order puts at step 7 and which is now unblocked: steps 3 and 4 are done, step 5 (M12) is the standing NEEDS HUMAN, and step 6 (M15-T5, M15-T6) depends on it. M15's buildable set is complete — T1–T4 and T7–T11 done, T5 and T6 waiting on credentials and hardware. Canary due after 3 more tasks (last before M15-T9: M15-T9, M15-T11, M15-T10 = 3).
+
+### Run stops here — everything buildable without credentials or hardware is done
+**Date:** 2026-09-07
+**Status:** NEEDS HUMAN (roadmap §3: the remaining tasks need credentials, hardware, and now live trading time)
+**Changed:** docs/progress.md only. Nothing was built.
+**Gates:** n/a. The tree is `[M15-T10]`: pytest 499 passed 0 skipped · migrations round-trip ok · frontend build ok · seed ok.
+**Notes:**
+- **Correcting the previous entry.** [M15-T10] ends "Next: M14-T1 … now unblocked". Roadmap **v9** revised step 7 after that was written: M14 is gated behind roughly two weeks of live trading, because the offline queue is the riskiest code in the system and a sync bug does not crash — it writes a wrong number that the reconciliation invariant surfaces days later. Shipping it as the café's first experience of the product would make a real bug indistinguishable from unfamiliarity. So M14-T1 is **not** the next task, and no work on it has started.
+- **Where the build actually stands.** M0–M11 complete and tagged through `checkpoint/M9`. M15: T1, T2, T3, T4, T7, T8, T9, T10, T11 done, one task per commit, four gates green before each. Nothing in the roadmap that can be done from this machine remains undone.
+- **What is left, and what each one is waiting for:**
+  - **M12-T1** a Supabase project on a **paid** tier — URL, anon key, service key, database password — then the restore sequence in `PROJECT-STATUS.md` §5.
+  - **M12-T2** a Meta app: WhatsApp Business account, phone number ID, permanent access token, webhook verify token. **Submit the two templates first** — review takes 24h or more, so it is the long pole and everything WhatsApp-shaped waits behind it.
+  - **M12-T3** a real handset on the allow-list, to receive one live nightly alert.
+  - **M12-T4** Railway (API + cron) and Vercel accounts and their deploy tokens. The cron entries M15-T1 and M15-T5 need are created here: `0 19 * * *` (02:00 WIB) for `python -m app.jobs.backup`, and the nightly job. Railway's image needs the Postgres 16 client tools on the cron service or `pg_dump`/`pg_restore` do not exist.
+  - **M15-T5** an external uptime check against `/health/db`, alerting the owner's phone after two consecutive failures. Needs M12-T4 (something deployed to watch) and M12-T2/T3 (somewhere to send it).
+  - **M15-T6** the café's actual receipt printer. **This is a purchase decision, not a task I can do:** the roadmap's preference order is (1) an Android POS terminal with a built-in printer — Sunmi, iMin, Advan, which is what majoo ships and which removes the pairing problem entirely; (2) a 58mm Bluetooth thermal printer over Web Bluetooth from Chrome on Android; (3) browser print, unusable in a queue and a fallback only. If hardware has not been bought, buy option 1.
+  - **M14** the offline queue, gated behind ~2 weeks of live use (roadmap v9 step 7).
+  - **M1-T3 part 2** the live evaluation of questions 16–30 and the text-to-SQL baseline, once Gemini billing is on. Non-blocking; the existing 15-question evidence stands on its own.
+- **Three things to do before the café's first day**, all of them recorded in `docs/runbook.md` rather than only here: set **Hari usaha dimulai jam** to an hour after the last bill is normally settled (04.00 is the usual answer) — it decides what "today" means everywhere; appoint a **manager** so a void does not need the owner on site; and **re-time the lockout drill** on the café's own tablet, which is the one measurement in the runbook taken on a development machine rather than the real device.
+- **Two known gaps remain in the runbook's go-live table**, both waiting on the above: no uptime alert (M15-T5) and no printer proven on real hardware (M15-T6). The offline-till row stays until M14, which is now a deliberate wait rather than a backlog item.
+**Deviation:** none. No code was written in this entry.
+**Next:** nothing, until the M12 accounts exist and the printer is chosen. After M12 lands, the order is M15-T5, then M15-T6, then two weeks of trading, then M14-T1.
