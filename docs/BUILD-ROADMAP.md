@@ -1,6 +1,6 @@
 # Warung Pintar — Autonomous Build Roadmap
 
-**Version 8** · 6 September 2026. Adds M13 (table service), M14 (offline-first POS) and
+**Version 10** · 6 September 2026. Adds M13 (table service), M14 (offline-first POS) and
 M15 (go-live hardening). This system is being deployed in a real café, not only submitted.
 **Target:** the core of majoo's SME operating system, plus the things majoo cannot do.
 
@@ -315,17 +315,43 @@ button at all.*
 
 1. ~~**M15-T1 → M15-T4**~~ **done** — backups, restore drill, clean bootstrap, day boundary
 2. ~~**M15-T7 → M15-T9**~~ **done** — manager role, lockout recovery, runbook
-3. **M15-T11** — the void and refund screen. **Do this next.** A café rings something up wrong
-   every day; the WiFi drops far less often. Fix the daily incident before the weekly one.
+3. ~~**M15-T11**~~ **done** — the void and refund screen
+3b. **M15-T12** — PIN brute-force protection. The last thing buildable without credentials, and
+   the PIN guards voids and refunds.
 4. **M15-T10** — backdated sale entry, so paper sales from an outage can reach the books
 5. **M12** — Supabase (paid tier, not free), Meta templates, Railway, Vercel
 6. **M15-T5, M15-T6** — uptime alert and the real printer; both need step 5 and the hardware
-7. **M14-T1 → M14-T8, then M14-T10** — the offline queue (M14-T9 is cut)
+7. **M14-T1 → M14-T8, then M14-T10** — the offline queue (M14-T9 is cut).
+   **Gate: do not start M14 until the café has been running live for about two weeks.**
+   See "Why M14 waits" below.
 8. **M1-T3 part 2 and the remaining evaluation questions** — once Gemini billing is on
 9. **M13** — cut, counter service, do not build
 
 **Do not start M14 before steps 3 and 4 are done.** Offline is the more interesting engineering and
 the less urgent problem.
+
+#### Why M14 waits until after go-live
+
+Revised 6 September 2026, once M15-T10 and M15-T11 landed and the only remaining buildable
+milestone was M14.
+
+The offline queue rewrites how the till writes a sale: optimistic UI, a local queue, replay,
+idempotency. **It is the riskiest code in the system**, because a sync bug does not crash, it
+quietly writes the wrong number and the reconciliation invariant catches it days later. Shipping
+that as the café's *first* experience of the product means the owner cannot tell a real bug from
+her own unfamiliarity.
+
+Going live online-only first is the cheaper order:
+
+- Outages at this café are short, so the cost of not having it is a handful of minutes a week, and
+  M15-T10 already lets those sales reach the books.
+- Two weeks of real use tells you **how often the connection actually drops**, which is currently a
+  guess. That number decides how much of M14 is even worth building.
+- Real use surfaces things no roadmap predicts, and those will outrank M14 in the queue.
+- If offline lands badly, it lands on a system the owner already trusts, which is a far better
+  place to debug from.
+
+So: go live, watch it for two weeks, then come back to M14-T1 with real numbers in hand.
 
 Work this order, not the numeric order. Everything else in this document still applies.
 
@@ -975,6 +1001,33 @@ Build:
 anyone touching an API client or `/docs`; the reversing lines, reversing payments, `sale_void`
 stock movements and the `approvals` row all land exactly as M3-T4 and M15-T7 already specify; and
 the reconciliation invariant still holds afterwards.
+
+**M15-T12 · PIN brute-force protection** — `blocked_by: M15-T11` · **buildable now, no credentials**
+
+`POST /auth/verify-otp` counts attempts and returns 429 after five (`OTP_MAX_ATTEMPTS`).
+`POST /pos/login` counts nothing. Neither does `verify_manager_pin`, which is the gate on **voids,
+refunds and discounts** — the three things money leaves through.
+
+A 4-digit PIN is 10,000 combinations. The threat here is not a stranger on the internet, it is the
+person holding the tablet all shift: a cashier who wants to void their own sales and keep the cash
+can script the pad and have the owner's PIN inside an hour. The pairing link is also a bearer URL,
+so anyone who has ever seen it can reach `/pos/login` from their own phone.
+
+**The constraint that makes this interesting:** a café cannot have its till hard-locked during a
+rush. A lockout that protects the money by stopping trade is a denial of service the owner will
+disable within a week. So:
+
+- Count failures per staff row and per pairing token, in a short rolling window
+- Escalating cooldown rather than a permanent lock: 5 fails → 30s, 10 → 2 min, 20 → 15 min
+- A correct PIN clears the counter immediately
+- The owner can clear any cooldown from the dashboard, and sees the attempts
+- Failures land in `request_logs` so a pattern is visible after the fact
+- Same treatment for `verify_manager_pin`, counted separately, because that one guards money
+- Indonesian message that says how long to wait, not just "salah"
+
+**Done when:** a scripted 100-attempt run against `/pos/login` is throttled and logged; a correct
+PIN on the sixth attempt after a cooldown expires still works; the owner can see and clear it; and
+a busy till that fat-fingers a PIN twice is never slowed down.
 
 **M15-T9 · The runbook** — `blocked_by: M15-T8`
 `docs/runbook.md`, written for a stressed person at 8am, not for a developer:
