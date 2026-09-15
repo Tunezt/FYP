@@ -12,6 +12,7 @@ import jwt as pyjwt
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
+from app.core import otp_fallback
 from app.core.config import get_settings
 from app.core.db import plain_session, tenant_session
 from app.core.db_errors import raise_if_db_unreachable
@@ -78,6 +79,7 @@ async def request_otp(payload: PhoneIn):
         raise_if_db_unreachable(exc)
 
     await send_otp_template(payload.phone, code)
+    otp_fallback.log_code(payload.phone, code)
     if settings.environment == "development":
         # Dev convenience only — real deployments deliver via WhatsApp.
         logger.info("[DEV] OTP for %s is %s", payload.phone, code)
@@ -88,11 +90,17 @@ async def request_otp(payload: PhoneIn):
 DEV_BYPASS_CODE = "000000"
 
 
+def is_dev_bypass_code(code: str, settings) -> bool:
+    """`000000` logs in without a real code — development only, never production,
+    whatever else is switched on (the OTP log fallback included)."""
+    return settings.environment == "development" and code == DEV_BYPASS_CODE
+
+
 @router.post("/verify-otp", response_model=OtpVerifyOut)
 async def verify_otp(payload: OtpVerifyIn):
     now = datetime.now(timezone.utc)
     settings = get_settings()
-    is_dev_bypass = settings.environment == "development" and payload.code == DEV_BYPASS_CODE
+    is_dev_bypass = is_dev_bypass_code(payload.code, settings)
 
     try:
         async with plain_session() as session:

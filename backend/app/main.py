@@ -18,6 +18,10 @@ logger = logging.getLogger("app")
 
 settings = get_settings()
 
+from app.core import otp_fallback  # noqa: E402
+
+otp_fallback.announce(settings)
+
 app = FastAPI(title="Warung Pintar API", version="0.1.0")
 
 app.add_middleware(

@@ -1419,3 +1419,21 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Scanned 910 historical file blobs and the pending documentation for credential patterns and known local secrets; no matches. Environment files, local database files, and backups remain ignored.
 **Deviation:** User-requested repository publication outside the feature roadmap. The existing roadmap edit and repository guidance are recorded together as this single publication-preparation task.
 **Next:** Publish the clean `main` branch; feature work remains gated as described in the preceding stop entry.
+
+
+### [M12-T1a] Temporary OTP log fallback until Meta exists
+**Date:** 2026-09-16
+**Status:** done
+**Changed:** backend/app/core/otp_fallback.py (new), backend/app/core/config.py (`otp_log_fallback`), backend/app/api/auth.py (request-otp calls the fallback; `is_dev_bypass_code` extracted), backend/app/main.py (startup banner), backend/.env.example, backend/tests/test_otp_fallback.py (new, 8 tests)
+**Gates:** pytest 522 passed 0 skipped (was 514) · migrations round-trip ok (0034 -> 0033 -> 0034) · frontend build ok · seed ok
+**Notes:**
+- **User-directed deviation from the roadmap.** M12 is going live on Supabase, Railway and Vercel before the Meta app exists, because the user's own Facebook account is too new. Owner login is a WhatsApp OTP, so without this the production dashboard cannot be logged into at all.
+- **Fenced three ways.** Off unless `OTP_LOG_FALLBACK=true`; ignored the moment a real WhatsApp token is set; and **expires by date, not by memory**: `EXPIRES = 2026-10-16` is hardcoded, after which the flag is refused whatever the environment says and extending it takes a commit.
+- **Loud on every boot** while enabled (days remaining), an ERROR if enabled but expired. The risk is stated in the banner itself: anyone with Railway log access can log in as any owner while it is on.
+- `000000` stays development-only; a test pins that the fallback never enables it in production.
+- **Supabase state found during this run (recorded here, not a code change):** the project is the July one, not a fresh one. It was at alembic 0002 with the demo cafe and two test businesses (`321`, `231`). Migrated 0003 -> 0034 (32 s). `app_role` already existed with the right attributes; its password was reset from `.env.production` without being displayed. Verified live as `app_role`: no BYPASSRLS; a tenant table with no `app.current_business_id` raises rather than returning rows (fails closed); each business sees only its own staff. `tests/test_db_integration.py` against Supabase: 24 passed.
+- **Also found:** the server is Postgres 17.6 (the backup cron will need pg_dump 17), and `app/core/db.py` fails TLS verification against the Supabase pooler because Supabase's CA is not in the system store. That fix is the next commit.
+- **Deferred by the user, not dropped:** encrypted R2 backups, the age key, the weekly integrity check and the nightly closed-business-day fix. Backups become a blocking gate before the real cafe's first sale, together with the production wipe (downgrade base, upgrade head, clear the receipts bucket, assert zero businesses, prove `app.seed` refuses).
+- Tagged `demo/cp2-presentation` at 00a3e98, the code state for the FYP presentation (run locally with `app.seed`).
+**Deviation:** yes, user-directed, as above.
+**Next:** Supabase CA certificate TLS fix, then Railway API variables, Vercel redeploy, smoke test on demo data.

@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     frontend_origin: str = "http://localhost:3000"
     low_stock_days_threshold: float = 3.0
+    # Temporary: log owner OTP codes while WhatsApp is unconfigured. Fenced and
+    # date-limited in app/core/otp_fallback.py. Remove once Meta is live.
+    otp_log_fallback: bool = False
     # Evaluation only (roadmap M9-T6): lets app.eval run the naive text-to-SQL
     # baseline for comparison. Never read by the WhatsApp path.
     eval_text_to_sql: bool = False
