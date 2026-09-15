@@ -1,6 +1,6 @@
 # Warung Pintar — Autonomous Build Roadmap
 
-**Version 10** · 6 September 2026. Adds M13 (table service), M14 (offline-first POS) and
+**Version 11** · 12 September 2026. Adds M13 (table service), M14 (offline-first POS) and
 M15 (go-live hardening). This system is being deployed in a real café, not only submitted.
 **Target:** the core of majoo's SME operating system, plus the things majoo cannot do.
 
@@ -324,7 +324,8 @@ button at all.*
 7. **M14-T1 → M14-T8, then M14-T10** — the offline queue (M14-T9 is cut).
    **Gate: do not start M14 until the café has been running live for about two weeks.**
    See "Why M14 waits" below.
-8. **M1-T3 part 2 and the remaining evaluation questions** — once Gemini billing is on
+8. **M1-T3 part 2, the remaining evaluation questions, and M9-T7 (RAG evaluation)** — once
+   Gemini billing is on. Run all three in one batch; they share the same quota.
 9. **M13** — cut, counter service, do not build
 
 **Do not start M14 before steps 3 and 4 are done.** Offline is the more interesting engineering and
@@ -690,6 +691,38 @@ registry. Still no free-form SQL.
 When no metric or tool matches, the assistant says so in the owner's language and offers what it
 can answer. It never improvises a number.
 **Done when:** a set of out-of-scope questions produces refusals and zero fabricated figures.
+
+**M9-T7 · Evaluate the RAG path** — `blocked_by: M9-T6` · needs Gemini billing
+
+`search_history` is the only tool whose answer is not deterministic. Every other path is a named
+metric over SQL you wrote; this one is vector similarity over embedded receipts, and **similarity
+returns the nearest thing, which is not the same as the right thing.** That is the identical
+failure mode as text-to-SQL, the thing this whole architecture exists to avoid, sitting inside the
+system unmeasured.
+
+The evaluation set is 15 questions and **not one of them touches `search_history`.** So the project
+measures the components that cannot silently lie and does not measure the one that can.
+
+Two things also changed under it. When RAG was built, receipts were unstructured JSONB and it was
+the only way to ask about purchase history. M5 then added suppliers, purchase orders and goods
+receipts, and M9-T4 added `get_purchase_history` and `get_supplier_prices` as deterministic tools
+over real tables. **The data got structured, so most of what fuzzy search was compensating for went
+away.**
+
+Do:
+- Add 8 to 10 retrieval questions to the evaluation set, run in the same batch as questions 16-30
+- Score **retrieval precision** (was the returned receipt the right one) separately from answer
+  accuracy, and count a confident answer from the wrong receipt as a silent error
+- Include questions the structured tools now answer better, to show where the boundary sits
+- Check the reply **cites which receipt** it came from, with supplier and date, so the owner can
+  verify. An uncited RAG answer is an unfalsifiable claim
+- Narrow the tool's documented job to what structure does not capture: free-text notes, unmatched
+  invoice lines, receipts predating the structured flow, and "that supplier who does the pandan
+  syrup" when the name is forgotten
+
+**Done when:** `docs/evaluation.md` reports retrieval precision and silent-error rate for
+`search_history` alongside the existing tool numbers, and the shrinking-RAG-surface finding is
+written down. **Reporting an honest bad number here is worth more than not measuring it.**
 
 **M9-T6 · Evaluation harness** — `blocked_by: M9-T5`
 Question set in real code-switched Indonesian, Malay and English with typos. Score answer accuracy,

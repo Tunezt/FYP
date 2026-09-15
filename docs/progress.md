@@ -1406,3 +1406,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **One uncommitted file left alone on purpose:** `AGENTS.md` at the repo root, untracked, a copy of `CLAUDE.md`. It is not part of any task and committing it would batch unrelated work.
 **Deviation:** none.
 **Next:** nothing, until credentials, a printer, or two weeks of live trading arrive. The build is at `1a414fb`.
+
+### [repo-sync] Prepare the current version for GitHub
+**Date:** 2026-09-15
+**Status:** done (publication preparation)
+**Changed:** docs/BUILD-ROADMAP.md (existing v11 update planning M9-T7), AGENTS.md (existing repository instructions, now tracked), docs/progress.md.
+**Gates:** pytest 514 passed 0 skipped (one dependency deprecation warning) · migrations round-trip ok (0034 → 0033 → 0034) · frontend build ok · seed ok.
+**Notes:**
+- User requested publication of the current version to `Tunezt/FYP`, retaining the earlier requirement that GitHub show no AI contributors. This is a repository publication task; no roadmap feature was implemented or marked complete.
+- Includes the 30 existing commits after M8-T2, through M15-T12 and its stop entry, plus the current documentation. M9-T7 remains planned and requires Gemini billing.
+- Publish on the clean `main` history by removing AI co-author trailers from copied commit messages while preserving authors, committers, dates, parents' corresponding history, and every file tree. Keep the original local `master` history and all checkpoint tags; do not force-push or upload the original tags.
+- Scanned 910 historical file blobs and the pending documentation for credential patterns and known local secrets; no matches. Environment files, local database files, and backups remain ignored.
+**Deviation:** User-requested repository publication outside the feature roadmap. The existing roadmap edit and repository guidance are recorded together as this single publication-preparation task.
+**Next:** Publish the clean `main` branch; feature work remains gated as described in the preceding stop entry.
