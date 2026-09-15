@@ -1437,3 +1437,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Tagged `demo/cp2-presentation` at 00a3e98, the code state for the FYP presentation (run locally with `app.seed`).
 **Deviation:** yes, user-directed, as above.
 **Next:** Supabase CA certificate TLS fix, then Railway API variables, Vercel redeploy, smoke test on demo data.
+
+
+### [M12-T1c] Database TLS verified against the Supabase CA
+**Date:** 2026-09-16
+**Status:** done
+**Changed:** backend/app/core/db.py (`ssl_context_for`), backend/app/core/config.py (`database_ssl_root_cert`), backend/certs/supabase-ca.crt (new, public CA), backend/tests/test_db_tls.py (new, 8 tests)
+**Gates:** pytest 530 passed 0 skipped (was 522) · migrations round-trip ok (0034 -> 0033 -> 0034) · frontend build ok · seed ok
+**Notes:**
+- **The bug.** `db.py` verified remote TLS against the system trust store. Supabase's pooler chains to *Supabase Root 2021 CA*, which no system store carries, so the first connection failed with `CERTIFICATE_VERIFY_FAILED`. Production would never have reached its database. It went unnoticed because every test connects to localhost, where TLS is skipped.
+- **The fix keeps verification on.** The CA (downloaded from the project's Database settings, public, expires 2031-04-26) is committed at `backend/certs/supabase-ca.crt` and used automatically for `*.supabase.com` / `*.supabase.co`; `DATABASE_SSL_ROOT_CERT` overrides it. A missing CA file raises rather than falling back to an unverified connection, and there is a test for exactly that.
+- **A second failure behind the first.** Python 3.13 turns on `VERIFY_X509_STRICT`, which rejects Supabase's root for lacking a keyUsage extension. Only that flag is cleared, only for the pinned CA; chain, expiry and hostname are still verified, and other hosts keep Python's default flags (tested).
+- **Verified live**: the app engine connected to the Supabase pooler as `app_role` with `CERT_REQUIRED` and hostname checking on.
+- Alembic's engine still connects with asyncpg's default (encrypted, unverified). It only runs as a deploy step against a fixed host; noted, not changed here.
+**Deviation:** none beyond the user-directed M12 ordering recorded in [M12-T1a].
+**Next:** push, Railway deploy with production variables, `/health/db`, Vercel redeploy, smoke test on the demo data.

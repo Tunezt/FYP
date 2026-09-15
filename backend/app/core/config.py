@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     # a local dev Postgres with one superuser role and no RLS concerns).
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
     migration_database_url: str | None = None
+    # CA certificate that remote database TLS is verified against. Unset: a
+    # Supabase host uses the bundled backend/certs/supabase-ca.crt, anything
+    # else the system store. Verification is never disabled (app/core/db.py).
+    database_ssl_root_cert: str | None = None
 
     # Supabase storage
     supabase_url: str = "https://placeholder.supabase.co"

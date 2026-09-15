@@ -14,17 +14,57 @@ import ssl
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy import text
 
 from app.core.config import get_settings
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+# Supabase's pooler presents a certificate chained to Supabase's own root CA,
+# which is not in any system trust store — verifying against the default store
+# fails with CERTIFICATE_VERIFY_FAILED. The CA is public (downloaded from the
+# project's Database settings) and committed here so verification stays ON.
+BUNDLED_SUPABASE_CA = BACKEND_DIR / "certs" / "supabase-ca.crt"
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def ssl_context_for(database_url: str, root_cert: str | None = None) -> ssl.SSLContext | None:
+    """TLS for a remote database, always verified. None for a local one.
+
+    `root_cert` (DATABASE_SSL_ROOT_CERT) names the CA to trust, relative paths
+    resolving against backend/. Without it, a Supabase host uses the bundled
+    Supabase CA and anything else uses the system store. Verification is never
+    turned off: a missing CA file is an error, not a downgrade."""
+    host = urlsplit(database_url).hostname or ""
+    if host in LOCAL_HOSTS:
+        return None
+    if root_cert:
+        cafile = Path(root_cert)
+        if not cafile.is_absolute():
+            cafile = BACKEND_DIR / cafile
+    elif host.endswith((".supabase.com", ".supabase.co")):
+        cafile = BUNDLED_SUPABASE_CA
+    else:
+        return ssl.create_default_context()
+    if not cafile.is_file():
+        raise FileNotFoundError(f"database CA certificate not found: {cafile}")
+    context = ssl.create_default_context(cafile=str(cafile))
+    # Python 3.13 turns on VERIFY_X509_STRICT, which rejects Supabase Root 2021
+    # CA for lacking a keyUsage extension. Only that strictness is relaxed, and
+    # only for the pinned CA: chain, expiry and hostname are still verified.
+    context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return context
+
+
 settings = get_settings()
 
 _connect_args: dict = {"statement_cache_size": 0, "timeout": 5}
-if "localhost" not in settings.database_url and "127.0.0.1" not in settings.database_url:
-    _connect_args["ssl"] = ssl.create_default_context()
+_ssl = ssl_context_for(settings.database_url, settings.database_ssl_root_cert)
+if _ssl is not None:
+    _connect_args["ssl"] = _ssl
 
 # statement_cache_size=0 keeps asyncpg compatible with Supabase's PgBouncer
 # transaction-mode pooler (prepared statements don't survive pooled connections).
