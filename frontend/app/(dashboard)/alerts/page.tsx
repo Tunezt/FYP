@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { daySubLabel, groupByDay } from "@/lib/dates";
 import type { AlertRow, Business } from "@/lib/types";
-import { DayHeader, EmptyState, ErrorState, Glass, SeverityBadge, Skeleton } from "@/components/ui";
+import { DayHeaderToggle, EmptyState, ErrorState, Glass, SeverityBadge, Skeleton } from "@/components/ui";
+import { HistoryFilters } from "@/components/HistoryFilters";
 import { HelpTip } from "@/components/HelpTip";
 import { IconBell, IconBox, IconCheck, IconTrendUp } from "@/components/icons";
 
@@ -17,8 +18,23 @@ const ALERT_LABEL: Record<string, string> = {
   supplier_price: "harga supplier berubah",
 };
 
+const SEVERITIES = [
+  { value: "high", label: "Penting" },
+  { value: "medium", label: "Sedang" },
+  { value: "low", label: "Ringan" },
+];
+
 export default function AlertsPage() {
-  const alerts = useOwnerData<AlertRow[]>("/api/alerts?limit=100");
+  const [severity, setSeverity] = useState("");
+  const [since, setSince] = useState("");
+  const [until, setUntil] = useState("");
+  const filterQuery =
+    (severity ? `&severity=${severity}` : "") +
+    (since ? `&since=${since}` : "") +
+    (until ? `&until=${until}` : "");
+  const filtered = filterQuery !== "";
+  const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
+  const alerts = useOwnerData<AlertRow[]>(`/api/alerts?limit=100${filterQuery}`);
   const business = useOwnerData<Business>("/api/business");
   const tz = business.data?.timezone;
   const dayStart = business.data?.day_start_hour ?? 0;
@@ -38,6 +54,10 @@ export default function AlertsPage() {
   const open = (alerts.data ?? []).filter((a) => !a.is_acknowledged);
   const done = (alerts.data ?? []).filter((a) => a.is_acknowledged);
   const openGroups = groupByDay(open, (a) => new Date(a.created_at), tz, dayStart);
+  const openByDefault = (label: string) => label === "Hari ini" || label === "Kemarin";
+  const dayOpen = (key: string, label: string) => openDays[key] ?? openByDefault(label);
+  const toggleDay = (key: string, label: string) =>
+    setOpenDays((o) => ({ ...o, [key]: !(o[key] ?? openByDefault(label)) }));
 
   return (
     <div className="animate-fade-up space-y-7">
@@ -55,6 +75,22 @@ export default function AlertsPage() {
         </p>
       </header>
 
+      <HistoryFilters
+        optionLabel="Tingkat"
+        options={SEVERITIES}
+        value={severity}
+        onValue={setSeverity}
+        since={since}
+        onSince={setSince}
+        until={until}
+        onUntil={setUntil}
+        onReset={() => {
+          setSeverity("");
+          setSince("");
+          setUntil("");
+        }}
+      />
+
       {alerts.loading ? (
         <Skeleton className="h-64" />
       ) : alerts.error && !alerts.data ? (
@@ -63,9 +99,13 @@ export default function AlertsPage() {
         </Glass>
       ) : open.length === 0 && done.length === 0 ? (
         <Glass>
-          <EmptyState emoji="🔔" title="Belum ada peringatan">
-            Kalau ada penjualan yang aneh atau stok yang menipis, kabarnya muncul di sini dan di
-            WhatsApp.
+          <EmptyState
+            emoji="🔔"
+            title={filtered ? "Tidak ada peringatan yang cocok" : "Belum ada peringatan"}
+          >
+            {filtered
+              ? "Coba ubah tanggal atau pilih tingkat lain."
+              : "Kalau ada penjualan yang aneh atau stok yang menipis, kabarnya muncul di sini dan di WhatsApp."}
           </EmptyState>
         </Glass>
       ) : (
@@ -78,8 +118,15 @@ export default function AlertsPage() {
               </div>
               {openGroups.map((group) => (
                 <div key={group.key}>
-                  <DayHeader label={group.label} sub={daySubLabel(group.date, tz, dayStart)} />
-                  <ul>
+                  <DayHeaderToggle
+                    label={group.label}
+                    sub={daySubLabel(group.date, tz, dayStart)}
+                    meta={`${group.rows.length} peringatan`}
+                    open={dayOpen(group.key, group.label)}
+                    onToggle={() => toggleDay(group.key, group.label)}
+                    count={group.rows.length}
+                  />
+                  <ul hidden={!dayOpen(group.key, group.label)}>
                     {group.rows.map((alert) => (
                       <li key={alert.id} className="list-row">
                         <span

@@ -162,6 +162,12 @@ export const IconChevronRight = (p: IconProps) => (
   </Svg>
 );
 
+export const IconChevronDown = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m5.5 9.5 6.5 6.5 6.5-6.5" />
+  </Svg>
+);
+
 export const IconTrendUp = (p: IconProps) => (
   <Svg {...p}>
     <path d="M4 17.5 9.5 12l3.5 3.5 7-7.5" />

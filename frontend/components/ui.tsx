@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { categorize, type ItemCategory } from "@/lib/itemCategory";
 import {
+  IconChevronDown,
   IconCatBakery,
   IconCatCigarette,
   IconCatCleaning,
@@ -64,6 +65,50 @@ export function DayHeader({
       </p>
       {meta && <p className="ink-soft text-xs font-semibold tabular-nums">{meta}</p>}
     </div>
+  );
+}
+
+/** A day header that opens and closes its own section.
+ *
+ * History lists are long and the owner nearly always wants the last day or
+ * two: older days stay folded until asked for. The whole header is the hit
+ * target (a chevron alone is a 16px target on a phone), and it carries the
+ * day's totals so a folded day still answers "how much did we take?". */
+export function DayHeaderToggle({
+  label,
+  sub,
+  meta,
+  open,
+  onToggle,
+  count,
+}: {
+  label: string;
+  sub?: string | null;
+  meta?: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  count?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="day-header w-full cursor-pointer select-none text-left transition-colors hover:bg-[color:var(--hairline)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)] active:opacity-80"
+    >
+      <p className="flex items-center gap-1.5 text-sm font-bold">
+        <IconChevronDown
+          className={`h-4 w-4 shrink-0 transition-transform duration-200 ${open ? "" : "-rotate-90"}`}
+          aria-hidden
+        />
+        {label}
+        {sub && <span className="ink-faint ml-1 text-xs font-medium">{sub}</span>}
+        {!open && count !== undefined && (
+          <span className="ink-faint text-xs font-medium">({count})</span>
+        )}
+      </p>
+      {meta && <p className="ink-soft text-xs font-semibold tabular-nums">{meta}</p>}
+    </button>
   );
 }
 

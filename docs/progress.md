@@ -1480,3 +1480,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Verified in the browser against local demo data: the year tab fetches `days=730` and draws a full year.
 **Deviation:** none.
 **Next:** the history lists the same report asked for.
+
+
+### [dash-3] History lists: filter in SQL, fold the old days
+**Date:** 2026-09-16
+**Status:** done
+**Changed:** backend/app/api/dashboard.py (`_day_range_filters`; `since`/`until`/`staff_id` on `/sales`, `since`/`until`/`category` on `/expenses`, `since`/`until`/`severity` on `/alerts`), backend/tests/test_sales_filters.py (new, 11 tests), frontend/components/HistoryFilters.tsx (new), frontend/components/ui.tsx (`DayHeaderToggle`), frontend/components/icons.tsx (`IconChevronDown`), frontend/app/(dashboard)/sales|money|alerts/page.tsx
+**Gates:** pytest 558 passed 0 skipped - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **User-directed.** The owner asked for the history to open on today and yesterday, fold the older days, and be filterable by person and by date.
+- **Filtering belongs in SQL, not the page.** The lists are paginated at 20-40 rows; filtering client-side would answer "what did Sari sell last Tuesday" from whatever page happened to be loaded, and the result count would be a lie. One helper, `_day_range_filters`, gives all three lists the same meaning of "a day": *business* days (M15-T4), both ends inclusive - so the 00:15 bill filters under the night before, and asking for one day means that whole day. Tests pin exactly that, plus that a nonsense date is a 422 rather than a silently ignored filter.
+- **Folding is per day and remembered per click.** "Hari ini" and "Kemarin" open, everything older folded; the header carries the day's count and total so a folded day still answers "how much?". The whole header is the hit target, not a 16px chevron, because this is used on a counter tablet.
+- **The empty state now tells the truth.** With a filter on it says nothing matched rather than implying the shop has no sales, no expenses, no alerts.
+**Deviation:** none. Query parameters only, all optional; an unfiltered call is byte-for-byte the old behaviour, which `test_unfiltered_is_unchanged` holds.
+**Next:** the interactive-row polish from the same report.

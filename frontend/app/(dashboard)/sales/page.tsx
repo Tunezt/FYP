@@ -5,8 +5,9 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { useOwnerData } from "@/lib/hooks";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
-import type { Business, Page, SaleRow, TrendPoint } from "@/lib/types";
-import { DayHeader, EmptyState, ErrorState, Glass, ItemIcon, Segmented, Skeleton } from "@/components/ui";
+import type { Business, Page, SaleRow, StaffMember, TrendPoint } from "@/lib/types";
+import { DayHeaderToggle, EmptyState, ErrorState, Glass, ItemIcon, Segmented, Skeleton } from "@/components/ui";
+import { HistoryFilters } from "@/components/HistoryFilters";
 import { ReversalPanel } from "@/components/ReversalPanel";
 import { BackdatedSaleForm } from "@/components/BackdatedSaleForm";
 
@@ -19,8 +20,29 @@ const RANGES = [
 export default function SalesPage() {
   const [range, setRange] = useState<"7" | "30" | "90">("30");
   const [page, setPage] = useState(1);
+  // Filters live in the query, not in the page: filtering the 40 rows already
+  // fetched would answer "who sold what last Tuesday" with whatever happens to
+  // be on this page.
+  const [staffId, setStaffId] = useState("");
+  const [since, setSince] = useState("");
+  const [until, setUntil] = useState("");
+  const filterQuery =
+    (staffId ? `&staff_id=${staffId}` : "") +
+    (since ? `&since=${since}` : "") +
+    (until ? `&until=${until}` : "");
+  const filtered = filterQuery !== "";
   const trend = useOwnerData<TrendPoint[]>(`/api/sales-trend?days=${range}`);
-  const sales = useOwnerData<Page<SaleRow>>(`/api/sales?page=${page}&page_size=40`);
+  const sales = useOwnerData<Page<SaleRow>>(`/api/sales?page=${page}&page_size=40${filterQuery}`);
+  const staff = useOwnerData<StaffMember[]>("/auth/staff");
+  // A filter change lands the owner on page 1 — page 4 of the old result is a
+  // different set of rows, and usually an empty one.
+  const onFilter = (fn: (v: string) => void) => (value: string) => {
+    setPage(1);
+    fn(value);
+  };
+  // Today and yesterday are what the owner came for; older days stay folded
+  // until asked for. `openOverrides` records only the days they clicked.
+  const [openOverrides, setOpenOverrides] = useState<Record<string, boolean>>({});
   // Day buckets must match the backend's business day: its timezone AND its
   // day-start hour (M15-T4), or a 00:15 bill sits under the wrong header.
   const business = useOwnerData<Business>("/api/business");
@@ -32,6 +54,10 @@ export default function SalesPage() {
   const rangeTx = (trend.data ?? []).reduce((sum, p) => sum + p.transactions, 0);
 
   const groups = groupByDay(sales.data?.rows ?? [], (s) => new Date(s.sold_at), tz, dayStart);
+  const openByDefault = (label: string) => label === "Hari ini" || label === "Kemarin";
+  const isOpen = (key: string, label: string) => openOverrides[key] ?? openByDefault(label);
+  const toggleDay = (key: string, label: string) =>
+    setOpenOverrides((o) => ({ ...o, [key]: !(o[key] ?? openByDefault(label)) }));
 
   return (
     <div className="animate-fade-up space-y-7">
@@ -126,7 +152,33 @@ export default function SalesPage() {
 
       {/* Day-grouped history — open rows on the page background */}
       <section>
-        <h2 className="text-base font-bold">Riwayat transaksi</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-bold">
+            Riwayat transaksi
+            {filtered && sales.data && (
+              <span className="ink-soft ml-2 text-sm font-medium tabular-nums">
+                {sales.data.total} hasil
+              </span>
+            )}
+          </h2>
+        </div>
+        <HistoryFilters
+          className="mt-3"
+          optionLabel="Kasir"
+          options={(staff.data ?? []).map((member) => ({ value: member.id, label: member.name }))}
+          value={staffId}
+          onValue={onFilter(setStaffId)}
+          since={since}
+          onSince={onFilter(setSince)}
+          until={until}
+          onUntil={onFilter(setUntil)}
+          onReset={() => {
+            setPage(1);
+            setStaffId("");
+            setSince("");
+            setUntil("");
+          }}
+        />
         {sales.loading ? (
           <Skeleton className="mt-3 h-64" />
         ) : sales.error && !sales.data ? (
@@ -135,9 +187,13 @@ export default function SalesPage() {
           </Glass>
         ) : !sales.data || sales.data.rows.length === 0 ? (
           <Glass className="mt-3">
-            <EmptyState emoji="🧾" title="Belum ada transaksi">
-              Transaksi dari layar kasir akan muncul di sini begitu staf mencatat penjualan
-              pertama.
+            <EmptyState
+              emoji="🧾"
+              title={filtered ? "Tidak ada transaksi yang cocok" : "Belum ada transaksi"}
+            >
+              {filtered
+                ? "Coba ubah tanggal atau pilih kasir lain."
+                : "Transaksi dari layar kasir akan muncul di sini begitu staf mencatat penjualan pertama."}
             </EmptyState>
           </Glass>
         ) : (
@@ -146,12 +202,15 @@ export default function SalesPage() {
               const dayTotal = group.rows.reduce((s, r) => s + Number(r.total_price), 0);
               return (
                 <div key={group.key}>
-                  <DayHeader
+                  <DayHeaderToggle
                     label={group.label}
                     sub={daySubLabel(group.date, tz, dayStart)}
                     meta={`${group.rows.length} transaksi · ${formatRupiah(dayTotal)}`}
+                    open={isOpen(group.key, group.label)}
+                    onToggle={() => toggleDay(group.key, group.label)}
+                    count={group.rows.length}
                   />
-                  <ul>
+                  <ul hidden={!isOpen(group.key, group.label)}>
                     {group.rows.map((sale) => (
                       <li key={sale.id} className="list-row">
                         <span className="ink-faint w-11 shrink-0 text-xs tabular-nums">

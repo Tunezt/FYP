@@ -15,7 +15,8 @@ import type {
   ReceiptRow,
   ShiftRow,
 } from "@/lib/types";
-import { DayHeader, EmptyState, ErrorState, Glass, Plate, Skeleton } from "@/components/ui";
+import { DayHeader, DayHeaderToggle, EmptyState, ErrorState, Glass, Plate, Skeleton } from "@/components/ui";
+import { HistoryFilters } from "@/components/HistoryFilters";
 import { HelpTip } from "@/components/HelpTip";
 import { IconReceipt } from "@/components/icons";
 
@@ -38,10 +39,27 @@ const CASH_KIND_LABEL: Record<CashMovementRow["kind"], string> = {
 const APPROVAL_LABEL: Record<string, string> = { discount: "diskon", void: "batal", refund: "refund" };
 const ROLE_LABEL: Record<string, string> = { owner: "pemilik", manager: "manajer", staff: "staf" };
 
+const EXPENSE_CATEGORIES = ["bahan baku", "operasional", "lainnya"];
+
 export default function MoneyPage() {
   const [expensePage, setExpensePage] = useState(1);
+  const [category, setCategory] = useState("");
+  const [since, setSince] = useState("");
+  const [until, setUntil] = useState("");
+  const expenseQuery =
+    (category ? `&category=${encodeURIComponent(category)}` : "") +
+    (since ? `&since=${since}` : "") +
+    (until ? `&until=${until}` : "");
+  const expensesFiltered = expenseQuery !== "";
+  const onExpenseFilter = (fn: (v: string) => void) => (value: string) => {
+    setExpensePage(1);
+    fn(value);
+  };
+  const [openExpenseDays, setOpenExpenseDays] = useState<Record<string, boolean>>({});
   const pnl = useOwnerData<PnlMonth[]>("/api/pnl?months=6");
-  const expenses = useOwnerData<Page<ExpenseRow>>(`/api/expenses?page=${expensePage}&page_size=20`);
+  const expenses = useOwnerData<Page<ExpenseRow>>(
+    `/api/expenses?page=${expensePage}&page_size=20${expenseQuery}`
+  );
   const receipts = useOwnerData<Page<ReceiptRow>>("/api/receipts?page=1&page_size=6");
   const shifts = useOwnerData<ShiftRow[]>("/api/shifts?limit=12");
   const cash = useOwnerData<CashMovementRow[]>("/api/cash-movements?limit=200");
@@ -55,6 +73,10 @@ export default function MoneyPage() {
     ? Math.max(1, Math.ceil(expenses.data.total / expenses.data.page_size))
     : 1;
   const expenseGroups = groupByDay(expenses.data?.rows ?? [], (e) => new Date(e.occurred_at), tz, dayStart);
+  const openByDefault = (label: string) => label === "Hari ini" || label === "Kemarin";
+  const expenseDayOpen = (key: string, label: string) => openExpenseDays[key] ?? openByDefault(label);
+  const toggleExpenseDay = (key: string, label: string) =>
+    setOpenExpenseDays((o) => ({ ...o, [key]: !(o[key] ?? openByDefault(label)) }));
 
   return (
     <div className="animate-fade-up space-y-7">
@@ -321,7 +343,31 @@ export default function MoneyPage() {
       <div className="grid gap-8 lg:grid-cols-5">
         {/* Expenses — day-grouped open rows */}
         <section className="lg:col-span-3">
-          <h2 className="text-base font-bold">Pengeluaran</h2>
+          <h2 className="text-base font-bold">
+            Pengeluaran
+            {expensesFiltered && expenses.data && (
+              <span className="ink-soft ml-2 text-sm font-medium tabular-nums">
+                {expenses.data.total} hasil
+              </span>
+            )}
+          </h2>
+          <HistoryFilters
+            className="mt-3"
+            optionLabel="Jenis"
+            options={EXPENSE_CATEGORIES.map((c) => ({ value: c, label: c }))}
+            value={category}
+            onValue={onExpenseFilter(setCategory)}
+            since={since}
+            onSince={onExpenseFilter(setSince)}
+            until={until}
+            onUntil={onExpenseFilter(setUntil)}
+            onReset={() => {
+              setExpensePage(1);
+              setCategory("");
+              setSince("");
+              setUntil("");
+            }}
+          />
           {expenses.loading ? (
             <Skeleton className="mt-3 h-56" />
           ) : expenses.error && !expenses.data ? (
@@ -330,9 +376,18 @@ export default function MoneyPage() {
             </Plate>
           ) : !expenses.data || expenses.data.rows.length === 0 ? (
             <Plate className="mt-3">
-              <EmptyState emoji="🗒️" title="Belum ada pengeluaran">
-                Foto nota belanja ke asisten WhatsApp, atau ketik saja &ldquo;tadi beli gas
-                88rb&rdquo; — semua tercatat di sini.
+              <EmptyState
+                emoji="🗒️"
+                title={expensesFiltered ? "Tidak ada pengeluaran yang cocok" : "Belum ada pengeluaran"}
+              >
+                {expensesFiltered ? (
+                  "Coba ubah tanggal atau pilih jenis lain."
+                ) : (
+                  <>
+                    Foto nota belanja ke asisten WhatsApp, atau ketik saja &ldquo;tadi beli gas
+                    88rb&rdquo; — semua tercatat di sini.
+                  </>
+                )}
               </EmptyState>
             </Plate>
           ) : (
@@ -341,12 +396,15 @@ export default function MoneyPage() {
                 const dayTotal = group.rows.reduce((s, r) => s + Number(r.amount), 0);
                 return (
                   <div key={group.key}>
-                    <DayHeader
+                    <DayHeaderToggle
                       label={group.label}
                       sub={daySubLabel(group.date, tz, dayStart)}
                       meta={`− ${formatRupiah(dayTotal)}`}
+                      open={expenseDayOpen(group.key, group.label)}
+                      onToggle={() => toggleExpenseDay(group.key, group.label)}
+                      count={group.rows.length}
                     />
-                    <ul>
+                    <ul hidden={!expenseDayOpen(group.key, group.label)}>
                       {group.rows.map((expense) => (
                         <li key={expense.id} className="list-row">
                           <div className="min-w-0 flex-1">

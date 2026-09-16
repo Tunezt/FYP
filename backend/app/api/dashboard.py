@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
-from app.ai.periods import business_day
+from app.ai.periods import business_day, day_bounds
 from app.core.deps import OwnerCtx
 from app.models import (
     Account, Alert, Approval, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PostingRule,
@@ -169,18 +169,42 @@ async def sales_trend(ctx: OwnerCtx, days: int = Query(default=30, ge=1, le=730)
     ]
 
 
+def _day_range_filters(column, business, since: date | None, until: date | None) -> list:
+    """[since, until] as *business* days (M15-T4), both ends inclusive, on any
+    timestamp column. One day means that whole day, from its start hour to the
+    next — the same boundary the day headers and the metric layer use."""
+    filters = []
+    if since is not None:
+        filters.append(column >= day_bounds(since, business.timezone, business.day_start_hour)[0])
+    if until is not None:
+        filters.append(column < day_bounds(until, business.timezone, business.day_start_hour)[1])
+    return filters
+
+
 @router.get("/sales", response_model=SalesPage)
 async def sales_history(
     ctx: OwnerCtx,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
+    since: date | None = Query(default=None, description="business day, inclusive"),
+    until: date | None = Query(default=None, description="business day, inclusive"),
+    staff_id: uuid.UUID | None = Query(default=None),
 ):
-    total = (await ctx.session.execute(select(func.count(Sale.id)))).scalar_one()
+    """Filters are the owner's own words: a date range in *business* days
+    (M15-T4, so a 00:15 bill filters under the night before) and one cashier.
+    `until` is inclusive — "1 Sep to 1 Sep" is that whole day, not nothing."""
+    business = await _business(ctx)
+    filters = _day_range_filters(Sale.sold_at, business, since, until)
+    if staff_id is not None:
+        filters.append(Sale.staff_id == staff_id)
+
+    total = (await ctx.session.execute(select(func.count(Sale.id)).where(*filters))).scalar_one()
     rows = (
         await ctx.session.execute(
             select(Sale, Item.name, Staff.name)
             .join(Item, Item.id == Sale.item_id)
             .join(Staff, Staff.id == Sale.staff_id)
+            .where(*filters)
             .order_by(Sale.sold_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
@@ -993,12 +1017,24 @@ async def expenses(
     ctx: OwnerCtx,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
+    since: date | None = Query(default=None, description="business day, inclusive"),
+    until: date | None = Query(default=None, description="business day, inclusive"),
+    category: str | None = Query(default=None),
 ):
-    total = (await ctx.session.execute(select(func.count(Expense.id)))).scalar_one()
+    """Filtered in SQL for the same reason as /sales: the owner asking "what
+    did we spend on bahan baku last week" must not get the answer computed from
+    whichever 25 rows this page happens to hold."""
+    business = await _business(ctx)
+    filters = _day_range_filters(Expense.occurred_at, business, since, until)
+    if category:
+        filters.append(Expense.category == category)
+
+    total = (await ctx.session.execute(select(func.count(Expense.id)).where(*filters))).scalar_one()
     rows = (
         (
             await ctx.session.execute(
                 select(Expense)
+                .where(*filters)
                 .order_by(Expense.occurred_at.desc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
@@ -1028,11 +1064,22 @@ async def pnl(ctx: OwnerCtx, months: int = Query(default=6, ge=1, le=12)):
 
 
 @router.get("/alerts", response_model=list[AlertRow])
-async def alerts(ctx: OwnerCtx, limit: int = Query(default=50, ge=1, le=200)):
+async def alerts(
+    ctx: OwnerCtx,
+    limit: int = Query(default=50, ge=1, le=200),
+    since: date | None = Query(default=None, description="business day, inclusive"),
+    until: date | None = Query(default=None, description="business day, inclusive"),
+    severity: str | None = Query(default=None),
+):
+    business = await _business(ctx)
+    filters = _day_range_filters(Alert.created_at, business, since, until)
+    if severity:
+        filters.append(Alert.severity == severity)
     rows = (
         await ctx.session.execute(
             select(Alert, Item.name)
             .outerjoin(Item, Item.id == Alert.related_item_id)
+            .where(*filters)
             .order_by(Alert.created_at.desc())
             .limit(limit)
         )
