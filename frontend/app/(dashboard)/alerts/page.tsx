@@ -81,9 +81,11 @@ export default function AlertsPage() {
         value={severity}
         onValue={setSeverity}
         since={since}
-        onSince={setSince}
         until={until}
-        onUntil={setUntil}
+        onRange={(a, b) => {
+          setSince(a);
+          setUntil(b);
+        }}
         onReset={() => {
           setSeverity("");
           setSince("");

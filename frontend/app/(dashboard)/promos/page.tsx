@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { DateRangePicker } from "@/components/DateRangePicker";
+import { Select } from "@/components/Select";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import type { InventoryItem, PromoCondition, PromoRow, VoucherRow } from "@/lib/types";
@@ -394,10 +396,17 @@ export default function PromosPage() {
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Jenis</span>
-                <select className="field" value={vdraft.kind} onChange={(e) => setVdraft({ ...vdraft, kind: e.target.value as VoucherRow["kind"] })}>
-                  <option value="amount_off">Potongan rupiah</option>
-                  <option value="percent_off">Diskon persen</option>
-                </select>
+                <Select
+                  variant="field"
+                  allowEmpty={false}
+                  ariaLabel="Jenis voucher"
+                  options={[
+                    { value: "amount_off", label: "Potongan rupiah" },
+                    { value: "percent_off", label: "Diskon persen" },
+                  ]}
+                  value={vdraft.kind}
+                  onChange={(value) => setVdraft({ ...vdraft, kind: value as VoucherRow["kind"] })}
+                />
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">{vdraft.kind === "percent_off" ? "Diskon (%)" : "Potongan (Rp)"}</span>
@@ -415,7 +424,14 @@ export default function PromosPage() {
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Berlaku sampai</span>
-                <input className="field" type="date" value={vdraft.expires_at} onChange={(e) => setVdraft({ ...vdraft, expires_at: e.target.value })} />
+                <DateRangePicker
+                  single
+                  variant="field"
+                  placeholder="Tanpa batas"
+                  since={vdraft.expires_at}
+                  until={vdraft.expires_at}
+                  onChange={(day) => setVdraft({ ...vdraft, expires_at: day })}
+                />
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Pemakaian per kode</span>
@@ -440,11 +456,18 @@ export default function PromosPage() {
             {editing === "new" && (
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Jenis</span>
-                <select className="field" value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as Draft["kind"] })}>
-                  <option value="percent_off">Diskon persen</option>
-                  <option value="amount_off">Potongan rupiah</option>
-                  <option value="bonus_item">Bonus barang (beli N gratis M)</option>
-                </select>
+                <Select
+                  variant="field"
+                  allowEmpty={false}
+                  ariaLabel="Jenis promo"
+                  options={[
+                    { value: "percent_off", label: "Diskon persen" },
+                    { value: "amount_off", label: "Potongan rupiah" },
+                    { value: "bonus_item", label: "Bonus barang (beli N gratis M)" },
+                  ]}
+                  value={draft.kind}
+                  onChange={(value) => setDraft({ ...draft, kind: value as Draft["kind"] })}
+                />
               </label>
             )}
             {draft.kind !== "bonus_item" && (
@@ -456,13 +479,14 @@ export default function PromosPage() {
             {editing === "new" && (
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">{draft.kind === "bonus_item" ? "Barang yang dibeli" : "Berlaku untuk"}</span>
-                <select className="field" value={draft.item_id} onChange={(e) => setDraft({ ...draft, item_id: e.target.value })}>
-                  {draft.kind !== "bonus_item" && <option value="">Seluruh struk</option>}
-                  {draft.kind === "bonus_item" && <option value="">— pilih barang —</option>}
-                  {(items.data ?? []).map((i) => (
-                    <option key={i.id} value={i.id}>{i.name}</option>
-                  ))}
-                </select>
+                <Select
+                  variant="field"
+                  placeholder={draft.kind === "bonus_item" ? "— pilih barang —" : "Seluruh struk"}
+                  ariaLabel={draft.kind === "bonus_item" ? "Barang yang dibeli" : "Berlaku untuk"}
+                  options={(items.data ?? []).map((i) => ({ value: i.id, label: i.name }))}
+                  value={draft.item_id}
+                  onChange={(value) => setDraft({ ...draft, item_id: value })}
+                />
               </label>
             )}
             {draft.kind === "bonus_item" && (
@@ -478,12 +502,14 @@ export default function PromosPage() {
                 {editing === "new" && (
                   <label className="block">
                     <span className="ink-soft mb-1.5 block text-xs font-medium">Barang gratis</span>
-                    <select className="field" value={draft.bonus_item_id} onChange={(e) => setDraft({ ...draft, bonus_item_id: e.target.value })}>
-                      <option value="">Barang yang sama</option>
-                      {(items.data ?? []).map((i) => (
-                        <option key={i.id} value={i.id}>{i.name}</option>
-                      ))}
-                    </select>
+                    <Select
+                      variant="field"
+                      placeholder="Barang yang sama"
+                      ariaLabel="Barang gratis"
+                      options={(items.data ?? []).map((i) => ({ value: i.id, label: i.name }))}
+                      value={draft.bonus_item_id}
+                      onChange={(value) => setDraft({ ...draft, bonus_item_id: value })}
+                    />
                   </label>
                 )}
               </div>
@@ -529,11 +555,25 @@ export default function PromosPage() {
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Mulai tanggal</span>
-                <input className="field" type="date" value={draft.starts_at} onChange={(e) => setDraft({ ...draft, starts_at: e.target.value })} />
+                <DateRangePicker
+                  single
+                  variant="field"
+                  placeholder="Mulai hari ini"
+                  since={draft.starts_at}
+                  until={draft.starts_at}
+                  onChange={(day) => setDraft({ ...draft, starts_at: day })}
+                />
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Sampai tanggal (tidak termasuk)</span>
-                <input className="field" type="date" value={draft.ends_at} onChange={(e) => setDraft({ ...draft, ends_at: e.target.value })} />
+                <DateRangePicker
+                  single
+                  variant="field"
+                  placeholder="Tanpa batas"
+                  since={draft.ends_at}
+                  until={draft.ends_at}
+                  onChange={(day) => setDraft({ ...draft, ends_at: day })}
+                />
               </label>
             </div>
             <label className="block">

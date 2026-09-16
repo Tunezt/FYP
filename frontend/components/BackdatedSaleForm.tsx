@@ -13,6 +13,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { Select } from "@/components/Select";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import { ApiError } from "@/lib/api";
@@ -163,13 +164,14 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Kasir yang melayani</span>
-                <select className="field" value={staffId} onChange={(e) => setStaffId(e.target.value)}>
-                  {active.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  variant="field"
+                  allowEmpty={false}
+                  ariaLabel="Kasir yang melayani"
+                  options={active.map((s) => ({ value: s.id, label: s.name }))}
+                  value={staffId}
+                  onChange={setStaffId}
+                />
               </label>
             </div>
 
@@ -177,20 +179,20 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
               <span className="ink-soft block text-xs font-medium">Barang</span>
               {lines.map((line, i) => (
                 <div key={i} className="flex gap-2">
-                  <select
-                    className="field flex-1"
+                  <Select
+                    variant="field"
+                    className="flex-1"
+                    placeholder="— pilih barang —"
+                    ariaLabel="Barang"
+                    options={catalogue.map((item) => ({
+                      value: item.id,
+                      label: `${item.name} · ${formatRupiah(item.sell_price)}`,
+                    }))}
                     value={line.itemId}
-                    onChange={(e) =>
-                      setLines(lines.map((l, j) => (j === i ? { ...l, itemId: e.target.value } : l)))
+                    onChange={(value) =>
+                      setLines(lines.map((l, j) => (j === i ? { ...l, itemId: value } : l)))
                     }
-                  >
-                    <option value="">— pilih barang —</option>
-                    {catalogue.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name} · {formatRupiah(item.sell_price)}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <input
                     className="field w-20 tabular-nums"
                     inputMode="decimal"
@@ -225,17 +227,14 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Dibayar dengan</span>
-                <select
-                  className="field"
+                <Select
+                  variant="field"
+                  allowEmpty={false}
+                  ariaLabel="Dibayar dengan"
+                  options={METHODS.map((m) => ({ value: m.value, label: m.label }))}
                   value={method}
-                  onChange={(e) => setMethod(e.target.value as (typeof METHODS)[number]["value"])}
-                >
-                  {METHODS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setMethod(value as (typeof METHODS)[number]["value"])}
+                />
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Catatan</span>

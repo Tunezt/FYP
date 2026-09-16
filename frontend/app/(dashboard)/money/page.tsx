@@ -358,9 +358,12 @@ export default function MoneyPage() {
             value={category}
             onValue={onExpenseFilter(setCategory)}
             since={since}
-            onSince={onExpenseFilter(setSince)}
             until={until}
-            onUntil={onExpenseFilter(setUntil)}
+            onRange={(a, b) => {
+              setExpensePage(1);
+              setSince(a);
+              setUntil(b);
+            }}
             onReset={() => {
               setExpensePage(1);
               setCategory("");

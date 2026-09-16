@@ -1524,3 +1524,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - `list_orders` already took a time range; it gained `staff_id`, and the endpoint converts a business day to the instants the service wants, so `/orders` and `/sales` now mean exactly the same thing by "10 September".
 **Deviation:** none.
 **Next:** the controls those filters are made of.
+
+
+### [dash-6] The controls are ours, not the operating system's
+**Date:** 2026-09-16
+**Status:** done
+**Changed:** frontend/components/Select.tsx (new), frontend/components/DateRangePicker.tsx (new), frontend/components/HistoryFilters.tsx, frontend/components/icons.tsx (`IconChevronLeft`, `IconCalendar`), frontend/app/globals.css (`.control-field`, `.popover-panel`, `.icon-btn`, `.chip-btn`, calendar band), frontend/app/(dashboard)/sales|money|alerts|settings|promos|customers/page.tsx, frontend/app/pos/[businessToken]/page.tsx, frontend/components/BackdatedSaleForm.tsx
+**Gates:** pytest 561 passed 0 skipped - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **User-directed:** "why is the dropdown ui default ahh looking" and a reference image of a date picker with the range drawn as one connected band.
+- **A native `<select>` renders the operating system's widget** - a blue Windows listbox in the middle of a warm-light cafe dashboard - and cannot be styled at all. `Select` is the listbox pattern instead: a trigger that owns the value, a floating panel, and the keyboard the native control had (Up/Down/Home/End, type-ahead, Enter/Escape, focus returned to the trigger). Verified by driving it from the keyboard alone.
+- **The panel is `position: fixed` and measured from the trigger**, so a card's own overflow can never clip it, and it flips above when the viewport runs out below.
+- **The date range is one calendar, not two `mm/dd/yyyy` boxes.** The browser's native date input shows the *browser's* locale order, which is how an Indonesian cafe ends up reading American dates. One click sets the start, the second the end; the span is drawn as a single band - rounded cap, continuous tint, rounded cap - because two circled dates do not say "everything between these". Today keeps a ring even when it is outside the range. Indonesian month and day names, and "Hari ini / 7 hari / 30 hari" shortcuts.
+- **Every native control in the app is replaced**, not only the two the owner pointed at: Pengaturan (jam mulai hari, pembulatan, arah, peran), Promo (jenis, barang, bonus, tanggal), Catat nota (kasir, barang, pembayaran), Pelanggan (ulang tahun), and the POS supplier picker. A `field` variant matches the existing `.field` grammar inside forms; `allowEmpty={false}` is for fields that must have an answer, so a form cannot be emptied into an invalid state.
+- Reduced motion drops the panel animation and every transition.
+**Deviation:** none.
+**Next:** deploy when the owner says to push; nothing here changes the API contract.

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError, POS_PAIRING_KEY, POS_TOKEN_KEY } from "@/lib/api";
+import { Select } from "@/components/Select";
 import { formatQty, formatRupiah, initials } from "@/lib/format";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 
@@ -1155,18 +1156,15 @@ function SellScreen({
               </div>
             )}
             {cashKind === "supplier_payment" && (
-              <select
+              <Select
+                variant="field"
+                className="mt-3"
+                placeholder="Pilih supplier…"
+                ariaLabel="Supplier"
+                options={suppliers.map((sp) => ({ value: sp.id, label: sp.name }))}
                 value={cashSupplier}
-                onChange={(e) => setCashSupplier(e.target.value)}
-                className="glass-card mt-3 w-full rounded-2xl px-4 py-2 text-sm"
-              >
-                <option value="">Pilih supplier…</option>
-                {suppliers.map((sp) => (
-                  <option key={sp.id} value={sp.id}>
-                    {sp.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setCashSupplier}
+              />
             )}
             {cashError && <p className="mt-3 text-sm text-red-600">{cashError}</p>}
             <div className="mt-5 flex gap-3">

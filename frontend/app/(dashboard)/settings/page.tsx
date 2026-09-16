@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import QRCode from "qrcode";
+import { Select } from "@/components/Select";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { ORDER_TYPE_LABEL, type Business, type LoyaltySettings, type OrderType, type PricingSettings, type StaffMember } from "@/lib/types";
 import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
@@ -306,17 +307,17 @@ export default function SettingsPage() {
                   jam 04.00 keesokan harinya. Pilih 00.00 kalau tutup sebelum tengah malam.
                 </HelpTip>
               </span>
-              <select
-                className="field"
+              <Select
+                variant="field"
+                allowEmpty={false}
+                ariaLabel="Hari usaha dimulai jam"
+                options={Array.from({ length: 24 }, (_, h) => ({
+                  value: String(h),
+                  label: `${String(h).padStart(2, "0")}.00${h === 0 ? " (hari kalender)" : ""}`,
+                }))}
                 value={String(draft.day_start_hour)}
-                onChange={(e) => setProfileDraft({ ...draft, day_start_hour: Number(e.target.value) })}
-              >
-                {Array.from({ length: 24 }, (_, h) => (
-                  <option key={h} value={h}>
-                    {String(h).padStart(2, "0")}.00{h === 0 ? " (hari kalender)" : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setProfileDraft({ ...draft, day_start_hour: Number(value) })}
+              />
             </label>
             <div className="ink-soft flex flex-wrap gap-x-6 gap-y-1 pt-1 text-xs">
               <span>WhatsApp: +{b?.owner_phone}</span>
@@ -447,31 +448,37 @@ export default function SettingsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Pembulatan total (Rp)</span>
-                <select
-                  className="field"
+                <Select
+                  variant="field"
+                  allowEmpty={false}
+                  ariaLabel="Pembulatan total"
+                  options={[
+                    { value: "0", label: "Tidak dibulatkan" },
+                    { value: "50", label: "Ke Rp 50" },
+                    { value: "100", label: "Ke Rp 100" },
+                    { value: "500", label: "Ke Rp 500" },
+                    { value: "1000", label: "Ke Rp 1.000" },
+                  ]}
                   value={pricingForm.rounding_unit}
-                  onChange={(e) => setPricingDraft({ ...pricingForm, rounding_unit: e.target.value })}
-                >
-                  <option value="0">Tidak dibulatkan</option>
-                  <option value="50">Ke Rp 50</option>
-                  <option value="100">Ke Rp 100</option>
-                  <option value="500">Ke Rp 500</option>
-                  <option value="1000">Ke Rp 1.000</option>
-                </select>
+                  onChange={(value) => setPricingDraft({ ...pricingForm, rounding_unit: value })}
+                />
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-xs font-medium">Arah pembulatan</span>
-                <select
-                  className="field"
+                <Select
+                  variant="field"
+                  allowEmpty={false}
+                  ariaLabel="Arah pembulatan"
+                  options={[
+                    { value: "nearest", label: "Terdekat" },
+                    { value: "up", label: "Selalu ke atas" },
+                    { value: "down", label: "Selalu ke bawah" },
+                  ]}
                   value={pricingForm.rounding_mode}
-                  onChange={(e) =>
-                    setPricingDraft({ ...pricingForm, rounding_mode: e.target.value as PricingForm["rounding_mode"] })
+                  onChange={(value) =>
+                    setPricingDraft({ ...pricingForm, rounding_mode: value as PricingForm["rounding_mode"] })
                   }
-                >
-                  <option value="nearest">Terdekat</option>
-                  <option value="up">Selalu ke atas</option>
-                  <option value="down">Selalu ke bawah</option>
-                </select>
+                />
               </label>
             </div>
             <label className="flex items-start gap-3">
@@ -892,14 +899,17 @@ export default function SettingsPage() {
           </label>
           <label className="block">
             <span className="ink-soft mb-1.5 block text-xs font-medium">Peran</span>
-            <select
-              className="field"
+            <Select
+              variant="field"
+              allowEmpty={false}
+              ariaLabel="Peran"
+              options={[
+                { value: "staff", label: "Staf kasir — jual, tutup shift" },
+                { value: "manager", label: "Manajer — bisa setujui batal, refund & diskon" },
+              ]}
               value={staffDraft.role}
-              onChange={(e) => setStaffDraft({ ...staffDraft, role: e.target.value as "staff" | "manager" })}
-            >
-              <option value="staff">Staf kasir — jual, tutup shift</option>
-              <option value="manager">Manajer — bisa setujui batal, refund &amp; diskon</option>
-            </select>
+              onChange={(value) => setStaffDraft({ ...staffDraft, role: value as "staff" | "manager" })}
+            />
           </label>
           {staffError && (
             <p

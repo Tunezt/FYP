@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import { dayLabel } from "@/lib/dates";
@@ -241,7 +242,14 @@ export default function CustomersPage() {
             </label>
             <label className="block">
               <span className="ink-soft mb-1.5 block text-xs font-medium">Tanggal lahir</span>
-              <input className="field" type="date" value={draft.birthday} onChange={(e) => setDraft({ ...draft, birthday: e.target.value })} />
+              <DateRangePicker
+                single
+                variant="field"
+                placeholder="Belum diisi"
+                since={draft.birthday}
+                until={draft.birthday}
+                onChange={(day) => setDraft({ ...draft, birthday: day })}
+              />
             </label>
             <label className="block">
               <span className="ink-soft mb-1.5 block text-xs font-medium">Catatan</span>
