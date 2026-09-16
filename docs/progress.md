@@ -1509,3 +1509,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - `.btn-quiet:hover` changed the border only, which is invisible on glass; it now darkens too.
 **Deviation:** none.
 **Next:** deploy these four to Railway/Vercel when the owner says to push; the OTP fallback still expires 2026-10-16.
+
+
+### [dash-5] Riwayat transaksi is a list of receipts, and each one opens
+**Date:** 2026-09-16
+**Status:** done
+**Changed:** backend/app/services/orders.py (`list_orders` takes `staff_id`), backend/app/api/dashboard.py (`/orders` takes `since`/`until`/`staff_id`), backend/tests/test_sales_filters.py (+3 tests), frontend/components/TransactionHistory.tsx (new), frontend/app/(dashboard)/sales/page.tsx, frontend/app/globals.css (`.pill-quiet`, `.receipt-lines`)
+**Gates:** pytest 561 passed 0 skipped (was 558) - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **User-directed.** The owner asked for the history to be "categorized by the transaction number, with the cashier name", opening to show what was ordered.
+- **A sale is a receipt, not a line.** The list was rendering `/api/sales`, which is order *lines*: a three-item bill appeared as three separate sales, none of which could be matched against the paper slip in the owner's hand or against the number the till printed. It now renders `/api/orders` - one row per receipt: number, time, cashier, item count, total.
+- **Opening a row fetches that receipt**, from the same endpoint the cashier printed from (M15-T11's rule: the owner deciding whether to void must not be reading a different document). Lazily, because forty rows would otherwise be forty requests for something nobody asked to see.
+- **Voided bills stay visible but stop counting.** Nothing is deleted, so a cancelled bill still appears - struck through, chipped "dibatalkan", and excluded from the day header's total. A backdated entry keeps its "dari nota kertas" tag (M15-T10).
+- `list_orders` already took a time range; it gained `staff_id`, and the endpoint converts a business day to the instants the service wants, so `/orders` and `/sales` now mean exactly the same thing by "10 September".
+**Deviation:** none.
+**Next:** the controls those filters are made of.

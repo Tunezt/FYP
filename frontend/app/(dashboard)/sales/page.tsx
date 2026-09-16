@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useOwnerData } from "@/lib/hooks";
-import { formatQty, formatRupiah } from "@/lib/format";
-import { daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
-import type { Business, Page, SaleRow, StaffMember, TrendPoint } from "@/lib/types";
-import { DayHeaderToggle, EmptyState, ErrorState, Glass, ItemIcon, Segmented, Skeleton } from "@/components/ui";
+import { formatRupiah } from "@/lib/format";
+import type { Business, OrdersPage, StaffMember, TrendPoint } from "@/lib/types";
+import { ErrorState, Glass, Segmented, Skeleton } from "@/components/ui";
+import { TransactionHistory } from "@/components/TransactionHistory";
 import { HistoryFilters } from "@/components/HistoryFilters";
 import { ReversalPanel } from "@/components/ReversalPanel";
 import { BackdatedSaleForm } from "@/components/BackdatedSaleForm";
@@ -32,7 +32,11 @@ export default function SalesPage() {
     (until ? `&until=${until}` : "");
   const filtered = filterQuery !== "";
   const trend = useOwnerData<TrendPoint[]>(`/api/sales-trend?days=${range}`);
-  const sales = useOwnerData<Page<SaleRow>>(`/api/sales?page=${page}&page_size=40${filterQuery}`);
+  // Receipts, not lines: one row per transaction, the way the owner's paper
+  // slips and the till's own list are numbered.
+  const sales = useOwnerData<OrdersPage>(
+    `/api/orders?limit=40&offset=${(page - 1) * 40}${filterQuery}`
+  );
   const staff = useOwnerData<StaffMember[]>("/auth/staff");
   // A filter change lands the owner on page 1 — page 4 of the old result is a
   // different set of rows, and usually an empty one.
@@ -40,24 +44,16 @@ export default function SalesPage() {
     setPage(1);
     fn(value);
   };
-  // Today and yesterday are what the owner came for; older days stay folded
-  // until asked for. `openOverrides` records only the days they clicked.
-  const [openOverrides, setOpenOverrides] = useState<Record<string, boolean>>({});
   // Day buckets must match the backend's business day: its timezone AND its
   // day-start hour (M15-T4), or a 00:15 bill sits under the wrong header.
   const business = useOwnerData<Business>("/api/business");
   const tz = business.data?.timezone;
   const dayStart = business.data?.day_start_hour ?? 0;
 
-  const totalPages = sales.data ? Math.max(1, Math.ceil(sales.data.total / sales.data.page_size)) : 1;
+  const totalPages = sales.data ? Math.max(1, Math.ceil(sales.data.total / 40)) : 1;
   const rangeTotal = (trend.data ?? []).reduce((sum, p) => sum + p.revenue, 0);
   const rangeTx = (trend.data ?? []).reduce((sum, p) => sum + p.transactions, 0);
 
-  const groups = groupByDay(sales.data?.rows ?? [], (s) => new Date(s.sold_at), tz, dayStart);
-  const openByDefault = (label: string) => label === "Hari ini" || label === "Kemarin";
-  const isOpen = (key: string, label: string) => openOverrides[key] ?? openByDefault(label);
-  const toggleDay = (key: string, label: string) =>
-    setOpenOverrides((o) => ({ ...o, [key]: !(o[key] ?? openByDefault(label)) }));
 
   return (
     <div className="animate-fade-up space-y-7">
@@ -169,9 +165,12 @@ export default function SalesPage() {
           value={staffId}
           onValue={onFilter(setStaffId)}
           since={since}
-          onSince={onFilter(setSince)}
           until={until}
-          onUntil={onFilter(setUntil)}
+          onRange={(a, b) => {
+            setPage(1);
+            setSince(a);
+            setUntil(b);
+          }}
           onReset={() => {
             setPage(1);
             setStaffId("");
@@ -179,81 +178,35 @@ export default function SalesPage() {
             setUntil("");
           }}
         />
-        {sales.loading ? (
-          <Skeleton className="mt-3 h-64" />
-        ) : sales.error && !sales.data ? (
-          <Glass className="mt-3">
-            <ErrorState onRetry={sales.reload} />
-          </Glass>
-        ) : !sales.data || sales.data.rows.length === 0 ? (
-          <Glass className="mt-3">
-            <EmptyState
-              emoji="🧾"
-              title={filtered ? "Tidak ada transaksi yang cocok" : "Belum ada transaksi"}
+        <TransactionHistory
+          orders={sales.data?.rows ?? []}
+          loading={sales.loading}
+          error={sales.error}
+          onRetry={sales.reload}
+          filtered={filtered}
+          tz={tz}
+          dayStart={dayStart}
+        />
+        {totalPages > 1 && (
+          <div className="mt-5 flex items-center justify-between">
+            <button
+              className="btn-quiet px-4 py-2 text-sm disabled:opacity-40"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
             >
-              {filtered
-                ? "Coba ubah tanggal atau pilih kasir lain."
-                : "Transaksi dari layar kasir akan muncul di sini begitu staf mencatat penjualan pertama."}
-            </EmptyState>
-          </Glass>
-        ) : (
-          <>
-            {groups.map((group) => {
-              const dayTotal = group.rows.reduce((s, r) => s + Number(r.total_price), 0);
-              return (
-                <div key={group.key}>
-                  <DayHeaderToggle
-                    label={group.label}
-                    sub={daySubLabel(group.date, tz, dayStart)}
-                    meta={`${group.rows.length} transaksi · ${formatRupiah(dayTotal)}`}
-                    open={isOpen(group.key, group.label)}
-                    onToggle={() => toggleDay(group.key, group.label)}
-                    count={group.rows.length}
-                  />
-                  <ul hidden={!isOpen(group.key, group.label)}>
-                    {group.rows.map((sale) => (
-                      <li key={sale.id} className="list-row">
-                        <span className="ink-faint w-11 shrink-0 text-xs tabular-nums">
-                          {timeLabel(new Date(sale.sold_at), tz)}
-                        </span>
-                        <ItemIcon name={sale.item_name} className="h-9 w-9 rounded-lg" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">
-                            {formatQty(sale.quantity)}× {sale.item_name}
-                          </p>
-                          <p className="ink-faint text-xs">oleh {sale.staff_name}</p>
-                        </div>
-                        <span className="shrink-0 text-sm font-semibold tabular-nums">
-                          {formatRupiah(sale.total_price)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-            {totalPages > 1 && (
-              <div className="mt-5 flex items-center justify-between">
-                <button
-                  className="btn-quiet px-4 py-2 text-sm disabled:opacity-40"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  ← Lebih baru
-                </button>
-                <span className="ink-soft text-sm tabular-nums">
-                  {page} / {totalPages}
-                </span>
-                <button
-                  className="btn-quiet px-4 py-2 text-sm disabled:opacity-40"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Lebih lama →
-                </button>
-              </div>
-            )}
-          </>
+              ← Lebih baru
+            </button>
+            <span className="ink-soft text-sm tabular-nums">
+              {page} / {totalPages}
+            </span>
+            <button
+              className="btn-quiet px-4 py-2 text-sm disabled:opacity-40"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Lebih lama →
+            </button>
+          </div>
         )}
       </section>
     </div>

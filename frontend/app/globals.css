@@ -302,6 +302,20 @@ body::after {
     background: var(--bad-bg);
     color: var(--bad);
   }
+
+  /* Neutral tag — a fact about the row, not a status ("dari nota kertas"). */
+  .pill-quiet {
+    @apply rounded-full px-2.5 py-0.5 text-xs font-medium;
+    background: var(--row-hover);
+    color: var(--ink-soft);
+  }
+
+  /* The opened receipt under a transaction row: indented to the row's text
+     column so the items read as belonging to it, on a quieter ground. */
+  .receipt-lines {
+    @apply mb-1 ml-14 mr-1 rounded-xl px-3 py-2;
+    background: var(--row-hover);
+  }
 }
 
 /* driver.js tour popover — restyled to the system. Uses an OPAQUE surface, not

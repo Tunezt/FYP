@@ -192,3 +192,35 @@ async def test_alerts_take_the_same_range(client, shop):
     assert r.status_code == 200
     r = await client.get("/api/alerts?since=bukan-tanggal", headers=shop["auth"])
     assert r.status_code == 422
+
+
+# ── the same filters on the receipt list the Penjualan page now shows ────────
+
+
+async def _orders(client, shop, query=""):
+    r = await client.get(f"/api/orders?limit=40{query}", headers=shop["auth"])
+    assert r.status_code == 200, r.text
+    body = r.json()
+    return body["total"], [(row["staff_name"], row["number"], float(row["total"])) for row in body["rows"]]
+
+
+async def test_orders_are_receipts_not_lines(client, shop):
+    total, rows = await _orders(client, shop)
+    assert total == 3                      # three bills, whatever their line counts
+    assert all(len(number) == 8 for _staff, number, _total in rows)
+
+
+async def test_orders_by_business_day_and_cashier(client, shop):
+    total, rows = await _orders(client, shop, "&since=2026-09-10&until=2026-09-10")
+    assert total == 2 and {s for s, _n, _t in rows} == {"Sari"}     # incl. the 00:15 bill
+    total, rows = await _orders(client, shop, f"&staff_id={shop['budi']}")
+    assert total == 1 and rows[0][0] == "Budi"
+    total, _ = await _orders(client, shop, f"&staff_id={shop['budi']}&since=2026-09-10&until=2026-09-10")
+    assert total == 0
+
+
+async def test_orders_reject_a_nonsense_filter(client, shop):
+    r = await client.get("/api/orders?since=bukan-tanggal", headers=shop["auth"])
+    assert r.status_code == 422
+    r = await client.get("/api/orders?staff_id=not-a-uuid", headers=shop["auth"])
+    assert r.status_code == 422

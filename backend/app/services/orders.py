@@ -916,7 +916,8 @@ def order_number(order_id: uuid.UUID) -> str:
 
 async def list_orders(
     session: AsyncSession, *, since: datetime | None = None, until: datetime | None = None,
-    q: str = "", limit: int = 50, offset: int = 0, statuses: tuple[str, ...] = ("completed", "voided", "refunded"),
+    q: str = "", staff_id: uuid.UUID | None = None, limit: int = 50, offset: int = 0,
+    statuses: tuple[str, ...] = ("completed", "voided", "refunded"),
 ) -> tuple[list[OrderSummary], int]:
     """Orders newest first, with the count before paging (M15-T11).
 
@@ -947,6 +948,8 @@ async def list_orders(
         base = base.where(Order.sold_at >= since)
     if until is not None:
         base = base.where(Order.sold_at < until)
+    if staff_id is not None:
+        base = base.where(Order.staff_id == staff_id)
     needle = (q or "").strip().replace("-", "").upper()
     if needle:
         base = base.where(number.like(f"%{needle}%"))

@@ -1607,6 +1607,9 @@ async def owner_orders(
     q: str = Query(default="", max_length=40),
     limit: int = Query(default=30, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    since: date | None = Query(default=None, description="business day, inclusive"),
+    until: date | None = Query(default=None, description="business day, inclusive"),
+    staff_id: uuid.UUID | None = Query(default=None),
 ):
     """Every sale, newest first, searchable by receipt number — the owner's way
     into a mistake found after the shift closed (M15-T11). The till's own list
@@ -1615,7 +1618,13 @@ async def owner_orders(
     from app.schemas.pos import OrderSummaryOut
     from app.services.orders import list_orders
 
-    rows, total = await list_orders(ctx.session, q=q, limit=limit, offset=offset)
+    business = await _business(ctx)
+    # The service takes instants; a business day is [start hour, next start hour).
+    start = day_bounds(since, business.timezone, business.day_start_hour)[0] if since else None
+    end = day_bounds(until, business.timezone, business.day_start_hour)[1] if until else None
+    rows, total = await list_orders(
+        ctx.session, q=q, limit=limit, offset=offset, staff_id=staff_id, since=start, until=end,
+    )
     return OrdersPage(total=total, rows=[OrderSummaryOut(**vars(r)) for r in rows])
 
 
