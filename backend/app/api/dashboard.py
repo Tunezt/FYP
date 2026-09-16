@@ -149,9 +149,14 @@ async def overview(ctx: OwnerCtx):
 
 
 @router.get("/sales-trend", response_model=list[TrendPoint])
-async def sales_trend(ctx: OwnerCtx, days: int = Query(default=30, ge=1, le=365)):
+async def sales_trend(ctx: OwnerCtx, days: int = Query(default=30, ge=1, le=730)):
     """Revenue and order count per business-local day, dense (zero-filled so
-    charts do not skip quiet days), each day the registry's own number."""
+    charts do not skip quiet days), each day the registry's own number.
+
+    The ceiling is two years, not one: the dashboard asks for twice the window
+    it draws so it can show "vs the period before". At the 365-day tab that is
+    730, and the old 365 ceiling rejected the request outright, which is how
+    "Tahun Ini" came to draw an empty chart."""
     business = await _business(ctx)
     from app.metrics import local_day_windows, series
 

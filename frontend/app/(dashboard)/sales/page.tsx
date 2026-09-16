@@ -38,7 +38,7 @@ export default function SalesPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[1.65rem] font-bold tracking-tight md:text-3xl">Penjualan</h1>
-          {trend.data && (
+          {trend.data && !trend.loading && (
             <p className="ink-soft mt-1 text-sm">
               <span className="font-semibold tabular-nums">{formatRupiah(rangeTotal)}</span> dari{" "}
               {rangeTx} transaksi · {range} hari terakhir
@@ -51,7 +51,11 @@ export default function SalesPage() {
       {/* HERO — trend */}
       <Glass className="overflow-hidden pt-5">
         <div className="h-56 w-full">
-          {trend.data ? (
+          {trend.loading ? (
+            <Skeleton className="mx-6 h-44" />
+          ) : trend.error ? (
+            <ErrorState onRetry={trend.reload} />
+          ) : trend.data ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trend.data} margin={{ top: 8, left: 8, right: 8, bottom: 4 }}>
                 <defs>

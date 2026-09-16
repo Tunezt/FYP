@@ -192,7 +192,7 @@ export default function OverviewPage() {
         <div className="flex flex-wrap items-start justify-between gap-3 px-6 pt-6 md:px-7">
           <div>
             <h2 className="text-base font-bold">Tren penjualan</h2>
-            {trend.data ? (
+            {trend.data && !trend.loading ? (
               <>
                 <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight md:text-4xl">
                   {formatRupiah(visibleTotal)}
@@ -219,14 +219,16 @@ export default function OverviewPage() {
           </span>
         </div>
         <div className="h-52 w-full md:h-60">
-          {trend.data && !chartReady && (
+          {trend.loading && <Skeleton className="mx-6 h-40" />}
+          {!trend.loading && trend.error && <ErrorState onRetry={trend.reload} />}
+          {!trend.loading && !trend.error && trend.data && !chartReady && (
             <div className="flex h-full items-center justify-center px-6 text-center">
               <p className="ink-faint text-sm">
                 Grafik butuh setidaknya 2 hari data — pilih Minggu Ini ke atas untuk melihat tren.
               </p>
             </div>
           )}
-          {trend.data && chartReady && (
+          {!trend.loading && !trend.error && trend.data && chartReady && (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={visible} margin={{ top: 16, left: 0, right: 4, bottom: 0 }}>
                 <defs>

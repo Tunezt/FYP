@@ -1467,3 +1467,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - A statement counter proves a 90-day chart is one query per metric, not ninety.
 **Deviation:** none. No schema change; the registry's contract (one implementation per metric) is unchanged - the bucketed form is checked against it rather than replacing it.
 **Next:** the range bugs the same report surfaced.
+
+
+### [dash-2] The range tabs actually change the chart
+**Date:** 2026-09-16
+**Status:** done
+**Changed:** backend/app/api/dashboard.py (`/sales-trend` ceiling 365 -> 730), backend/tests/test_trend_range.py (new, 9 tests), frontend/app/(dashboard)/overview/page.tsx, frontend/app/(dashboard)/sales/page.tsx
+**Gates:** pytest 558 passed 0 skipped - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **"Tahun Ini" was a 422, not an empty shop.** The overview fetches twice the window it draws so it can show "vs the period before"; on the year tab that is 730 days, and the endpoint's ceiling was 365. The request was rejected outright and the tab drew nothing. The ceiling is now two years, and `test_the_dashboard_windows_are_all_served` covers every tab the UI can ask for (1/30/90/365/730), with 731 still refused rather than silently trimmed.
+- **The silence was the worse half.** `useOwnerData` keeps the previous data on failure, and both pages rendered on `trend.data` alone. A rejected or slow request therefore left the *old* range's chart on screen with no spinner and no error - which is exactly what "clicking the tabs does nothing" looked like. Both pages now distinguish the three states: loading shows a skeleton (never the previous range's numbers), failure shows the existing `ErrorState` with a retry, and only then the chart.
+- Verified in the browser against local demo data: the year tab fetches `days=730` and draws a full year.
+**Deviation:** none.
+**Next:** the history lists the same report asked for.
