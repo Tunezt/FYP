@@ -1452,3 +1452,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Alembic's engine still connects with asyncpg's default (encrypted, unverified). It only runs as a deploy step against a fixed host; noted, not changed here.
 **Deviation:** none beyond the user-directed M12 ordering recorded in [M12-T1a].
 **Next:** push, Railway deploy with production variables, `/health/db`, Vercel redeploy, smoke test on the demo data.
+
+
+### [dash-1] Charts: one grouped query per metric instead of one per day
+**Date:** 2026-09-16
+**Status:** done
+**Changed:** backend/app/metrics/registry.py (`series_buckets`, `SERIES_BUCKETS`, `_back_to_back`, fast path in `series`), backend/app/metrics/catalogue.py (bucketed revenue, transaction_count, expense_total), backend/tests/test_metric_series.py (new, 8 tests)
+**Gates:** pytest 558 passed 0 skipped (was 530) - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **User-directed, outside the roadmap.** The owner reported that the dashboard's 30/90-day and "Tahun Ini" tabs did nothing on the deployed site.
+- **The cause was N+1 by design.** `series` called `compute` once per window, so a 90-day chart was 90 round trips per metric, 180 for the trend endpoint. On the laptop, against a local Postgres, that is imperceptible; from Railway's US West region to Supabase in Singapore a single `select 1` measured **1.2-2.4 s**, so the request never returned.
+- **Two fixes, one of them not code.** The Railway service was moved to Southeast Asia, which took the same `/health/db` call from ~1400 ms to **20 ms**. This commit is the other half: a metric may register a bucketed form, one grouped query that assigns each row to `floor((column - start) / width)`.
+- **The fast path is only ever an optimisation.** It engages only for back-to-back equal windows and only when no dimension is passed; months and `item_id` series still go row by row. `test_bucketed_series_equals_compute_on_every_window` runs both and asserts equality over 1/7/30/90-day windows, with sales placed exactly at 04:00 and one microsecond before it, so an off-by-one on the business-day boundary cannot pass.
+- A statement counter proves a 90-day chart is one query per metric, not ninety.
+**Deviation:** none. No schema change; the registry's contract (one implementation per metric) is unchanged - the bucketed form is checked against it rather than replacing it.
+**Next:** the range bugs the same report surfaced.

@@ -18,13 +18,13 @@ The basis, stated once so every consumer inherits it:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
-from sqlalchemy import case, desc, func, literal, select
+from sqlalchemy import DateTime, case, desc, func, literal, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.metrics.registry import MetricContext, MetricResult, metric
+from app.metrics.registry import MetricContext, MetricResult, metric, series_buckets
 from app.models import (
     Customer, Expense, GoodsReceipt, GoodsReceiptLine, Item, ItemVariant, Order, OrderLine, Promo, PromoApplication, Sale, Shift,
     StockMovement, Supplier,
@@ -72,6 +72,34 @@ async def _transactions(session: AsyncSession, ctx: MetricContext) -> int:
     return int((await session.execute(
         select(func.count(Order.id)).where(Order.sold_at >= ctx.since, Order.sold_at < ctx.until, Order.status.not_in(("voided", "open")))
     )).scalar_one())
+
+
+async def _bucket_totals(session: AsyncSession, column, aggregate, filters, start: datetime, width: timedelta, n: int) -> dict[int, object]:
+    """`aggregate` per back-to-back window of `width` from `start`, in one
+    query: each row lands in bucket floor((column − start) / width). The window
+    bounds are the same half-open [since, until) that `compute` uses."""
+    start_param = literal(start, DateTime(timezone=True))
+    bucket = func.floor(func.extract("epoch", column - start_param) / width.total_seconds())
+    rows = (await session.execute(
+        select(bucket, aggregate)
+        .where(column >= start, column < start + width * n, *filters)
+        .group_by(text("1"))
+    )).all()
+    return {int(i): value for i, value in rows}
+
+
+@series_buckets("revenue")
+async def _revenue_buckets(session: AsyncSession, start: datetime, width: timedelta, n: int) -> list[Decimal]:
+    totals = await _bucket_totals(session, Sale.sold_at, func.sum(Sale.total_price), (), start, width, n)
+    return [_money(totals.get(i)) for i in range(n)]
+
+
+@series_buckets("transaction_count")
+async def _transaction_buckets(session: AsyncSession, start: datetime, width: timedelta, n: int) -> list[int]:
+    counts = await _bucket_totals(
+        session, Order.sold_at, func.count(Order.id), (Order.status.not_in(("voided", "open")),), start, width, n
+    )
+    return [int(counts.get(i) or 0) for i in range(n)]
 
 
 @metric("revenue", description_id="Total penjualan (harga jual bersih diskon baris) dalam periode",
@@ -247,6 +275,12 @@ async def expense_total(session: AsyncSession, ctx: MetricContext) -> MetricResu
         select(func.coalesce(func.sum(Expense.amount), 0)).where(Expense.occurred_at >= ctx.since, Expense.occurred_at < ctx.until)
     )).scalar_one()
     return MetricResult(name="expense_total", unit="rupiah", value=_money(value))
+
+
+@series_buckets("expense_total")
+async def _expense_buckets(session: AsyncSession, start: datetime, width: timedelta, n: int) -> list[Decimal]:
+    totals = await _bucket_totals(session, Expense.occurred_at, func.sum(Expense.amount), (), start, width, n)
+    return [_money(totals.get(i)) for i in range(n)]
 
 
 @metric("net_profit", description_id="Laba bersih operasional: penjualan − harga pokok − pengeluaran tercatat",

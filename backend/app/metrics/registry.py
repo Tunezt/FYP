@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Any, Awaitable, Callable
@@ -209,13 +209,55 @@ def local_month_windows(business: Business, months: int, *, now: datetime | None
     return out
 
 
+# A bucketed form of a metric: one grouped query over n equal, back-to-back
+# windows starting at `start`, returning one value per window. Optional, and
+# only ever an optimisation of `series` — it must equal `compute` per window,
+# which tests/test_metric_series.py checks against the real implementation.
+Buckets = Callable[[AsyncSession, datetime, timedelta, int], Awaitable[list[Any]]]
+SERIES_BUCKETS: dict[str, Buckets] = {}
+
+
+def series_buckets(name: str):
+    def register(fn: Buckets) -> Buckets:
+        if name in SERIES_BUCKETS:
+            raise RuntimeError(f"series buckets for {name!r} are already registered")
+        SERIES_BUCKETS[name] = fn
+        return fn
+
+    return register
+
+
+def _back_to_back(windows: list[tuple[str, datetime, datetime]]):
+    """The shared width when every window is the same width and each starts
+    where the last ended; None otherwise (months, gaps, overlaps)."""
+    if not windows:
+        return None
+    width = windows[0][2] - windows[0][1]
+    for i, (_key, since, until) in enumerate(windows):
+        if until - since != width or (i and since != windows[i - 1][2]):
+            return None
+    return width
+
+
 async def series(
     session: AsyncSession, business: Business, name: str, windows: list[tuple[str, datetime, datetime]], **kw,
 ) -> list[tuple[str, MetricResult]]:
     """One metric over many windows — the dashboard's charts. The same
     implementation as a single `compute`, so a bar and a WhatsApp answer for
-    the same day are the same number."""
-    return [(key, await compute(session, business, name, since=since, until=until, **kw)) for key, since, until in windows]
+    the same day are the same number.
+
+    A 90-day chart used to be 90 round trips per metric. For metrics with a
+    bucketed form and back-to-back windows (the daily charts) it is one."""
+    spec = get_metric(name)
+    fast = SERIES_BUCKETS.get(spec.name)
+    width = _back_to_back(windows) if fast is not None and not kw else None
+    if width is None:
+        return [(key, await compute(session, business, name, since=since, until=until, **kw)) for key, since, until in windows]
+    values = await fast(session, windows[0][1], width, len(windows))
+    return [
+        (key, MetricResult(name=spec.name, unit=spec.unit, value=value, since=since, until=until))
+        for (key, since, until), value in zip(windows, values)
+    ]
 
 
 async def compute(
