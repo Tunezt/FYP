@@ -4,6 +4,7 @@ import { useState } from "react";
 import { categorize, type ItemCategory } from "@/lib/itemCategory";
 import {
   IconChevronDown,
+  IconChevronRight,
   IconCatBakery,
   IconCatCigarette,
   IconCatCleaning,
@@ -66,6 +67,13 @@ export function DayHeader({
       {meta && <p className="ink-soft text-xs font-semibold tabular-nums">{meta}</p>}
     </div>
   );
+}
+
+/** The trailing chevron on an interactive row. Pairs with `.list-row-action`,
+ * which tints the row and nudges this on hover. Decorative: the row itself is
+ * the button, and screen readers get its label, not an arrow. */
+export function RowChevron({ className = "" }: { className?: string }) {
+  return <IconChevronRight className={`row-chevron h-4 w-4 shrink-0 ${className}`} aria-hidden />;
 }
 
 /** A day header that opens and closes its own section.

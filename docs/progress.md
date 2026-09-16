@@ -1494,3 +1494,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **The empty state now tells the truth.** With a filter on it says nothing matched rather than implying the shop has no sales, no expenses, no alerts.
 **Deviation:** none. Query parameters only, all optional; an unfiltered call is byte-for-byte the old behaviour, which `test_unfiltered_is_unchanged` holds.
 **Next:** the interactive-row polish from the same report.
+
+
+### [dash-4] A row that does something now looks like it
+**Date:** 2026-09-16
+**Status:** done
+**Changed:** frontend/app/globals.css (`--row-hover`/`--row-press` tokens, `.list-row-action`, reduced-motion branch, `.btn-quiet:hover`), frontend/components/ui.tsx (`RowChevron`), frontend/app/(dashboard)/inventory/page.tsx
+**Gates:** pytest 558 passed 0 skipped - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **User-directed.** "Give it some element to show it's clickable, and darken/dim on hover."
+- **Only rows that actually do something get the affordance.** Stock rows open the edit sheet, so they get a pointer, a trailing chevron that nudges 2px on hover, a hover tint, a darker pressed state and a keyboard focus ring. Alert, receipt and staff rows do nothing when clicked and were deliberately left quiet: a hover state on an inert row is a promise the interface cannot keep, and the design context (`.impeccable.md`) is explicit that rows stay quiet while the day header does the scanning work.
+- **The tint darkens toward ink rather than introducing a colour**, at 4.5% light / 6% dark, and runs 8px past the text so the row reads as one band. Radius 12px, inside the existing 24px card grammar.
+- `prefers-reduced-motion: reduce` drops both transitions - the hover tint still applies, only the movement goes.
+- `.btn-quiet:hover` changed the border only, which is invisible on glass; it now darkens too.
+**Deviation:** none.
+**Next:** deploy these four to Railway/Vercel when the owner says to push; the OTP fallback still expires 2026-10-16.

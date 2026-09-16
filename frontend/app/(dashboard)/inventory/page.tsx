@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatQty, formatRupiah } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
-import { EmptyState, ErrorState, Glass, ItemIcon, Sheet, Skeleton } from "@/components/ui";
+import { EmptyState, ErrorState, Glass, ItemIcon, RowChevron, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconPlus } from "@/components/icons";
 
@@ -253,7 +253,7 @@ function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: Inven
         const pill = riskPill(item);
         return (
           <li key={item.id}>
-            <button onClick={() => onEdit(item)} className="list-row w-full text-left">
+            <button onClick={() => onEdit(item)} className="list-row list-row-action">
               <ItemIcon name={item.name} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{item.name}</p>
@@ -271,6 +271,7 @@ function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: Inven
                 </p>
                 <span className={pill.cls}>{pill.text}</span>
               </div>
+              <RowChevron />
             </button>
           </li>
         );
