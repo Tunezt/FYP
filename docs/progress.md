@@ -1681,3 +1681,32 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - The impeccable detector found nothing.
 **Deviation:** none.
 **Next:** svc-9 - end-to-end service run across the three screens, and the closing summary.
+
+
+### [svc-9] One service, three screens: verification run and open decisions
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** docs/progress.md only
+**Gates:** pytest 574 passed 0 skipped - migrations round-trip ok (0037 -> 0036 -> 0037) - frontend build ok - seed ok
+**Notes:**
+- **The ten journey checks the owner asked for are tests, not screenshots.** They live in `backend/tests/test_service_journey.py` and run against the real API and Postgres: (1) Americano refused without size, then without temperature, on the till and the QR menu; (2) differently customised Americanos stay three lines; (3) held orders survive switching customers and a refresh; (4) a QR order reaches the cashier, is edited, and stale edits and stale payments are refused; (5) unpaid orders never reach the kitchen; (6) payment is one order, one payment, one journal entry, one movement per line and one kitchen ticket, and a replayed tap returns it; (7) an addition charges only the new items and cooks only them, and the original's footprint is unchanged; (8) partial preparation, ready and handover agree across kitchen board, active orders and the guest's page; (9) concurrent resubmits, double taps, two tablets paying and two tablets editing do not duplicate; (10) cancelling unpaid leaves no reversal rows, a refund after preparation keeps both originals and reversals, and the kitchen sees why. Also: RLS on `kitchen_line_events`, QR order privacy, and quote/re-price.
+- **Cross-screen run in the browser** (seeded Poernama catalogue; orders created through the API). Kitchen at 1280x800, three columns: ticked the remaining item on #8568 and marked it ready; the till's `/pos/active-orders` showed `paid/ready` with both lines done. The addition #2EB0 stayed "new" beside it. The QR order M-A9E4 was paid at the till and appeared under Disiapkan without a reload. The guest's keyed status showed `preparing` with name and table, and an unkeyed read showed the same progress with both withheld. The refunded #52B1 sat in the cancellation band.
+- **Screen sizes checked across svc-1, svc-6, svc-7 and svc-8:** till at 1280x800 (landscape) and 800x1280 (portrait, drawer), kitchen at 1440x900 and 1280x800, QR menu at 375x812 and 390x844.
+
+**Decisions this sequence took that the owner may want to reverse (none blocks use):**
+1. **Price at payment.** An unpaid order whose catalogue price changed cannot be paid until the cashier re-prices it in front of the customer (svc-5). Honouring the price the customer saw at order time is the alternative; the check in `settle_ticket` is the one place to change.
+2. **Reversing a family.** Voiding or refunding an original order does not reverse its paid additions (svc-3). Each is its own receipt under the existing manager-PIN rules.
+3. **Handover from the till.** A cashier can confirm *Sudah diserahkan* for a ready order from Pesanan aktif, as well as the kitchen. This fits counter pickup. If handover must only ever be confirmed in the kitchen, remove the button.
+
+**NEEDS HUMAN (not blocking, not built):**
+- **Kitchen recall/undo** (ready back to preparing, or undo a handover) was not added. `tests/test_kitchen.py::test_states_move_forward_only_and_done_bumps_the_ticket_off` requires those moves to be refused, and under §1.8 changing that is the owner's call. What exists instead: unticking a line while a ticket is being prepared, and the expected-state guard that stops accidental skips.
+- **A multi-item ticket can still be marked ready as a whole through the API** when nobody ticked any line, because the M11-T2 API test does exactly that on a two-line order. The kitchen screen never offers that path (it requires every line ticked). Making it a server rule needs the same decision as above.
+
+**Known limitations, stated plainly:**
+- Everything is polled (till 6s, kitchen 4s, guest 6s). No push; near-instant sync across devices would need websockets or SSE, which the café's wifi was deliberately never trusted with (M11).
+- An unsent cart on the till lives only in the page until *Simpan* is tapped. That is deliberate: held orders are server-side, and there is no second browser order system. The QR guest's unsent cart is kept in the phone's localStorage for refresh, and only as a convenience.
+- Tickets older than the 12-hour board window drop off the board and the history (unchanged M11-T2 behaviour).
+- M14 (offline queue) is untouched and still gated on two weeks of live use. `client_ref` covers retries while online, not queued offline sales.
+- Browser screenshots in emulated mobile sizes were sometimes cropped or timed out in the preview pane. Those checks were confirmed by reading layout metrics and page text instead.
+**Deviation:** none. Nothing was pushed or deployed.
+**Next:** owner review of the three decisions and the NEEDS HUMAN items above; push only when asked.
