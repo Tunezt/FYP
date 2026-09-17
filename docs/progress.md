@@ -1600,3 +1600,20 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Business decision left as it was, stated plainly:** voiding or refunding the original does not touch its additions. Each is its own receipt with its own payment, and the existing manager-PIN reversal applies to each separately. Reversing a whole family at once would be a new rule.
 **Deviation:** none.
 **Next:** svc-4 - kitchen backend: per-line progress, expected-state conflicts, cancellation notices, history.
+
+
+### [svc-4] Kitchen backend: what is left to make, and who got there first
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** backend/alembic/versions/0037_kitchen_line_events.py (new table, RLS in the same migration), backend/app/models/models.py + models/__init__.py (`KitchenLineEvent`), backend/app/services/kitchen.py (line progress, `expected` state, `cancellations`, `history`, sizes written out), backend/app/schemas/pos.py (`KitchenBoardOut`, `KitchenLineIn`, `KitchenStateIn.expected`), backend/app/api/pos.py (`GET /pos/kitchen/board`, `POST /pos/kitchen/{id}/lines/{line_id}`), backend/tests/test_service_journey.py (test 8, test 10, RLS test for the new table)
+**Gates:** pytest 572 passed 0 skipped (was 569) - migrations round-trip ok (0037 -> 0036 -> 0037) - frontend build ok - seed ok
+**Notes:**
+- **User-directed:** Baru -> Disiapkan -> Siap diambil -> Diserahkan, mapped onto the existing `new/preparing/ready/done` with no new state.
+- **Checked the existing forward-only tests first.** `test_states_move_forward_only_and_done_bumps_the_ticket_off` pins that ready->preparing and done->ready are refused, and that `done` is accepted straight from `new` at the service level. Nothing here weakens either. **Recall/undo of a kitchen state was not added**: it would contradict that test, so under §1.8 it is a question for the owner, not a change to make. Unticking a *line* while the ticket is still being prepared is allowed. That is a correction to line progress, not a state moving backwards.
+- **"Ready" means the whole order.** Ticking any line starts the ticket. Once any line has been ticked, `ready` is refused while one is unfinished ("Masih ada 1 item belum selesai"). A ticket nobody ticked line by line can still be called ready as a whole, which is what M11-T2's API test does and what a single coffee needs. Lines are fixed once the ticket is ready.
+- **The expected state stops two tablets disagreeing.** A device sends the state it is showing. The move must be the next step from it and is refused if another device got there first ("sudah siap diambil dari perangkat lain"). The same tap arriving twice is still a no-op 200. With an expected state there is no path from `new` to `done`, so an unprepared order cannot be dismissed by accident. Callers that send no expected state keep the M11-T2 behaviour. The order row is read `for update`, so concurrent moves on one ticket serialise.
+- **Cancellations are shown, not silently dropped.** `board()` still excludes a reversed order (the M11-T2 test pins that). `cancellations()` lists paid orders voided or refunded before handover, with who approved it and the reason from the `approvals` row, until someone in the kitchen acknowledges. Acknowledging appends `done` and is the only move a reversed order accepts.
+- **Choices are written out.** The kitchen line carries `size` whenever the product has more than one size, including "Standar". It previously hid the default size, so "Americano" could mean either.
+- `history()` is the last handovers of the board window, newest first, with who handed over.
+**Deviation:** none.
+**Next:** svc-5 - QR backend: per-order access key, a real quote before sending, prices re-checked before payment.

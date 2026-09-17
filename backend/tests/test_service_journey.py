@@ -387,3 +387,157 @@ async def test_7_a_paid_order_addition_charges_only_the_new_items_and_cooks_only
     refused = await client.post("/pos/orders", headers=_auth(c["pos"]), json={
         "lines": [_line(c, item="roti")], "payments": _cash(15000), "parent_order_id": draft["id"]})
     assert refused.status_code == 409 and "belum dibayar" in refused.json()["detail"]
+
+
+# ── 8. Partial preparation, ready and handover agree on every screen ────────
+
+
+async def test_8_partial_preparation_ready_and_handover_stay_consistent_across_screens(client, session_factory, cafe):
+    c = cafe
+    placed = (await client.post(f"/menu/{c['menu']}/orders", json={
+        "lines": [_line(c, variant="standar", mods=["panas"]), _line(c, item="roti", notes="dipanaskan")],
+        "order_type": "takeaway", "guest_name": "Wulan"})).json()
+    tid = placed["id"]
+    assert (await client.post(f"/pos/tickets/{tid}/settle", headers=_auth(c["pos"]), json={"payments": _cash(33000)})).status_code == 200
+    pos = _auth(c["pos"])
+
+    board = (await client.get("/pos/kitchen/board", headers=pos)).json()
+    [ticket] = board["tickets"]
+    assert ticket["state"] == "new" and board["cancellations"] == [] and board["history"] == []
+    # The size the customer chose is written out, the default one included.
+    by_item = {l["item_name"]: l for l in ticket["lines"]}
+    assert by_item["Americano"]["size"] == "Standar" and by_item["Americano"]["name"] == "Americano · Standar"
+    assert by_item["Americano"]["modifiers"] == ["Panas"] and by_item["Roti"]["notes"] == "dipanaskan"
+    assert by_item["Roti"]["size"] is None
+
+    # No shortcut from "new" to "handed over" for a device that says what it sees.
+    skip = await client.post(f"/pos/kitchen/{tid}/state", headers=pos, json={"state": "done", "expected": "new"})
+    assert skip.status_code == 409
+
+    # Ticking the roti starts the ticket; the coffee is still to make.
+    ticked = await client.post(f"/pos/kitchen/{tid}/lines/{by_item['Roti']['line_id']}", headers=pos, json={"done": True})
+    assert ticked.status_code == 200 and ticked.json()["state"] == "preparing"
+    early = await client.post(f"/pos/kitchen/{tid}/state", headers=pos, json={"state": "ready", "expected": "preparing"})
+    assert early.status_code == 409 and "1 item belum selesai" in early.json()["detail"]
+
+    # Every screen sees the same partial progress.
+    active = {a["id"]: a for a in (await client.get("/pos/active-orders", headers=pos)).json()}[tid]
+    assert active["payment"] == "paid" and active["prep"] == "preparing"
+    assert sorted((l["name"], l["done"]) for l in active["lines"]) == [("Americano", False), ("Roti", True)]
+    assert (await client.get(f"/menu/{c['menu']}/orders/{tid}")).json()["kitchen_state"] == "preparing"
+
+    await client.post(f"/pos/kitchen/{tid}/lines/{by_item['Americano']['line_id']}", headers=pos, json={"done": True})
+    ready = await client.post(f"/pos/kitchen/{tid}/state", headers=pos, json={"state": "ready", "expected": "preparing"})
+    assert ready.status_code == 200 and all(l["done"] for l in ready.json()["lines"])
+    # The same tap arriving twice is not an error; a tablet that still showed "preparing"
+    # and tries to hand over is told the order is already ready, not silently obeyed.
+    assert (await client.post(f"/pos/kitchen/{tid}/state", headers=pos, json={"state": "ready", "expected": "preparing"})).status_code == 200
+    other = await client.post(f"/pos/kitchen/{tid}/state", headers=pos, json={"state": "done", "expected": "preparing"})
+    assert other.status_code == 409 and "siap diambil dari perangkat lain" in other.json()["detail"]
+    # Lines are fixed once the order is ready.
+    assert (await client.post(f"/pos/kitchen/{tid}/lines/{by_item['Roti']['line_id']}", headers=pos, json={"done": False})).status_code == 409
+
+    # Ready stays on the board until somebody confirms the handover.
+    assert [t["state"] for t in (await client.get("/pos/kitchen/board", headers=pos)).json()["tickets"]] == ["ready"]
+    assert {a["id"]: a for a in (await client.get("/pos/active-orders", headers=pos)).json()}[tid]["prep"] == "ready"
+    assert (await client.get(f"/menu/{c['menu']}/orders/{tid}")).json()["kitchen_state"] == "ready"
+    handed = await client.post(f"/pos/kitchen/{tid}/state", headers=pos, json={"state": "done", "expected": "ready"})
+    assert handed.status_code == 200
+    board = (await client.get("/pos/kitchen/board", headers=pos)).json()
+    assert board["tickets"] == [] and [h["order_id"] for h in board["history"]] == [tid] and board["history"][0]["state_by"] == "Sari"
+    assert tid not in {a["id"] for a in (await client.get("/pos/active-orders", headers=pos)).json()}
+    assert (await client.get(f"/menu/{c['menu']}/orders/{tid}")).json()["kitchen_state"] == "done"
+
+
+async def test_kitchen_line_events_are_tenant_isolated(session_factory, cafe):
+    from app.models import KitchenLineEvent
+    from app.services.kitchen import set_line_done
+    from app.services.orders import OrderLineSpec, PaymentSpec, create_order
+
+    c = cafe
+    other = await _make_cafe(session_factory, name="Tetangga")
+    try:
+        async with session_factory() as s:
+            await _set_tenant(s, c["bid"])
+            sale = await create_order(s, business_id=c["bid"], staff_id=c["sari"],
+                                      lines=[OrderLineSpec(item_id=c["roti"], quantity=D(1))], payments=[PaymentSpec(method="cash", amount=D(15000))])
+            await set_line_done(s, business_id=c["bid"], order_id=sale.order.id, line_id=sale.lines[0].line.id, done=True, staff_id=c["sari"])
+            await s.commit()
+        async with session_factory() as s:
+            row = (await s.execute(text("select relrowsecurity, relforcerowsecurity from pg_class where relname = 'kitchen_line_events'"))).one()
+            assert row == (True, True)
+            assert (await s.execute(text("select policyname from pg_policies where tablename = 'kitchen_line_events'"))).scalars().all() == ["tenant_isolation"]
+        async with session_factory() as s:
+            await _set_tenant(s, other["bid"])
+            assert (await s.execute(select(func.count(KitchenLineEvent.id)))).scalar_one() == 0
+            s.add(KitchenLineEvent(business_id=c["bid"], order_id=sale.order.id, order_line_id=sale.lines[0].line.id, done=False))
+            with pytest.raises(Exception):
+                await s.flush()
+            await s.rollback()
+    finally:
+        async with session_factory() as s:
+            row = await s.get(Business, other["bid"])
+            if row:
+                await s.delete(row)
+            await s.commit()
+
+
+# ── 10. Cancelling and refunding keep the trail and the books ────────────────
+
+
+async def test_10_cancel_before_payment_and_refund_after_keep_the_audit_trail(client, session_factory, cafe):
+    from app.models import Approval, JournalEntry, StockMovement
+
+    c = cafe
+    pos = _auth(c["pos"])
+    # Unpaid: cancelling a held draft needs no PIN and reverses nothing, because nothing was taken.
+    draft = (await client.post("/pos/drafts", headers=pos, json={"lines": [_line(c, item="roti", qty=3)]})).json()
+    cancelled = await client.post(f"/pos/tickets/{draft['id']}/cancel", headers=pos, json={"reason": "pelanggan pergi"})
+    assert cancelled.status_code == 200
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        row = await s.get(Order, uuid.UUID(draft["id"]))
+        assert row.status == "voided" and row.cart["cancelled"]["reason"] == "pelanggan pergi"
+        assert await _footprint(s, row.id) == {"lines": 0, "payments": 0, "journal": 0, "movements": 0, "kitchen_events": 0}
+        assert await _count(s, Approval, Approval.order_id == row.id) == 0
+
+    # Paid and already being made: a refund needs a manager PIN, and a wrong one changes nothing.
+    sale = (await client.post("/pos/orders", headers=pos, json={"lines": [_line(c, variant="large", mods=["dingin"], qty=2)], "payments": _cash(44000)})).json()
+    sid = sale["id"]
+    await client.post(f"/pos/kitchen/{sid}/state", headers=pos, json={"state": "preparing", "expected": "new"})
+    wrong = await client.post(f"/pos/orders/{sid}/refund", headers=pos, json={"manager_pin": "9999", "note": "salah menu", "restock": True})
+    assert wrong.status_code == 403
+    assert [t["order_id"] for t in (await client.get("/pos/kitchen/board", headers=pos)).json()["tickets"]] == [sid]
+    refund = await client.post(f"/pos/orders/{sid}/refund", headers=pos, json={"manager_pin": "1234", "note": "salah menu", "restock": True})
+    assert refund.status_code == 200, refund.text
+
+    # The cooks see why the ticket left the board, until they acknowledge it.
+    board = (await client.get("/pos/kitchen/board", headers=pos)).json()
+    assert board["tickets"] == []
+    [notice] = board["cancellations"]
+    assert notice["order_id"] == sid and notice["status"] == "refunded" and notice["state"] == "preparing"
+    assert notice["reversal_reason"] == "salah menu" and notice["reversed_by"] == "Bu Ratna"
+    # A reversed order cannot be moved on as if it were still a sale; it can only be acknowledged.
+    assert (await client.post(f"/pos/kitchen/{sid}/state", headers=pos, json={"state": "ready"})).status_code == 409
+    ack = await client.post(f"/pos/kitchen/{sid}/state", headers=pos, json={"state": "done"})
+    assert ack.status_code == 200
+    board = (await client.get("/pos/kitchen/board", headers=pos)).json()
+    assert board["cancellations"] == [] and board["history"][0]["status"] == "refunded"
+
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        oid = uuid.UUID(sid)
+        # Nothing deleted: the original lines and payment remain, reversed by new rows.
+        lines = (await s.execute(select(OrderLine.quantity).where(OrderLine.order_id == oid))).scalars().all()
+        assert sorted(D(q) for q in lines) == [D(-2), D(2)]
+        from app.models import Payment
+
+        pays = (await s.execute(select(Payment.amount).where(Payment.order_id == oid))).scalars().all()
+        assert sorted(D(p) for p in pays) == [D(-44000), D(44000)]
+        events = (await s.execute(select(JournalEntry.event_type).where(JournalEntry.source_id == oid))).scalars().all()
+        assert sorted(events) == ["OrderCompleted", "OrderRefunded"]
+        moves = (await s.execute(select(StockMovement.reason).where(StockMovement.item_id == c["americano"]))).scalars().all()
+        assert sorted(moves).count("refund") == 1 and sorted(moves).count("sale") == 1
+        assert (await s.get(Item, c["americano"])).current_stock == D(40)
+        approval = (await s.execute(select(Approval).where(Approval.order_id == oid))).scalar_one()
+        assert approval.action == "refund" and approval.approved_by == c["owner"] and approval.requested_by == c["sari"]

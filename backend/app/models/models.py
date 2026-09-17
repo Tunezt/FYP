@@ -1018,6 +1018,23 @@ class KitchenEvent(Base):
     created_at: Mapped[datetime] = _now()
 
 
+class KitchenLineEvent(Base):
+    """Per-line preparation progress (svc-4, migration 0037). Append-only like
+    `kitchen_events`: the latest row per line is whether it is made."""
+
+    __tablename__ = "kitchen_line_events"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
+    order_line_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("order_lines.id"), nullable=False)
+    done: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    created_at: Mapped[datetime] = _now()
+
+
 class Approval(Base):
     """One manager authorisation (M15-T7, migration 0031). Append-only: a void,
     a refund or an over-threshold discount writes a row naming who approved it,

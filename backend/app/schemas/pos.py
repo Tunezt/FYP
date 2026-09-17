@@ -422,6 +422,10 @@ class KitchenLineOut(BaseModel):
     quantity: Decimal
     modifiers: list[str] = []
     notes: str | None = None
+    line_id: uuid.UUID | None = None      # svc-4: what "tick this line" points at
+    item_name: str = ""
+    size: str | None = None
+    done: bool = False
 
 
 class KitchenTicketOut(BaseModel):
@@ -438,7 +442,29 @@ class KitchenTicketOut(BaseModel):
     state_since: datetime | None
     lines: list[KitchenLineOut]
     parent_code: str | None = None   # svc-3
+    status: str = "completed"        # svc-4: voided / refunded on a cancellation notice
+    reversal_reason: str | None = None
+    reversed_by: str | None = None
+    reversed_at: datetime | None = None
+    state_by: str | None = None
+
+
+class KitchenBoardOut(BaseModel):
+    """Everything the kitchen screen draws, from one request (svc-4), with the
+    server's clock so waiting times do not drift with a tablet's."""
+
+    server_time: datetime
+    tickets: list[KitchenTicketOut]
+    cancellations: list[KitchenTicketOut]
+    history: list[KitchenTicketOut]
+
+
+class KitchenLineIn(BaseModel):
+    done: bool
 
 
 class KitchenStateIn(BaseModel):
     state: KitchenState
+    # svc-4: the state this device was showing. Given, the move must be the
+    # next step from it and is refused if another device got there first.
+    expected: KitchenState | None = None

@@ -20,7 +20,7 @@ from app.services import pin_guard
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
 from app.schemas.menu import ActiveOrderOut, DraftIn, OpenOrderUpdateIn, PosTicketOut, TicketCancelIn, TicketSettleIn
-from app.schemas.pos import KitchenLineOut, KitchenStateIn, KitchenTicketOut
+from app.schemas.pos import KitchenBoardOut, KitchenLineIn, KitchenLineOut, KitchenStateIn, KitchenTicketOut
 from app.core.security import create_token, decode_token, verify_pin
 from app.models import Business, Item, ItemVariant, Modifier, RequestLog, Staff
 from app.schemas.pos import (
@@ -713,7 +713,7 @@ async def _active_views(session, orders, tickets_by_id=None):
             ]
         elif ticket is not None:
             lines = [
-                ActiveLineOut(name=getattr(l, "item_name", l.name), size=getattr(l, "size", None), quantity=l.quantity, modifiers=l.modifiers, notes=l.notes,
+                ActiveLineOut(name=l.item_name or l.name, size=l.size, quantity=l.quantity, modifiers=l.modifiers, notes=l.notes,
                               done=getattr(l, "done", False))
                 for l in ticket.lines
             ]
@@ -1156,7 +1156,13 @@ def _kitchen_out(t) -> KitchenTicketOut:
         order_id=t.order_id, code=t.code, source=t.source, order_type=t.order_type, table_label=t.table_label,
         guest_name=t.guest_name, note=t.note, delivery_address=t.delivery_address,
         sold_at=t.sold_at, state=t.state, state_since=t.state_since, parent_code=t.parent_code,
-        lines=[KitchenLineOut(name=l.name, quantity=l.quantity, modifiers=l.modifiers, notes=l.notes) for l in t.lines],
+        status=t.status, reversal_reason=t.reversal_reason, reversed_by=t.reversed_by, reversed_at=t.reversed_at,
+        state_by=t.state_by,
+        lines=[
+            KitchenLineOut(name=l.name, quantity=l.quantity, modifiers=l.modifiers, notes=l.notes, line_id=l.line_id,
+                           item_name=l.item_name, size=l.size, done=l.done)
+            for l in t.lines
+        ],
     )
 
 
@@ -1167,19 +1173,65 @@ async def pos_kitchen(ctx: PosCtx):
     return [_kitchen_out(t) for t in await board(ctx.session)]
 
 
+@router.get("/kitchen/board", response_model=KitchenBoardOut)
+async def pos_kitchen_board(ctx: PosCtx):
+    """The kitchen screen in one read (svc-4): open tickets oldest first, paid
+    orders reversed before handover, and what left the pass recently."""
+    from datetime import datetime, timezone
+
+    from app.services.kitchen import board, cancellations, history
+
+    now = datetime.now(timezone.utc)
+    return KitchenBoardOut(
+        server_time=now,
+        tickets=[_kitchen_out(t) for t in await board(ctx.session, now=now)],
+        cancellations=[_kitchen_out(t) for t in await cancellations(ctx.session, now=now)],
+        history=[_kitchen_out(t) for t in await history(ctx.session, now=now)],
+    )
+
+
+def _kitchen_error(exc) -> HTTPException:
+    from app.services.kitchen import STATE_LABEL_ID
+
+    label = lambda s: STATE_LABEL_ID.get(s or "", s)  # noqa: E731
+    if exc.code == "not_found":
+        return HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    if exc.code == "line_not_found":
+        return HTTPException(status_code=404, detail="Item pesanan tidak ditemukan")
+    if exc.code == "not_paid":
+        return HTTPException(status_code=409, detail="Pesanan belum dibayar — dapur hanya menyiapkan pesanan yang sudah dibayar")
+    if exc.code == "conflict":
+        return HTTPException(status_code=409, detail=f"Pesanan ini sudah {label(exc.current)} dari perangkat lain — layar sudah diperbarui")
+    if exc.code == "lines_pending":
+        return HTTPException(status_code=409, detail=f"Masih ada {exc.pending} item belum selesai — tandai semua item dulu")
+    if exc.code == "closed":
+        return HTTPException(status_code=409, detail=f"Pesanan sudah {label(exc.current)} — item tidak bisa diubah lagi")
+    return HTTPException(
+        status_code=409,
+        detail=f"Pesanan sudah {label(exc.current)} — tidak bisa diubah ke {label(exc.wanted)}",
+    )
+
+
 @router.post("/kitchen/{order_id}/state", response_model=KitchenTicketOut)
 async def pos_kitchen_state(order_id: uuid.UUID, payload: KitchenStateIn, ctx: PosCtx):
-    from app.services.kitchen import STATE_LABEL_ID, KitchenInvalid, set_state
+    from app.services.kitchen import KitchenInvalid, set_state
 
     try:
-        t = await set_state(ctx.session, business_id=ctx.business_id, order_id=order_id, state=payload.state, staff_id=ctx.staff_id)
+        t = await set_state(ctx.session, business_id=ctx.business_id, order_id=order_id, state=payload.state,
+                            staff_id=ctx.staff_id, expected=payload.expected)
     except KitchenInvalid as exc:
-        if exc.code == "not_found":
-            raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
-        if exc.code == "not_paid":
-            raise HTTPException(status_code=409, detail="Pesanan belum dibayar — dapur hanya menyiapkan pesanan yang sudah dibayar")
-        raise HTTPException(
-            status_code=409,
-            detail=f"Pesanan sudah {STATE_LABEL_ID.get(exc.current or '', exc.current)} — tidak bisa diubah ke {STATE_LABEL_ID.get(exc.wanted or '', exc.wanted)}",
-        )
+        raise _kitchen_error(exc)
+    return _kitchen_out(t)
+
+
+@router.post("/kitchen/{order_id}/lines/{line_id}", response_model=KitchenTicketOut)
+async def pos_kitchen_line(order_id: uuid.UUID, line_id: uuid.UUID, payload: KitchenLineIn, ctx: PosCtx):
+    """Tick or untick one line of a paid ticket (svc-4)."""
+    from app.services.kitchen import KitchenInvalid, set_line_done
+
+    try:
+        t = await set_line_done(ctx.session, business_id=ctx.business_id, order_id=order_id, line_id=line_id,
+                                done=payload.done, staff_id=ctx.staff_id)
+    except KitchenInvalid as exc:
+        raise _kitchen_error(exc)
     return _kitchen_out(t)
