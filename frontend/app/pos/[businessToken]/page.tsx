@@ -7,20 +7,22 @@ import { Select } from "@/components/Select";
 import { IconBackspace, IconCheck, IconExternal, IconLock, IconPlugOff } from "@/components/icons";
 import { formatQty, formatRupiah, initials } from "@/lib/format";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
+import { ProductPicker } from "@/components/ProductPicker";
+import {
+  displayName,
+  freshSelection,
+  identityKey,
+  isQuickAdd,
+  selectedModifiers,
+  selectedVariant,
+  type Modifier,
+  type ModifierGroup,
+  type Selection,
+  type Variant,
+} from "@/lib/choices";
 
 type StaffLite = { id: string; name: string; role: string };
 type PosBusiness = { business_name: string; staff: StaffLite[] };
-type Variant = { id: string; name: string; sell_price: string; is_default: boolean };
-type Modifier = { id: string; name: string; price_delta: string; is_default: boolean };
-type ModifierGroup = {
-  id: string;
-  name: string;
-  selection: "single" | "multi";
-  is_required: boolean;
-  min_select: number;
-  max_select: number | null;
-  modifiers: Modifier[];
-};
 type Item = {
   id: string;
   name: string;
@@ -76,9 +78,10 @@ type OrderResult = {
   lines: { item_name: string; quantity: string; line_total: string; remaining_stock: string }[];
   payments: { method: string; amount: string }[];
 };
-// A cart line is an item at one size (variant) with a set of chosen modifiers;
-// stock is the item's. Same item + size + modifiers merge into one line.
-type CartLine = { item: Item; variant: Variant | null; modifiers: Modifier[]; qty: number; discount: number };
+// A cart line is an item at one size (variant) with a set of chosen modifiers
+// and a preparation note; stock is the item's. Lines merge only when all four
+// match (svc-1) — "Americano, gelas kertas" is not "Americano".
+type CartLine = { uid: string; item: Item; variant: Variant | null; modifiers: Modifier[]; qty: number; discount: number; notes: string };
 // What the server says the cart comes to (M7-T4b) — the kiosk never adds tax
 // or rounding itself, so the screen and the ledger cannot disagree.
 type Quote = {
@@ -162,18 +165,23 @@ type ReversalResult = {
   reversing_payments: { id: string; method: string; amount: string; reference: string | null }[];
 };
 
-const lineKey = (itemId: string, variant: Variant | null, modifiers: Modifier[]) =>
-  `${itemId}:${variant?.id ?? "default"}:${modifiers.map((m) => m.id).sort().join(",")}`;
+const lineKey = (l: CartLine) => identityKey(l.item.id, l.variant?.id ?? null, l.modifiers.map((m) => m.id), l.notes);
 const linePrice = (l: { item: Item; variant: Variant | null; modifiers: Modifier[] }) =>
   Number(l.variant?.sell_price ?? l.item.sell_price) + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0);
 const lineName = (l: { item: Item; variant: Variant | null; modifiers: Modifier[] }) => {
-  const base = l.variant && l.item.variants.length > 1 ? `${l.item.name} · ${l.variant.name}` : l.item.name;
+  const base = displayName(l.item, l.variant);
   return l.modifiers.length ? `${base} (${l.modifiers.map((m) => m.name).join(", ")})` : base;
 };
-const defaultChoices = (item: Item): Record<string, Modifier[]> =>
-  Object.fromEntries(item.modifier_groups.map((g) => [g.id, g.modifiers.filter((m) => m.is_default)]));
-const missingRequired = (item: Item, chosen: Record<string, Modifier[]>) =>
-  item.modifier_groups.filter((g) => g.is_required && (chosen[g.id]?.length ?? 0) < Math.max(1, g.min_select));
+/** The cart line as the picker wants it back, so editing restores its own answers (svc-1). */
+const lineSelection = (l: CartLine): Selection => {
+  const chosen: Record<string, string[]> = {};
+  for (const g of l.item.modifier_groups) {
+    const ids = l.modifiers.filter((m) => g.modifiers.some((x) => x.id === m.id)).map((m) => m.id);
+    if (ids.length) chosen[g.id] = ids;
+  }
+  return { variantId: l.variant?.id ?? null, chosen, qty: l.qty, notes: l.notes };
+};
+let lineSeq = 0;
 
 type Screen =
   | { kind: "loading" }
@@ -448,11 +456,9 @@ function SellScreen({
   onLock: () => void;
 }) {
   const [items, setItems] = useState<Item[] | null>(null);
-  const [selected, setSelected] = useState<Item | null>(null);
-  const [variant, setVariant] = useState<Variant | null>(null);
-  const [chosen, setChosen] = useState<Record<string, Modifier[]>>({});
+  // The product sheet (svc-1): a new line starts fresh; editing a line brings its own answers.
+  const [picker, setPicker] = useState<{ item: Item; editUid: string | null; initial: Selection } | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
-  const [qty, setQty] = useState(1);
   // One order = many lines + one or more payments (M3-T3). The cart is the order
   // being built; nothing is written until "Bayar" succeeds.
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -718,6 +724,7 @@ function SellScreen({
             modifier_ids: l.modifiers.map((m) => m.id),
             quantity: l.qty,
             line_discount: l.discount,
+            notes: l.notes || null,
           })),
           bill_discount: Number(billDiscount || 0),
           voucher_code: voucherCode.trim() || null,
@@ -738,29 +745,50 @@ function SellScreen({
 
   const stockCap = (item: Item) => (item.made_to_order ? 999 : Number(item.current_stock));
 
-  function addToCart(item: Item, v: Variant | null, mods: Modifier[], n: number) {
+  /** Put a picked product in the cart. `replaceUid` is the line being edited:
+   *  it is taken out first, and if the edited answers now match another line
+   *  the two merge — the cart never shows the same thing twice. */
+  function putInCart(item: Item, sel: Selection, replaceUid: string | null) {
     setCart((c) => {
-      const key = lineKey(item.id, v, mods);
-      const others = c.filter((l) => l.item.id === item.id && lineKey(l.item.id, l.variant, l.modifiers) !== key)
-        .reduce((s, l) => s + l.qty, 0);
+      const base = replaceUid ? c.filter((l) => l.uid !== replaceUid) : c;
+      const draft: CartLine = {
+        uid: replaceUid ?? `l${++lineSeq}`,
+        item,
+        variant: selectedVariant(item, sel),
+        modifiers: selectedModifiers(item, sel),
+        qty: sel.qty,
+        discount: replaceUid ? c.find((l) => l.uid === replaceUid)?.discount ?? 0 : 0,
+        notes: sel.notes.trim(),
+      };
+      const key = lineKey(draft);
+      const others = base.filter((l) => l.item.id === item.id && lineKey(l) !== key).reduce((s, l) => s + l.qty, 0);
       const room = Math.max(0, stockCap(item) - others);
-      const existing = c.find((l) => lineKey(l.item.id, l.variant, l.modifiers) === key);
+      const existing = base.find((l) => lineKey(l) === key);
       if (existing) {
-        return c.map((l) =>
-          lineKey(l.item.id, l.variant, l.modifiers) === key ? { ...l, qty: Math.min(room, l.qty + n) } : l
-        );
+        return base.map((l) => (l === existing ? { ...l, qty: Math.min(room, l.qty + draft.qty) } : l));
       }
-      return [...c, { item, variant: v, modifiers: mods, qty: Math.min(room, n), discount: 0 }];
+      const at = replaceUid ? c.findIndex((l) => l.uid === replaceUid) : -1;
+      const next = { ...draft, qty: Math.min(room, draft.qty) };
+      if (next.qty <= 0) return base;
+      return at >= 0 ? [...base.slice(0, at), next, ...base.slice(at)] : [...base, next];
     });
   }
 
-  function changeLine(key: string, delta: number) {
+  function openProduct(item: Item) {
+    setError(null);
+    if (isQuickAdd(item)) {
+      putInCart(item, { ...freshSelection(item), qty: 1 }, null);
+      return;
+    }
+    setPicker({ item, editUid: null, initial: freshSelection(item) });
+  }
+
+  function changeLine(uid: string, delta: number) {
     setCart((c) =>
       c
         .map((l) => {
-          if (lineKey(l.item.id, l.variant, l.modifiers) !== key) return l;
-          const others = c.filter((o) => o.item.id === l.item.id && lineKey(o.item.id, o.variant, o.modifiers) !== key)
-            .reduce((s, o) => s + o.qty, 0);
+          if (l.uid !== uid) return l;
+          const others = c.filter((o) => o.item.id === l.item.id && o.uid !== uid).reduce((s, o) => s + o.qty, 0);
           const room = Math.max(0, stockCap(l.item) - others);
           return { ...l, qty: Math.min(room, l.qty + delta) };
         })
@@ -768,28 +796,8 @@ function SellScreen({
     );
   }
 
-  function setLineDiscount(key: string, amount: number) {
-    setCart((c) =>
-      c.map((l) => (lineKey(l.item.id, l.variant, l.modifiers) === key ? { ...l, discount: Math.max(0, amount) } : l))
-    );
-  }
-
-  function toggleModifier(group: ModifierGroup, m: Modifier) {
-    setChosen((prev) => {
-      const current = prev[group.id] ?? [];
-      const has = current.some((x) => x.id === m.id);
-      let next: Modifier[];
-      if (group.selection === "single") {
-        next = has ? (group.is_required ? current : []) : [m];
-      } else if (has) {
-        next = current.filter((x) => x.id !== m.id);
-      } else if (group.max_select !== null && current.length >= group.max_select) {
-        next = current;
-      } else {
-        next = [...current, m];
-      }
-      return { ...prev, [group.id]: next };
-    });
+  function setLineDiscount(uid: string, amount: number) {
+    setCart((c) => c.map((l) => (l.uid === uid ? { ...l, discount: Math.max(0, amount) } : l)));
   }
 
   async function printReceipt(orderId: string) {
@@ -846,6 +854,7 @@ function SellScreen({
             modifier_ids: l.modifiers.map((m) => m.id),
             quantity: l.qty,
             line_discount: l.discount,
+            notes: l.notes || null,
           })),
           payments,
           order_type: orderType,
@@ -974,13 +983,7 @@ function SellScreen({
               <button
                 key={item.id}
                 disabled={out}
-                onClick={() => {
-                  setSelected(item);
-                  setVariant(item.variants.find((v) => v.is_default) ?? item.variants[0] ?? null);
-                  setChosen(defaultChoices(item));
-                  setQty(1);
-                  setError(null);
-                }}
+                onClick={() => openProduct(item)}
                 className={`glass-card relative flex min-h-[8.5rem] flex-col items-start gap-1 px-5 py-5 text-left transition-[transform,box-shadow] duration-150 ${
                   out ? "opacity-40" : "hover:shadow-key active:scale-[0.98]"
                 }`}
@@ -1333,103 +1336,29 @@ function SellScreen({
         </div>
       )}
 
-      {/* Quantity sheet */}
-      {selected && (
-        <div
-          className="sheet-scrim"
-          onClick={() => !busy && setSelected(null)}
-        >
-          <div
-            className="sheet-panel block overflow-y-auto sm:max-w-md px-8 pb-10 pt-6 sm:pb-8"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mx-auto mb-5 h-1.5 w-10 rounded-full bg-[color:var(--ink-faint)] opacity-40 sm:hidden" />
-            <p className="text-[19px] font-semibold tracking-[-0.015em]">{selected.name}</p>
-            <p className="ink-soft text-sm">
-              {formatRupiah(variant?.sell_price ?? selected.sell_price)} / {selected.unit}
-              {selected.made_to_order ? " · dibuat saat dipesan" : ` · sisa ${formatQty(selected.current_stock)}`}
-            </p>
-
-            {selected.variants.length > 1 && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {selected.variants.map((v) => (
-                  <button
-                    key={v.id}
-                    onClick={() => setVariant(v)}
-                    aria-pressed={variant?.id === v.id}
-                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-colors ${
-                      variant?.id === v.id ? "toggle-on" : "toggle-off"
-                    }`}
-                  >
-                    {v.name} · {formatRupiah(v.sell_price)}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {selected.modifier_groups.map((g) => (
-              <div key={g.id} className="mt-4">
-                <p className="ink-soft text-[13px] font-semibold">
-                  {g.name}
-                  {g.is_required ? " · wajib" : g.selection === "multi" ? " · boleh lebih dari satu" : ""}
-                </p>
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  {g.modifiers.map((m) => {
-                    const on = (chosen[g.id] ?? []).some((x) => x.id === m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => toggleModifier(g, m)}
-                        aria-pressed={on}
-                  className={`rounded-2xl px-3 py-2 text-sm font-medium transition-colors ${
-                          on ? "toggle-on" : "toggle-off"
-                        }`}
-                      >
-                        {m.name}
-                        {Number(m.price_delta) > 0 ? ` +${formatRupiah(m.price_delta)}` : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-
-            <div className="mt-6 flex items-center justify-center gap-6">
-              <QtyButton label="−" onPress={() => setQty((q) => Math.max(1, q - 1))} />
-              <span className="w-16 text-center text-4xl font-bold tabular-nums">{qty}</span>
-              <QtyButton
-                label="+"
-                onPress={() => setQty((q) => Math.min(stockCap(selected), q + 1))}
-              />
-            </div>
-
-            {(() => {
-              const mods = Object.values(chosen).flat();
-              const missing = missingRequired(selected, chosen);
-              const unit = linePrice({ item: selected, variant, modifiers: mods });
-              return (
-                <>
-                  {missing.length > 0 && (
-                    <p className="ink-faint mt-4 text-center text-sm">
-                      Pilih dulu: {missing.map((g) => g.name).join(", ")}
-                    </p>
-                  )}
-                  <button
-                    onClick={() => {
-                      addToCart(selected, variant, mods, qty);
-                      setSelected(null);
-                      setQty(1);
-                    }}
-                    disabled={missing.length > 0}
-                    className="btn-accent mt-6 w-full py-4 text-lg disabled:opacity-50"
-                  >
-                    Tambah {formatRupiah(unit * qty)}
-                  </button>
-                </>
-              );
-            })()}
-          </div>
-        </div>
+      {/* Product choices (svc-1) */}
+      {picker && (
+        <ProductPicker
+          key={`${picker.item.id}:${picker.editUid ?? "new"}`}
+          product={picker.item}
+          initial={picker.initial}
+          editing={picker.editUid !== null}
+          maxQty={Math.max(
+            0,
+            stockCap(picker.item) -
+              cart.filter((l) => l.item.id === picker.item.id && l.uid !== picker.editUid).reduce((n, l) => n + l.qty, 0)
+          )}
+          meta={picker.item.made_to_order ? "dibuat saat dipesan" : `sisa ${formatQty(picker.item.current_stock)} ${picker.item.unit}`}
+          onSubmit={(sel) => {
+            putInCart(picker.item, sel, picker.editUid);
+            setPicker(null);
+          }}
+          onRemove={() => {
+            if (picker.editUid) setCart((c) => c.filter((l) => l.uid !== picker.editUid));
+            setPicker(null);
+          }}
+          onClose={() => setPicker(null)}
+        />
       )}
 
       {/* Cart bar */}
@@ -1439,15 +1368,20 @@ function SellScreen({
             {cartOpen && (
               <ul className="hairline-b mb-3 max-h-64 overflow-y-auto pb-2">
                 {cart.map((l) => {
-                  const key = lineKey(l.item.id, l.variant, l.modifiers);
+                  const key = l.uid;
                   return (
                     <li key={key} className="flex items-center gap-3 py-2">
-                      <div className="min-w-0 flex-1">
+                      <button
+                        onClick={() => setPicker({ item: l.item, editUid: l.uid, initial: lineSelection(l) })}
+                        className="min-w-0 flex-1 text-left"
+                        title="Ubah pilihan"
+                      >
                         <p className="truncate text-sm font-semibold">{lineName(l)}</p>
+                        {l.notes && <p className="ink-soft truncate text-xs">Catatan: {l.notes}</p>}
                         <p className="ink-faint text-xs">
-                          {formatRupiah(linePrice(l))} × {l.qty}
+                          {formatRupiah(linePrice(l))} × {l.qty} · ubah
                         </p>
-                      </div>
+                      </button>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => changeLine(key, -1)}

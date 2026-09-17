@@ -4,23 +4,25 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { formatRupiah } from "@/lib/format";
+import { ProductPicker } from "@/components/ProductPicker";
+import {
+  displayName,
+  freshSelection,
+  identityKey,
+  isQuickAdd,
+  selectedModifiers,
+  selectedVariant,
+  type Modifier,
+  type ModifierGroup,
+  type Selection,
+  type Variant,
+} from "@/lib/choices";
 
 // The QR e-menu (M11-T1). A guest scans the code on the table, orders, and
 // gets a short ticket code to quote at the counter. The order lands in the
 // till's own queue as an open ticket; nothing is charged here — the cashier
 // takes payment, and this page watches the ticket until it is paid.
 
-type Variant = { id: string; name: string; sell_price: string; is_default: boolean };
-type Modifier = { id: string; name: string; price_delta: string; is_default: boolean };
-type ModifierGroup = {
-  id: string;
-  name: string;
-  selection: "single" | "multi";
-  is_required: boolean;
-  min_select: number;
-  max_select: number | null;
-  modifiers: Modifier[];
-};
 type MenuItem = {
   id: string;
   name: string;
@@ -32,7 +34,7 @@ type MenuItem = {
   modifier_groups: ModifierGroup[];
 };
 type Menu = { business_name: string; items: MenuItem[] };
-type CartLine = { item: MenuItem; variant: Variant | null; modifiers: Modifier[]; qty: number; notes: string };
+type CartLine = { uid: string; item: MenuItem; variant: Variant | null; modifiers: Modifier[]; qty: number; notes: string };
 type Ticket = {
   id: string;
   code: string;
@@ -52,19 +54,22 @@ type Ticket = {
 };
 type OrderType = "dine_in" | "takeaway";
 
-const lineKey = (l: { item: MenuItem; variant: Variant | null; modifiers: Modifier[]; notes: string }) =>
-  `${l.item.id}:${l.variant?.id ?? "-"}:${l.modifiers.map((m) => m.id).sort().join(",")}:${l.notes}`;
+const lineKey = (l: CartLine) => identityKey(l.item.id, l.variant?.id ?? null, l.modifiers.map((m) => m.id), l.notes);
 const linePrice = (l: { item: MenuItem; variant: Variant | null; modifiers: Modifier[] }) =>
   Number(l.variant?.sell_price ?? l.item.sell_price) + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0);
 const lineName = (l: { item: MenuItem; variant: Variant | null; modifiers: Modifier[] }) => {
-  const base = l.variant && l.item.variants.length > 1 ? `${l.item.name} · ${l.variant.name}` : l.item.name;
+  const base = displayName(l.item, l.variant);
   return l.modifiers.length ? `${base} (${l.modifiers.map((m) => m.name).join(", ")})` : base;
 };
-const defaultChoices = (item: MenuItem): Record<string, Modifier[]> =>
-  Object.fromEntries(item.modifier_groups.map((g) => [g.id, g.modifiers.filter((m) => m.is_default)]));
-const missingRequired = (item: MenuItem, chosen: Record<string, Modifier[]>) =>
-  item.modifier_groups.filter((g) => g.is_required && (chosen[g.id]?.length ?? 0) < Math.max(1, g.min_select));
-const needsPicker = (item: MenuItem) => item.variants.length > 1 || item.modifier_groups.length > 0;
+const lineSelection = (l: CartLine): Selection => {
+  const chosen: Record<string, string[]> = {};
+  for (const g of l.item.modifier_groups) {
+    const ids = l.modifiers.filter((m) => g.modifiers.some((x) => x.id === m.id)).map((m) => m.id);
+    if (ids.length) chosen[g.id] = ids;
+  }
+  return { variantId: l.variant?.id ?? null, chosen, qty: l.qty, notes: l.notes };
+};
+let lineSeq = 0;
 
 export default function MenuPage() {
   const params = useParams<{ token: string }>();
@@ -74,11 +79,7 @@ export default function MenuPage() {
   const [menu, setMenu] = useState<Menu | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [picker, setPicker] = useState<MenuItem | null>(null);
-  const [variant, setVariant] = useState<Variant | null>(null);
-  const [chosen, setChosen] = useState<Record<string, Modifier[]>>({});
-  const [qty, setQty] = useState(1);
-  const [notes, setNotes] = useState("");
+  const [picker, setPicker] = useState<{ item: MenuItem; editUid: string | null; initial: Selection } | null>(null);
   const [checkout, setCheckout] = useState(false);
   const [orderType, setOrderType] = useState<OrderType>("dine_in");
   const [table, setTable] = useState("");
@@ -132,41 +133,37 @@ export default function MenuPage() {
   const cartTotal = useMemo(() => cart.reduce((s, l) => s + linePrice(l) * l.qty, 0), [cart]);
   const cartCount = cart.reduce((s, l) => s + l.qty, 0);
 
-  const addLine = useCallback((item: MenuItem, v: Variant | null, mods: Modifier[], n: number, lineNotes: string) => {
+  /** Add a picked product, or put an edited line back. Lines merge only when
+   *  size, every extra and the note all match (svc-1). */
+  const putLine = useCallback((item: MenuItem, sel: Selection, replaceUid: string | null) => {
     setCart((prev) => {
-      const key = lineKey({ item, variant: v, modifiers: mods, notes: lineNotes });
-      const found = prev.find((l) => lineKey(l) === key);
-      if (found) return prev.map((l) => (l === found ? { ...l, qty: l.qty + n } : l));
-      return [...prev, { item, variant: v, modifiers: mods, qty: n, notes: lineNotes }];
+      const base = replaceUid ? prev.filter((l) => l.uid !== replaceUid) : prev;
+      const draft: CartLine = {
+        uid: replaceUid ?? `m${++lineSeq}`,
+        item,
+        variant: selectedVariant(item, sel),
+        modifiers: selectedModifiers(item, sel),
+        qty: sel.qty,
+        notes: sel.notes.trim(),
+      };
+      const found = base.find((l) => lineKey(l) === lineKey(draft));
+      if (found) return base.map((l) => (l === found ? { ...l, qty: Math.min(99, l.qty + draft.qty) } : l));
+      const at = replaceUid ? prev.findIndex((l) => l.uid === replaceUid) : -1;
+      return at >= 0 ? [...base.slice(0, at), draft, ...base.slice(at)] : [...base, draft];
     });
   }, []);
 
   function openPicker(item: MenuItem) {
     if (!item.available) return;
-    if (!needsPicker(item)) {
-      addLine(item, item.variants[0] ?? null, [], 1, "");
+    if (isQuickAdd(item)) {
+      putLine(item, freshSelection(item), null);
       return;
     }
-    setPicker(item);
-    setVariant(item.variants.find((v) => v.is_default) ?? item.variants[0] ?? null);
-    setChosen(defaultChoices(item));
-    setQty(1);
-    setNotes("");
+    setPicker({ item, editUid: null, initial: freshSelection(item) });
   }
 
-  function toggleModifier(group: ModifierGroup, m: Modifier) {
-    setChosen((prev) => {
-      const current = prev[group.id] ?? [];
-      const has = current.some((x) => x.id === m.id);
-      if (group.selection === "single") return { ...prev, [group.id]: has && !group.is_required ? [] : [m] };
-      if (has) return { ...prev, [group.id]: current.filter((x) => x.id !== m.id) };
-      if (group.max_select !== null && current.length >= group.max_select) return prev;
-      return { ...prev, [group.id]: [...current, m] };
-    });
-  }
-
-  function changeLine(key: string, delta: number) {
-    setCart((prev) => prev.map((l) => (lineKey(l) === key ? { ...l, qty: l.qty + delta } : l)).filter((l) => l.qty > 0));
+  function changeLine(uid: string, delta: number) {
+    setCart((prev) => prev.map((l) => (l.uid === uid ? { ...l, qty: Math.min(99, l.qty + delta) } : l)).filter((l) => l.qty > 0));
   }
 
   async function placeOrder() {
@@ -231,9 +228,6 @@ export default function MenuPage() {
   if (ticket) {
     return <TicketView ticket={ticket} businessName={menu?.business_name ?? ""} onAgain={orderAgain} />;
   }
-
-  const pickerMissing = picker ? missingRequired(picker, chosen) : [];
-  const pickerPrice = picker ? linePrice({ item: picker, variant, modifiers: Object.values(chosen).flat() }) : 0;
 
   return (
     <main className="mx-auto min-h-screen max-w-md px-4 pb-32">
@@ -305,88 +299,23 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* Size & extras picker */}
+      {/* Product choices (svc-1) */}
       {picker && (
-        <div className="sheet-scrim sm:items-end" onClick={() => setPicker(null)}>
-          <div
-            className="sheet-panel block overflow-y-auto sm:max-w-md px-6 pb-8 pt-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-xl font-bold">{picker.name}</p>
-            {picker.variants.length > 1 && (
-              <div className="mt-3">
-                <p className="ink-soft text-[13px] font-medium">Ukuran</p>
-                <div className="mt-1 flex flex-wrap gap-2">
-                  {picker.variants.map((v) => (
-                    <button
-                      key={v.id}
-                      onClick={() => setVariant(v)}
-                      aria-pressed={variant?.id === v.id}
-                  className={`rounded-2xl px-3 py-2 text-sm font-semibold ${variant?.id === v.id ? "toggle-on" : "toggle-off"}`}
-                    >
-                      {v.name} · {formatRupiah(v.sell_price)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {picker.modifier_groups.map((g) => (
-              <div key={g.id} className="mt-3">
-                <p className="ink-soft text-[13px] font-medium">
-                  {g.name}
-                  {g.is_required ? " · wajib" : ""}
-                  {g.selection === "multi" && g.max_select !== null ? ` · maks ${g.max_select}` : ""}
-                </p>
-                <div className="mt-1 flex flex-wrap gap-2">
-                  {g.modifiers.map((m) => {
-                    const on = (chosen[g.id] ?? []).some((x) => x.id === m.id);
-                    const delta = Number(m.price_delta);
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => toggleModifier(g, m)}
-                        aria-pressed={on}
-                  className={`rounded-2xl px-3 py-2 text-sm font-semibold ${on ? "toggle-on" : "toggle-off"}`}
-                      >
-                        {m.name}
-                        {delta !== 0 ? ` ${delta > 0 ? "+" : "−"}${formatRupiah(Math.abs(delta))}` : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            <input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value.slice(0, 200))}
-              className="field mt-4 w-full text-sm"
-              placeholder="Catatan (mis. tanpa gula)"
-            />
-            <div className="mt-4 flex items-center justify-between">
-              <div className="surface-inset flex items-center gap-1 rounded-2xl p-1">
-                <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="h-10 w-10 rounded-xl text-xl font-bold">
-                  −
-                </button>
-                <span className="w-8 text-center text-lg font-bold tabular-nums">{qty}</span>
-                <button onClick={() => setQty((q) => Math.min(99, q + 1))} className="h-10 w-10 rounded-xl text-xl font-bold">
-                  +
-                </button>
-              </div>
-              <p className="text-lg font-bold tabular-nums">{formatRupiah(pickerPrice * qty)}</p>
-            </div>
-            {pickerMissing.length > 0 && <p className="mt-2 text-xs" style={{ color: "var(--warn)" }}>Pilih dulu: {pickerMissing.map((g) => g.name).join(", ")}</p>}
-            <button
-              disabled={pickerMissing.length > 0}
-              onClick={() => {
-                addLine(picker, variant, Object.values(chosen).flat(), qty, notes.trim());
-                setPicker(null);
-              }}
-              className="btn-accent mt-4 w-full py-3 text-base disabled:opacity-50"
-            >
-              Tambah ke pesanan
-            </button>
-          </div>
-        </div>
+        <ProductPicker
+          key={`${picker.item.id}:${picker.editUid ?? "new"}`}
+          product={picker.item}
+          initial={picker.initial}
+          editing={picker.editUid !== null}
+          onSubmit={(sel) => {
+            putLine(picker.item, sel, picker.editUid);
+            setPicker(null);
+          }}
+          onRemove={() => {
+            if (picker.editUid) setCart((c) => c.filter((l) => l.uid !== picker.editUid));
+            setPicker(null);
+          }}
+          onClose={() => setPicker(null)}
+        />
       )}
 
       {/* Checkout */}
@@ -399,14 +328,17 @@ export default function MenuPage() {
             <p className="text-xl font-bold">Pesanan kamu</p>
             <ul className="mt-3 space-y-2">
               {cart.map((l) => {
-                const key = lineKey(l);
+                const key = l.uid;
                 return (
                   <li key={key} className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
+                    <button
+                      onClick={() => setPicker({ item: l.item, editUid: l.uid, initial: lineSelection(l) })}
+                      className="min-w-0 text-left"
+                    >
                       <p className="truncate text-sm font-semibold">{lineName(l)}</p>
                       {l.notes && <p className="ink-faint truncate text-xs">{l.notes}</p>}
-                      <p className="ink-soft text-xs">{formatRupiah(linePrice(l))}</p>
-                    </div>
+                      <p className="ink-soft text-xs">{formatRupiah(linePrice(l))} · ubah</p>
+                    </button>
                     <div className="surface-inset flex shrink-0 items-center gap-1 rounded-2xl p-0.5">
                       <button onClick={() => changeLine(key, -1)} className="h-8 w-8 rounded-xl font-bold">
                         −

@@ -56,7 +56,9 @@ from app.schemas.pos import (
     SaleOut,
 )
 from app.services.orders import (
+    ChoiceMissing,
     DiscountNeedsManager,
+    require_explicit_choices,
     ManagerPinThrottled,
     list_orders,
     order_number,
@@ -271,6 +273,11 @@ def _rp(amount) -> str:
     return f"Rp {amount:,.0f}".replace(",", ".")
 
 
+def choice_missing_message(exc: ChoiceMissing) -> str:
+    """svc-1: the one wording for a size nobody chose, at the till and on the menu."""
+    return f"Ukuran {exc.item_name} belum dipilih — pilih ukurannya dulu"
+
+
 _ORDER_TYPE_ERRORS = {   # M11-T3
     "address": "Pesanan antar perlu alamat pengantaran",
     "phone": "Pesanan antar perlu nomor HP penerima — isi nomornya atau pilih pelanggan yang punya nomor",
@@ -381,18 +388,20 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
     """A multi-line order with one or more payments (M3-T3). All-or-nothing:
     an out-of-stock line or payments that do not add up leave nothing behind."""
     start = time.perf_counter()
+    specs = [
+        OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, modifier_ids=list(l.modifier_ids),
+                      quantity=l.quantity, unit_price=l.unit_price, notes=l.notes,
+                      line_discount=l.line_discount)
+        for l in payload.lines
+    ]
     try:
+        await require_explicit_choices(ctx.session, specs)
         created = await create_order(
             ctx.session,
             business_id=ctx.business_id,
             staff_id=ctx.staff_id,
             order_type=payload.order_type,
-            lines=[
-                OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, modifier_ids=list(l.modifier_ids),
-                              quantity=l.quantity, unit_price=l.unit_price, notes=l.notes,
-                              line_discount=l.line_discount)
-                for l in payload.lines
-            ],
+            lines=specs,
             payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
             bill_discount=payload.bill_discount,
             manager_pin=payload.manager_pin,
@@ -403,6 +412,8 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             guest_name=payload.guest_name,
             guest_phone=payload.guest_phone,
         )
+    except ChoiceMissing as exc:
+        raise HTTPException(status_code=422, detail=choice_missing_message(exc))
     except OrderTypeInvalid as exc:
         raise HTTPException(status_code=422, detail=_ORDER_TYPE_ERRORS[exc.code])
     except VoucherInvalid as exc:

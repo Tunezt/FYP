@@ -110,6 +110,33 @@ async def _resolve_modifiers(session: AsyncSession, item: Item, modifier_ids: li
     return chosen
 
 
+class ChoiceMissing(Exception):
+    """A size the customer never chose (svc-1). The service layer still fills
+    in the default variant for callers that have no customer to ask (the
+    WhatsApp tool, the backdated paper slip, the M4 tests); the till and the
+    QR menu call `require_explicit_choices` first, so a missing answer there is
+    a question back to the cashier, not a silent "Standar"."""
+
+    def __init__(self, item_name: str):
+        self.item_name = item_name
+        super().__init__(item_name)
+
+
+async def require_explicit_choices(session: AsyncSession, lines: list["OrderLineSpec"]) -> None:
+    """Refuse a line for a product with more than one active size that does
+    not name one. Required modifier groups need no extra check: `_resolve_modifiers`
+    never applies catalogue defaults, so an unanswered group is already refused."""
+    for spec in lines:
+        if spec.variant_id is not None:
+            continue
+        sizes = (await session.execute(
+            select(func.count(ItemVariant.id)).where(ItemVariant.item_id == spec.item_id, ItemVariant.is_active.is_(True))
+        )).scalar_one()
+        if sizes > 1:
+            item = await session.get(Item, spec.item_id)
+            raise ChoiceMissing(item.name if item is not None else "")
+
+
 class PaymentMismatch(Exception):
     def __init__(self, total: Decimal, paid: Decimal):
         self.total = total

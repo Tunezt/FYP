@@ -20,7 +20,7 @@ from app.core.security import decode_token
 from app.models import Business, Item, ItemVariant, Order
 from app.schemas.menu import MenuItemOut, MenuOut, TicketIn, TicketLineOut, TicketOut
 from app.schemas.pos import PosModifierGroupOut, PosModifierOut, PosVariantOut
-from app.services.orders import ItemNotFound, ModifierSelectionInvalid, OrderLineSpec, VariantNotFound
+from app.services.orders import ChoiceMissing, ItemNotFound, ModifierSelectionInvalid, OrderLineSpec, VariantNotFound
 from app.services.tickets import QueueFull, TicketNotFound, TicketUnavailable, get_ticket, place_ticket, ticket_code
 
 router = APIRouter(prefix="/menu", tags=["menu"])
@@ -131,6 +131,10 @@ async def place(menu_token: str, payload: TicketIn):
             raise HTTPException(status_code=404, detail="Menu tidak ditemukan — coba muat ulang halaman")
         except VariantNotFound:
             raise HTTPException(status_code=404, detail="Ukuran menu tidak ditemukan atau sudah tidak tersedia")
+        except ChoiceMissing as exc:
+            from app.api.pos import choice_missing_message
+
+            raise HTTPException(status_code=422, detail=choice_missing_message(exc))
         except ModifierSelectionInvalid as exc:
             messages = {
                 "unknown": "Pilihan tambahan tidak dikenali atau sudah tidak tersedia",

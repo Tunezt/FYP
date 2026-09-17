@@ -36,6 +36,7 @@ from app.services.orders import (
     VariantNotFound,
     _resolve_modifiers,
     create_order,
+    require_explicit_choices,
 )
 from app.services.pricing import LineInput, price_order, pricing_config
 
@@ -85,6 +86,9 @@ async def place_ticket(
     if order_type not in MENU_ORDER_TYPES:
         order_type = "dine_in"
     placed_at = placed_at or datetime.now(timezone.utc)
+    # A guest's order is always a customer's own choices (svc-1): no size is
+    # ever assumed for them.
+    await require_explicit_choices(session, lines)
     waiting = int((await session.execute(
         select(func.count(Order.id)).where(Order.status == "open", Order.source == "menu")
     )).scalar_one())

@@ -1553,3 +1553,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Gates were run against exactly this tree before committing; nothing was changed to make them pass.
 **Deviation:** none.
 **Next:** svc-1 - deliberate product choices on the till and the QR menu.
+
+
+### [svc-1] Deliberate product choices: nothing is chosen for the customer
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** backend/app/services/orders.py (`ChoiceMissing`, `require_explicit_choices`), backend/app/services/tickets.py (the menu always asks), backend/app/api/pos.py (`/pos/orders` asks; `choice_missing_message`), backend/app/api/menu.py, backend/tests/test_service_journey.py (new, tests 1-2), frontend/lib/choices.ts (new), frontend/components/ProductPicker.tsx (new), frontend/app/pos/[businessToken]/page.tsx, frontend/app/menu/[token]/page.tsx
+**Gates:** pytest 563 passed 0 skipped (was 561) - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **User-directed.** Both pickers pre-selected the default size and every `is_default` modifier, so "Americano" silently became "Americano Standar Panas".
+- **The server was half of the problem.** Required modifier groups were already enforced (`_resolve_modifiers` never applies defaults), but a line with no `variant_id` was quietly given the default size. The till and the QR menu now call `require_explicit_choices` first: a product with more than one active size must name one, or the answer is a 422 "Ukuran Americano belum dipilih". The service-layer default stays for callers with no customer to ask (WhatsApp tool, backdated slip) - `test_line_without_variant_uses_the_default` still encodes that, and it is right for those callers.
+- **One picker, one rule set, both screens.** `lib/choices.ts` decides what to ask; `ProductPicker` shows every question with "wajib"/"opsional" and a tick once answered, and the add button explains the gap ("Pilih ukuran dan suhu") instead of just greying out. Single/multi and min/max are respected; a full multi group disables the rest.
+- **A product with nothing to ask stays one tap** (one variant, no modifier groups). Optional extras still open the sheet, with "Tambah" ready immediately.
+- **Lines are identities, not items.** Size, every modifier and the preparation note together decide whether two taps merge; editing a line reopens the sheet with that line's answers and merges if the edit makes it equal to another line. Verified in the browser at 1280x800 (till) and 375x812 (menu); option labels wrap instead of truncating on a phone.
+**Deviation:** none.
+**Next:** svc-2 - unpaid orders on the backend: held drafts, edits under a revision guard, idempotent submission, the active-orders list.
