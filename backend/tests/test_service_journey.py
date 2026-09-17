@@ -541,3 +541,76 @@ async def test_10_cancel_before_payment_and_refund_after_keep_the_audit_trail(cl
         assert (await s.get(Item, c["americano"])).current_stock == D(40)
         approval = (await s.execute(select(Approval).where(Approval.order_id == oid))).scalar_one()
         assert approval.action == "refund" and approval.approved_by == c["owner"] and approval.requested_by == c["sari"]
+
+
+# ── The QR journey: private, quoted, re-priced before payment (svc-5) ───────
+
+
+async def test_a_guests_order_is_private_to_the_phone_that_placed_it(client, cafe):
+    c = cafe
+    body = {"lines": [_line(c, item="roti", notes="potong dua")], "order_type": "dine_in", "table_label": "Meja 7",
+            "guest_name": "Ayu", "note": "alergi kacang", "client_ref": _ref()}
+    placed = (await client.post(f"/menu/{c['menu']}/orders", json=body)).json()
+    key = placed["access_key"]
+    assert key and len(key) >= 20 and placed["guest_name"] == "Ayu"
+    # The phone retries after losing signal: same order, same key.
+    again = (await client.post(f"/menu/{c['menu']}/orders", json=body)).json()
+    assert again["id"] == placed["id"] and again["access_key"] == key
+    # Anyone else with the shared menu link and the id sees the order's progress, not the person.
+    stranger = (await client.get(f"/menu/{c['menu']}/orders/{placed['id']}")).json()
+    assert stranger["status"] == "open" and stranger["access_key"] is None
+    assert (stranger["guest_name"], stranger["table_label"], stranger["note"], stranger["lines"][0]["notes"]) == (None, None, None, None)
+    wrong = (await client.get(f"/menu/{c['menu']}/orders/{placed['id']}?key=not-the-key")).json()
+    assert wrong["guest_name"] is None
+    mine = (await client.get(f"/menu/{c['menu']}/orders/{placed['id']}?key={key}")).json()
+    assert (mine["guest_name"], mine["table_label"], mine["note"], mine["lines"][0]["notes"]) == ("Ayu", "Meja 7", "alergi kacang", "potong dua")
+    assert mine["access_key"] is None     # the key is handed out once, at placing
+
+
+async def test_the_guest_confirms_the_real_total_and_a_moved_price_is_refused_not_charged(client, session_factory, cafe):
+    from app.models import ItemVariant
+
+    c = cafe
+    lines = [_line(c, variant="large", mods=["dingin", "shot"]), _line(c, item="roti", qty=2)]
+    quote = await client.post(f"/menu/{c['menu']}/quote", json={"lines": lines, "order_type": "takeaway"})
+    assert quote.status_code == 200, quote.text
+    assert D(quote.json()["total"]) == D(27000 + 30000)
+    # A quote for a cart that is not answered yet explains, like the picker does.
+    assert (await client.post(f"/menu/{c['menu']}/quote", json={"lines": [_line(c, mods=["dingin"])], "order_type": "takeaway"})).status_code == 422
+
+    # The menu page was open for a while; the owner changed the price of Large meanwhile.
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        (await s.get(ItemVariant, c["large"])).sell_price = D(24000)
+        await s.commit()
+    stale = await client.post(f"/menu/{c['menu']}/orders", json={"lines": lines, "order_type": "takeaway", "expected_total": quote.json()["total"]})
+    assert stale.status_code == 409 and "Harga menu baru saja berubah" in stale.json()["detail"]
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        assert await _count(s, Order, Order.source == "menu") == 0
+    fresh = (await client.post(f"/menu/{c['menu']}/quote", json={"lines": lines, "order_type": "takeaway"})).json()
+    placed = await client.post(f"/menu/{c['menu']}/orders", json={"lines": lines, "order_type": "takeaway", "expected_total": fresh["total"]})
+    assert placed.status_code == 201 and D(placed.json()["total"]) == D(59000)
+    tid, key = placed.json()["id"], placed.json()["access_key"]
+
+    # It changes again before the guest reaches the counter.
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        (await s.get(ItemVariant, c["large"])).sell_price = D(25000)
+        await s.commit()
+    active = {a["id"]: a for a in (await client.get("/pos/active-orders", headers=_auth(c["pos"]))).json()}[tid]
+    assert active["price_changes"] == [{"name": "Americano · Large", "was": "29000.00", "now": "30000.00"}]
+    refused = await client.post(f"/pos/tickets/{tid}/settle", headers=_auth(c["pos"]), json={"payments": _cash(59000)})
+    assert refused.status_code == 409 and "Americano · Large Rp 29.000 → Rp 30.000" in refused.json()["detail"]
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        assert await _footprint(s, uuid.UUID(tid)) == {"lines": 0, "payments": 0, "journal": 0, "movements": 0, "kitchen_events": 0}
+    # The cashier re-prices in front of the guest; the selections are untouched.
+    repriced = await client.post(f"/pos/open-orders/{tid}/reprice", headers=_auth(c["pos"]), json={"rev": 0})
+    assert repriced.status_code == 200, repriced.text
+    assert D(repriced.json()["total"]) == D(60000) and repriced.json()["price_changes"] == []
+    assert [(l["size"], l["modifiers"], D(l["quantity"])) for l in repriced.json()["lines"]] == [("Large", ["Dingin", "Extra shot"], D(1)), (None, [], D(2))]
+    watched = (await client.get(f"/menu/{c['menu']}/orders/{tid}?key={key}")).json()
+    assert watched["revised"] is True and D(watched["total"]) == D(60000)
+    paid = await client.post(f"/pos/tickets/{tid}/settle", headers=_auth(c["pos"]), json={"payments": _cash(60000), "rev": 1})
+    assert paid.status_code == 200 and D(paid.json()["total"]) == D(60000)

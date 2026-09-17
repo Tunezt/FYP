@@ -28,7 +28,9 @@ to reverse because nothing was taken. Nothing is deleted.
 """
 from __future__ import annotations
 
+import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -71,6 +73,22 @@ class QueueFull(Exception):
 
 class TicketNotFound(Exception):
     pass
+
+
+class PricesChanged(Exception):
+    """The catalogue moved under an unpaid order (svc-5): a price is not what the
+    customer was shown, or a product, size or option is gone. Payment waits until
+    the cashier re-prices it in front of the customer."""
+
+    def __init__(self, changes: list["PriceChange"]):
+        self.changes = changes
+
+
+@dataclass
+class PriceChange:
+    name: str
+    was: Decimal | None
+    now: Decimal | None     # None: no longer sold as ordered
 
 
 class OrderChanged(Exception):
@@ -216,7 +234,10 @@ async def place_ticket(
         table_label=table_label or None,
         guest_name=guest_name or None,
         guest_phone=guest_phone or None,
-        cart={"lines": cart_lines, "note": note or None, "estimate": True, "rev": 0},
+        # The guest's own key to this order (svc-5). The menu link is shared by
+        # every table; the order id alone must not show a stranger's name.
+        cart={"lines": cart_lines, "note": note or None, "estimate": True, "rev": 0,
+              "access_key": secrets.token_urlsafe(18)},
         sold_at=placed_at,
         created_at=placed_at,
         client_ref=client_ref,
@@ -371,6 +392,37 @@ async def get_open_order(session: AsyncSession, order_id: uuid.UUID) -> Order:
     return order
 
 
+async def price_changes(session: AsyncSession, order: Order) -> list[PriceChange]:
+    """What today's catalogue says about an unpaid cart, line by line (svc-5).
+    Stock is not checked here — running out is the sale's own refusal, with its
+    own message — only whether each line still exists at the price it shows."""
+    from app.models import Modifier
+
+    changes: list[PriceChange] = []
+    for l in (order.cart or {}).get("lines", []):
+        label = f"{l['item_name']} · {l['variant_name']}" if l.get("variant_name") else l["item_name"]
+        was = Decimal(l["unit_price"])
+        item = await session.get(Item, uuid.UUID(l["item_id"]))
+        variant = await session.get(ItemVariant, uuid.UUID(l["variant_id"])) if l.get("variant_id") else None
+        if item is None or (l.get("variant_id") and (variant is None or not variant.is_active)):
+            changes.append(PriceChange(name=label, was=was, now=None))
+            continue
+        base = Decimal(variant.sell_price) if variant is not None else Decimal(item.sell_price)
+        now = base
+        gone = False
+        for mid in l.get("modifier_ids", []):
+            m = await session.get(Modifier, uuid.UUID(mid))
+            if m is None or not m.is_active:
+                gone = True
+                break
+            now += Decimal(m.price_delta)
+        if gone:
+            changes.append(PriceChange(name=label, was=was, now=None))
+        elif now.quantize(TWO_PLACES) != was.quantize(TWO_PLACES):
+            changes.append(PriceChange(name=label, was=was, now=now.quantize(TWO_PLACES)))
+    return changes
+
+
 def ticket_specs(ticket: Order) -> list[OrderLineSpec]:
     """The cart as the sale path wants it — at the prices it was priced at."""
     return [
@@ -430,6 +482,11 @@ async def settle_ticket(
         raise TicketNotOpen(ticket.status)
     if expected_rev is not None and cart_rev(ticket) != int(expected_rev):
         raise OrderChanged(ticket.status, cart_rev(ticket))
+    # Server-authoritative prices (svc-5): nobody is charged a price that is no
+    # longer the catalogue's, and nobody is charged a new one without seeing it.
+    changes = await price_changes(session, ticket)
+    if changes:
+        raise PricesChanged(changes)
     if ticket.parent_order_id is not None:
         from app.services.orders import resolve_parent
 

@@ -1617,3 +1617,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - `history()` is the last handovers of the board window, newest first, with who handed over.
 **Deviation:** none.
 **Next:** svc-5 - QR backend: per-order access key, a real quote before sending, prices re-checked before payment.
+
+
+### [svc-5] QR backend: a private order, a real total, and no price the customer did not see
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** backend/app/services/tickets.py (`access_key` on placing, `price_changes`, `PricesChanged` at settlement), backend/app/api/menu.py (`POST /menu/{token}/quote`, `expected_total` on placing, `watch?key=` with a redacted view without it), backend/app/api/pos.py (`POST /pos/open-orders/{id}/reprice`, `price_changes` on active orders, `prices_changed_message`), backend/app/schemas/menu.py, backend/tests/test_service_journey.py (2 tests)
+**Gates:** pytest 574 passed 0 skipped (was 572) - migrations round-trip ok (no migration in this task; 0037 -> 0036 -> 0037) - frontend build ok - seed ok
+**Notes:**
+- **Canary (§0.3) ran before this task**, five commits after the session began: `git stash list` empty, `alembic downgrade base` then `upgrade head` (0001 -> 0037), seed ok, pytest 572 passed 0 skipped.
+- **Every table shares one menu link, so the order id is not a secret worth a person's name.** Placing a QR order returns a random `access_key` (kept in the cart, returned only to the placing request or its idempotent replay). `GET /menu/{token}/orders/{id}` without the key still shows status, items, total and kitchen progress (the existing M11 tests depend on that). Guest name, phone, table, order note and line notes are withheld. Comparison is `secrets.compare_digest`.
+- **The guest confirms the total the till will charge.** `/menu/{token}/quote` runs the same `price_cart` (choices, availability, tax, service, rounding) and writes nothing. Placing with `expected_total` is refused, with nothing written, if the server now prices the cart differently, so the phone can re-quote with the cart intact.
+- **Business decision taken, and stated: the catalogue price at payment wins, and the customer must see it first.** Before this, settlement charged the price stored at placing, whatever the catalogue said by then. Now `settle_ticket` compares every unpaid line with today's catalogue and refuses payment with the old and new price named ("Americano · Large Rp 29.000 → Rp 30.000"). The cashier re-prices explicitly (`/reprice`, which keeps every size, option, note and quantity and bumps the revision), the guest's page shows `revised`, and payment goes through at the new total. Out-of-stock stays the sale's own 409 ("Stok tidak cukup"), which `test_a_settlement_that_fails_leaves_the_ticket_open_and_untouched` pins. If the owner prefers to honour the price shown at order time, this check is the one place to change.
+- A first attempt normalised cart quantities to `1.000`. `test_placing_a_ticket_writes_one_open_row_and_takes_nothing` pins the stored `"2"`, so that change was reverted, and the new test compares numerically instead.
+**Deviation:** none.
+**Next:** svc-6 - the cashier workspace: products beside a persistent order, Pesanan baru / aktif / Riwayat transaksi.

@@ -19,7 +19,7 @@ from app.ai.periods import period_range
 from app.services import pin_guard
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
-from app.schemas.menu import ActiveOrderOut, DraftIn, OpenOrderUpdateIn, PosTicketOut, TicketCancelIn, TicketSettleIn
+from app.schemas.menu import ActiveOrderOut, DraftIn, OpenOrderUpdateIn, PosTicketOut, RepriceIn, TicketCancelIn, TicketSettleIn
 from app.schemas.pos import KitchenBoardOut, KitchenLineIn, KitchenLineOut, KitchenStateIn, KitchenTicketOut
 from app.core.security import create_token, decode_token, verify_pin
 from app.models import Business, Item, ItemVariant, Modifier, RequestLog, Staff
@@ -555,7 +555,7 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
     """Payment for a guest's ticket: exactly what `POST /pos/orders` does, on
     the ticket's own row. All-or-nothing; a second till gets 409."""
     from app.services.orders import TicketNotOpen
-    from app.services.tickets import OrderChanged, TicketNotFound, find_by_client_ref, get_open_order, settle_ticket
+    from app.services.tickets import OrderChanged, PricesChanged, TicketNotFound, find_by_client_ref, get_open_order, settle_ticket
 
     start = time.perf_counter()
     try:
@@ -576,6 +576,8 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
     except OrderChanged as exc:
         raise HTTPException(status_code=409, detail=order_changed_message(exc))
+    except PricesChanged as exc:
+        raise HTTPException(status_code=409, detail=prices_changed_message(exc))
     except ParentOrderInvalid as exc:
         raise HTTPException(status_code=409, detail=_PARENT_ERRORS[exc.code])
     except OrderTypeInvalid as exc:
@@ -635,6 +637,18 @@ async def pos_cancel_ticket(order_id: uuid.UUID, payload: TicketCancelIn, ctx: P
     except TicketNotOpen as exc:
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
     return ticket_out(ticket, PosTicketOut)
+
+
+def prices_changed_message(exc) -> str:
+    """svc-5: name what moved, so the cashier can say it to the customer."""
+    parts = []
+    for ch in exc.changes[:3]:
+        if ch.now is None:
+            parts.append(f"{ch.name} sudah tidak tersedia")
+        else:
+            parts.append(f"{ch.name} {_rp(ch.was)} → {_rp(ch.now)}")
+    more = f" dan {len(exc.changes) - 3} lainnya" if len(exc.changes) > 3 else ""
+    return f"Harga berubah sejak dipesan: {'; '.join(parts)}{more} — perbarui pesanan dan konfirmasi ke pelanggan dulu"
 
 
 def order_changed_message(exc) -> str:
@@ -722,7 +736,14 @@ async def _active_views(session, orders, tickets_by_id=None):
         payment = {"open": "unpaid", "completed": "paid", "voided": "cancelled" if o.cart is not None and "cancelled" in cart else "reversed",
                    "refunded": "reversed"}.get(o.status, "paid")
         parent = parents.get(getattr(o, "parent_order_id", None))
+        changes = []
+        if o.status == "open":
+            from app.schemas.menu import PriceChangeOut
+            from app.services.tickets import price_changes
+
+            changes = [PriceChangeOut(name=ch.name, was=ch.was, now=ch.now) for ch in await price_changes(session, o)]
         out.append(ActiveOrderOut(
+            price_changes=changes,
             id=o.id, code=order_code(o), number=order_number(o.id), source=o.source, status=o.status, payment=payment,
             prep=ticket.state if ticket is not None else None,
             order_type=o.order_type, table_label=o.table_label, guest_name=o.guest_name, note=cart.get("note"),
@@ -798,6 +819,31 @@ async def pos_update_open_order(order_id: uuid.UUID, payload: OpenOrderUpdateIn,
             ctx.session, business_id=ctx.business_id, order=order, expected_rev=payload.rev, staff_id=ctx.staff_id,
             lines=_cart_specs(payload.lines), order_type=payload.order_type, table_label=payload.table_label,
             guest_name=payload.guest_name, note=payload.note,
+        ))
+    except TicketNotOpen as exc:
+        raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
+    except OrderChanged as exc:
+        raise HTTPException(status_code=409, detail=order_changed_message(exc))
+    return (await _active_views(ctx.session, [order]))[0]
+
+
+@router.post("/open-orders/{order_id}/reprice", response_model=ActiveOrderOut)
+async def pos_reprice_open_order(order_id: uuid.UUID, payload: RepriceIn, ctx: PosCtx):
+    """Bring an unpaid order to today's prices without changing what is in it
+    (svc-5). A line whose product, size or option is gone cannot be re-priced;
+    the cashier edits it out instead."""
+    from app.services.orders import TicketNotOpen
+    from app.services.tickets import OrderChanged, TicketNotFound, get_open_order, ticket_specs, update_open_order
+
+    try:
+        order = await get_open_order(ctx.session, order_id)
+    except TicketNotFound:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    specs = [OrderLineSpec(item_id=s.item_id, variant_id=s.variant_id, modifier_ids=s.modifier_ids, quantity=s.quantity, notes=s.notes)
+             for s in ticket_specs(order)] if order.status == "open" else []
+    try:
+        order = await _price_errors(lambda: update_open_order(
+            ctx.session, business_id=ctx.business_id, order=order, expected_rev=payload.rev, staff_id=ctx.staff_id, lines=specs,
         ))
     except TicketNotOpen as exc:
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))

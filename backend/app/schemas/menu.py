@@ -48,6 +48,33 @@ class TicketIn(BaseModel):
     # svc-2: the phone names this submission once; a retry after a dropped
     # connection returns the same ticket instead of a second one.
     client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    # svc-5: the total the guest was shown (from /quote). If the server now
+    # prices the same cart differently the order is refused and re-quoted.
+    expected_total: Decimal | None = Field(default=None, ge=0)
+
+
+class MenuQuoteIn(BaseModel):
+    lines: list[TicketLineIn] = Field(min_length=1, max_length=30)
+    order_type: MenuOrderType = "dine_in"
+
+
+class MenuQuoteLineOut(BaseModel):
+    item_id: uuid.UUID
+    unit_price: Decimal
+    line_total: Decimal
+
+
+class MenuQuoteOut(BaseModel):
+    """The estimate a guest confirms before sending (svc-5): the same pricing
+    the cashier will run, tax and service included."""
+
+    lines: list[MenuQuoteLineOut]
+    subtotal: Decimal
+    service_charge: Decimal
+    tax_total: Decimal
+    tax_inclusive: bool
+    rounding: Decimal
+    total: Decimal
 
 
 class TicketLineOut(BaseModel):
@@ -84,6 +111,8 @@ class TicketOut(BaseModel):
     total: Decimal
     is_estimate: bool
     kitchen_state: str | None = None   # once paid: new · preparing · ready · done (M11-T2)
+    access_key: str | None = None      # svc-5: returned to the device that placed it, nobody else
+    revised: bool = False              # svc-5: the cashier changed it after it was sent
 
 
 class PosTicketOut(TicketOut):
@@ -177,3 +206,19 @@ class ActiveOrderOut(BaseModel):
     lines: list[ActiveLineOut]
     parent_id: uuid.UUID | None = None
     parent_code: str | None = None
+    # svc-5: unpaid lines whose catalogue price or availability moved since
+    # they were priced. Payment is refused until the order is re-priced.
+    price_changes: list["PriceChangeOut"] = []
+
+
+class PriceChangeOut(BaseModel):
+    name: str
+    was: Decimal | None
+    now: Decimal | None
+
+
+class RepriceIn(BaseModel):
+    rev: int = Field(ge=0)
+
+
+ActiveOrderOut.model_rebuild()
