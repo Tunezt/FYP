@@ -381,6 +381,9 @@ class Order(Base):
     # Order type routing (M11-T3, migration 0028).
     delivery_fee: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     delivery_address: Mapped[str | None] = mapped_column(Text)
+    # The device's own name for the submission that created or paid this order
+    # (svc-2, migration 0035): a replay of the same reference is the same order.
+    client_ref: Mapped[str | None] = mapped_column(Text)
 
 
 class OrderLine(Base):

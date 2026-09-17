@@ -19,7 +19,7 @@ from app.ai.periods import period_range
 from app.services import pin_guard
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
-from app.schemas.menu import PosTicketOut, TicketCancelIn, TicketSettleIn
+from app.schemas.menu import ActiveOrderOut, DraftIn, OpenOrderUpdateIn, PosTicketOut, TicketCancelIn, TicketSettleIn
 from app.schemas.pos import KitchenLineOut, KitchenStateIn, KitchenTicketOut
 from app.core.security import create_token, decode_token, verify_pin
 from app.models import Business, Item, ItemVariant, Modifier, RequestLog, Staff
@@ -394,6 +394,13 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
                       line_discount=l.line_discount)
         for l in payload.lines
     ]
+    from app.services.tickets import find_by_client_ref, replay_created
+
+    replayed = await find_by_client_ref(ctx.session, ctx.business_id, payload.client_ref)
+    if replayed is not None:
+        if replayed.status == "open":
+            raise HTTPException(status_code=409, detail="Kode transaksi ini dipakai pesanan yang belum dibayar — muat ulang kasir")
+        return await _order_out(ctx.session, await replay_created(ctx.session, replayed))
     try:
         await require_explicit_choices(ctx.session, specs)
         created = await create_order(
@@ -460,6 +467,9 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             detail=f"Pembayaran {_rp(exc.paid)} tidak sama dengan total {_rp(exc.total)}",
         )
 
+    if payload.client_ref:
+        created.order.client_ref = payload.client_ref
+        await ctx.session.flush()
     for cl in created.lines:
         await check_low_stock_for_item(ctx.session, ctx.business_id, cl.line.item_id)
 
@@ -532,21 +542,27 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
     """Payment for a guest's ticket: exactly what `POST /pos/orders` does, on
     the ticket's own row. All-or-nothing; a second till gets 409."""
     from app.services.orders import TicketNotOpen
-    from app.services.tickets import TicketNotFound, get_ticket, settle_ticket
+    from app.services.tickets import OrderChanged, TicketNotFound, find_by_client_ref, get_open_order, settle_ticket
 
     start = time.perf_counter()
     try:
-        ticket = await get_ticket(ctx.session, order_id)
+        # The lock on the reference comes before the row is read, so a second
+        # copy of the same tap waits for the first and then replays it (svc-2).
+        await find_by_client_ref(ctx.session, ctx.business_id, payload.client_ref)
+        ticket = await get_open_order(ctx.session, order_id)
         created = await settle_ticket(
             ctx.session, business_id=ctx.business_id, ticket=ticket, staff_id=ctx.staff_id,
             payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
             bill_discount=payload.bill_discount, manager_pin=payload.manager_pin,
             customer_id=payload.customer_id, voucher_code=payload.voucher_code,
+            expected_rev=payload.rev, client_ref=payload.client_ref,
         )
     except TicketNotFound:
         raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
     except TicketNotOpen as exc:
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
+    except OrderChanged as exc:
+        raise HTTPException(status_code=409, detail=order_changed_message(exc))
     except OrderTypeInvalid as exc:
         raise HTTPException(status_code=422, detail=_ORDER_TYPE_ERRORS[exc.code])
     except VoucherInvalid as exc:
@@ -594,16 +610,182 @@ _TICKET_CLOSED = {
 async def pos_cancel_ticket(order_id: uuid.UUID, payload: TicketCancelIn, ctx: PosCtx):
     from app.api.menu import ticket_out
     from app.services.orders import TicketNotOpen
-    from app.services.tickets import TicketNotFound, cancel_ticket, get_ticket
+    from app.services.tickets import TicketNotFound, cancel_ticket, get_open_order
 
     try:
-        ticket = await get_ticket(ctx.session, order_id)
+        ticket = await get_open_order(ctx.session, order_id)
         ticket = await cancel_ticket(ctx.session, ticket=ticket, reason=payload.reason, staff_id=ctx.staff_id)
     except TicketNotFound:
         raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
     except TicketNotOpen as exc:
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
     return ticket_out(ticket, PosTicketOut)
+
+
+def order_changed_message(exc) -> str:
+    """svc-2: somebody else got to this order first. Say what happened, so the
+    cashier reloads instead of retrying the same stale action."""
+    if exc.status in _TICKET_CLOSED:
+        return _TICKET_CLOSED[exc.status]
+    return "Pesanan ini baru saja diubah di perangkat lain — muat ulang dulu, lalu periksa isinya"
+
+
+# ── Open orders and the active-orders workspace (svc-2) ─────────────────────
+
+
+async def _price_errors(fn):
+    """The cart-pricing failures, in the till's own words."""
+    from app.services.tickets import QueueFull, TicketUnavailable
+
+    try:
+        return await fn()
+    except QueueFull:
+        raise HTTPException(status_code=429, detail="Terlalu banyak pesanan tersimpan yang belum dibayar — selesaikan atau batalkan dulu")
+    except TicketUnavailable as exc:
+        raise HTTPException(status_code=409, detail=f"Stok {exc.item_name} sedang habis — hapus dari pesanan atau ganti menu")
+    except ChoiceMissing as exc:
+        raise HTTPException(status_code=422, detail=choice_missing_message(exc))
+    except ItemNotFound:
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+    except VariantNotFound:
+        raise HTTPException(status_code=404, detail="Ukuran barang tidak ditemukan atau sudah tidak aktif")
+    except ModifierSelectionInvalid as exc:
+        messages = {
+            "unknown": "Pilihan tambahan tidak dikenali atau sudah tidak aktif",
+            "required": f"Pilihan '{exc.group_name}' wajib diisi",
+            "single": f"Pilihan '{exc.group_name}' hanya boleh satu",
+            "max": f"Pilihan '{exc.group_name}' melebihi batas maksimal",
+        }
+        raise HTTPException(status_code=422, detail=messages[exc.code])
+
+
+def _cart_specs(lines) -> list[OrderLineSpec]:
+    return [
+        OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, modifier_ids=list(l.modifier_ids), quantity=l.quantity, notes=l.notes)
+        for l in lines
+    ]
+
+
+async def _active_views(session, orders, tickets_by_id=None):
+    """Unpaid carts and paid-not-handed-over tickets, in one shape."""
+    from app.schemas.menu import ActiveLineOut, ActiveOrderOut
+    from app.services.kitchen import order_code
+
+    staff_ids = {o.staff_id for o in orders if o.staff_id}
+    names = {}
+    if staff_ids:
+        names = dict((await session.execute(select(Staff.id, Staff.name).where(Staff.id.in_(staff_ids)))).all())
+    parents = {}
+    parent_ids = {getattr(o, "parent_order_id", None) for o in orders} - {None}
+    if parent_ids:
+        from app.models import Order as _Order
+
+        for pid in parent_ids:
+            parents[pid] = await session.get(_Order, pid)
+    out = []
+    for o in orders:
+        cart = o.cart or {}
+        ticket = (tickets_by_id or {}).get(o.id)
+        if o.status == "open":
+            lines = [
+                ActiveLineOut(
+                    name=l["item_name"], size=l.get("variant_name"), quantity=l["quantity"],
+                    modifiers=list(l.get("modifier_names", [])), notes=l.get("notes"), line_total=l.get("line_total"),
+                    item_id=uuid.UUID(l["item_id"]), variant_id=uuid.UUID(l["variant_id"]) if l.get("variant_id") else None,
+                    modifier_ids=[uuid.UUID(m) for m in l.get("modifier_ids", [])],
+                )
+                for l in cart.get("lines", [])
+            ]
+        elif ticket is not None:
+            lines = [
+                ActiveLineOut(name=getattr(l, "item_name", l.name), size=getattr(l, "size", None), quantity=l.quantity, modifiers=l.modifiers, notes=l.notes,
+                              done=getattr(l, "done", False))
+                for l in ticket.lines
+            ]
+        else:
+            lines = []
+        payment = {"open": "unpaid", "completed": "paid", "voided": "cancelled" if o.cart is not None and "cancelled" in cart else "reversed",
+                   "refunded": "reversed"}.get(o.status, "paid")
+        parent = parents.get(getattr(o, "parent_order_id", None))
+        out.append(ActiveOrderOut(
+            id=o.id, code=order_code(o), number=order_number(o.id), source=o.source, status=o.status, payment=payment,
+            prep=ticket.state if ticket is not None else None,
+            order_type=o.order_type, table_label=o.table_label, guest_name=o.guest_name, note=cart.get("note"),
+            placed_at=o.created_at, paid_at=o.sold_at if o.status != "open" else None,
+            prep_since=ticket.state_since if ticket is not None else None,
+            total=o.total, is_estimate=o.status == "open", rev=int(cart.get("rev", 0)),
+            staff_name=names.get(o.staff_id), lines=lines,
+            parent_id=parent.id if parent is not None else None,
+            parent_code=order_code(parent) if parent is not None else None,
+        ))
+    return out
+
+
+@router.get("/active-orders", response_model=list[ActiveOrderOut])
+async def pos_active_orders(ctx: PosCtx):
+    """Everything the counter still owes someone (svc-2): unpaid carts from the
+    till and the QR menu, and paid orders the kitchen has not handed over.
+    Oldest first — the customer who has waited longest is at the top."""
+    from app.models import Order as _Order
+    from app.schemas.menu import ActiveOrderOut  # noqa: F401 (response shape)
+    from app.services.kitchen import board
+    from app.services.tickets import open_orders
+
+    unpaid = await open_orders(ctx.session)
+    tickets = await board(ctx.session)
+    paid = [await ctx.session.get(_Order, t.order_id) for t in tickets]
+    views = await _active_views(ctx.session, unpaid + paid, {t.order_id: t for t in tickets})
+    return sorted(views, key=lambda v: (v.placed_at, str(v.id)))
+
+
+@router.get("/open-orders/{order_id}", response_model=ActiveOrderOut)
+async def pos_open_order(order_id: uuid.UUID, ctx: PosCtx):
+    """One unpaid (or just-settled) held cart, fresh, with its revision."""
+    from app.services.tickets import TicketNotFound, get_open_order
+
+    try:
+        order = await get_open_order(ctx.session, order_id)
+    except TicketNotFound:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    return (await _active_views(ctx.session, [order]))[0]
+
+
+@router.post("/drafts", response_model=ActiveOrderOut, status_code=201)
+async def pos_hold_draft(payload: DraftIn, ctx: PosCtx):
+    """Park an unpaid order on the server (svc-2). Replaying `client_ref`
+    returns the draft already held."""
+    from app.services.tickets import hold_draft
+
+    order = await _price_errors(lambda: hold_draft(
+        ctx.session, business_id=ctx.business_id, staff_id=ctx.staff_id, lines=_cart_specs(payload.lines),
+        order_type=payload.order_type, table_label=payload.table_label, guest_name=payload.guest_name,
+        note=payload.note, client_ref=payload.client_ref,
+    ))
+    return (await _active_views(ctx.session, [order]))[0]
+
+
+@router.put("/open-orders/{order_id}", response_model=ActiveOrderOut)
+async def pos_update_open_order(order_id: uuid.UUID, payload: OpenOrderUpdateIn, ctx: PosCtx):
+    """Change an unpaid order before payment — a held draft or a guest's QR
+    order. Refused with 409 if it was paid, cancelled or edited elsewhere."""
+    from app.services.orders import TicketNotOpen
+    from app.services.tickets import OrderChanged, TicketNotFound, get_open_order, update_open_order
+
+    try:
+        order = await get_open_order(ctx.session, order_id)
+    except TicketNotFound:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    try:
+        order = await _price_errors(lambda: update_open_order(
+            ctx.session, business_id=ctx.business_id, order=order, expected_rev=payload.rev, staff_id=ctx.staff_id,
+            lines=_cart_specs(payload.lines), order_type=payload.order_type, table_label=payload.table_label,
+            guest_name=payload.guest_name, note=payload.note,
+        ))
+    except TicketNotOpen as exc:
+        raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
+    except OrderChanged as exc:
+        raise HTTPException(status_code=409, detail=order_changed_message(exc))
+    return (await _active_views(ctx.session, [order]))[0]
 
 
 async def receipt_view(session, business_id: uuid.UUID, order_id: uuid.UUID) -> ReceiptOut:

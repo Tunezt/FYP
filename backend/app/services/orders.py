@@ -970,6 +970,9 @@ async def list_orders(
         .outerjoin(Customer, Customer.id == Order.customer_id)
         .outerjoin(lines, lines.c.order_id == Order.id)
         .where(Order.status.in_(statuses))
+        # A cancelled unpaid cart (a QR ticket or a held draft, svc-2) was never
+        # a sale: nothing was paid, so it is not a receipt anyone can void.
+        .where((Order.cart.is_(None)) | (~Order.cart.has_key("cancelled")))
     )
     if since is not None:
         base = base.where(Order.sold_at >= since)

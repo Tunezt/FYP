@@ -55,6 +55,9 @@ def ticket_out(order: Order, model=TicketOut, kitchen_state: str | None = None) 
                 name=f"{l['item_name']} · {l['variant_name']}" if l.get("variant_name") else l["item_name"],
                 modifiers=list(l.get("modifier_names", [])),
                 quantity=l["quantity"], unit_price=l["unit_price"], line_total=l["line_total"], notes=l.get("notes"),
+                variant_id=uuid.UUID(l["variant_id"]) if l.get("variant_id") else None,
+                size=l.get("variant_name"),
+                modifier_ids=[uuid.UUID(m) for m in l.get("modifier_ids", [])],
             )
             for l in cart["lines"]
         ],
@@ -124,6 +127,7 @@ async def place(menu_token: str, payload: TicketIn):
                 ],
                 order_type=payload.order_type, table_label=payload.table_label,
                 guest_name=payload.guest_name, guest_phone=payload.guest_phone, note=payload.note,
+                client_ref=payload.client_ref,
             )
         except QueueFull:
             raise HTTPException(status_code=429, detail="Antrean pesanan sedang penuh — silakan pesan langsung ke kasir ya")

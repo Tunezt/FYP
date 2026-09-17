@@ -45,6 +45,9 @@ class TicketIn(BaseModel):
     guest_name: str | None = Field(default=None, max_length=60)
     guest_phone: str | None = Field(default=None, max_length=32)
     note: str | None = Field(default=None, max_length=200)
+    # svc-2: the phone names this submission once; a retry after a dropped
+    # connection returns the same ticket instead of a second one.
+    client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class TicketLineOut(BaseModel):
@@ -55,6 +58,10 @@ class TicketLineOut(BaseModel):
     unit_price: Decimal
     line_total: Decimal
     notes: str | None = None
+    # What the till needs to reopen the line with the same answers (svc-2).
+    variant_id: uuid.UUID | None = None
+    size: str | None = None
+    modifier_ids: list[uuid.UUID] = []
 
 
 class TicketOut(BaseModel):
@@ -91,6 +98,8 @@ class TicketSettleIn(BaseModel):
     manager_pin: str | None = Field(default=None, min_length=4, max_length=6)
     customer_id: uuid.UUID | None = None
     voucher_code: str | None = Field(default=None, max_length=40)
+    rev: int | None = Field(default=None, ge=0)   # svc-2: the version the cashier is looking at
+    client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class TicketCancelIn(BaseModel):
@@ -100,3 +109,70 @@ class TicketCancelIn(BaseModel):
 class MenuLinkOut(BaseModel):
     menu_token: str
     menu_path: str
+
+
+# ── Open orders at the till (svc-2) ──────────────────────────────────────────
+
+DraftOrderType = Literal["dine_in", "takeaway", "pickup"]
+
+
+class DraftIn(BaseModel):
+    """A cashier parks an unpaid order. Prices are never sent: the server prices it."""
+
+    lines: list[TicketLineIn] = Field(min_length=1, max_length=50)
+    order_type: DraftOrderType = "takeaway"
+    table_label: str | None = Field(default=None, max_length=20)
+    guest_name: str | None = Field(default=None, max_length=60)
+    note: str | None = Field(default=None, max_length=200)
+    client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class OpenOrderUpdateIn(BaseModel):
+    """Replace an unpaid order's cart. `rev` is the version the device loaded."""
+
+    rev: int = Field(ge=0)
+    lines: list[TicketLineIn] = Field(min_length=1, max_length=50)
+    order_type: DraftOrderType | None = None
+    table_label: str | None = Field(default=None, max_length=20)
+    guest_name: str | None = Field(default=None, max_length=60)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class ActiveLineOut(BaseModel):
+    name: str
+    size: str | None = None
+    quantity: Decimal
+    modifiers: list[str] = []
+    notes: str | None = None
+    line_total: Decimal | None = None
+    item_id: uuid.UUID | None = None
+    variant_id: uuid.UUID | None = None
+    modifier_ids: list[uuid.UUID] = []
+    done: bool = False
+
+
+class ActiveOrderOut(BaseModel):
+    """One order the counter is still responsible for: unpaid, or paid and not
+    yet handed over. Payment and preparation are separate facts (svc-2)."""
+
+    id: uuid.UUID
+    code: str                       # what is called out: M-1A2B for QR, #1A2B at the till
+    number: str                     # the receipt number, last 8 of the id
+    source: Literal["pos", "menu"]
+    status: str                     # open · completed · voided · refunded
+    payment: Literal["unpaid", "paid", "cancelled", "reversed"]
+    prep: Literal["new", "preparing", "ready", "done"] | None = None   # None until paid
+    order_type: str
+    table_label: str | None = None
+    guest_name: str | None = None
+    note: str | None = None
+    placed_at: datetime
+    paid_at: datetime | None = None
+    prep_since: datetime | None = None
+    total: Decimal
+    is_estimate: bool
+    rev: int = 0
+    staff_name: str | None = None
+    lines: list[ActiveLineOut]
+    parent_id: uuid.UUID | None = None
+    parent_code: str | None = None

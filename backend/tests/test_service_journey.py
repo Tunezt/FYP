@@ -173,3 +173,163 @@ async def test_2_differently_customised_americanos_stay_distinct_lines(client, s
     assert sorted((l["quantity"], tuple(l["modifiers"]), l["notes"] or "") for l in kitchen[0]["lines"]) == [
         ("1.000", ("Panas",), ""), ("1.000", ("Panas",), "gelas kertas"), ("2.000", ("Dingin", "Extra shot"), ""),
     ]
+
+
+# ── 3-6, 9. Unpaid orders are held on the server; payment is the one posting ──
+
+
+async def _count(s, model, *where):
+    return (await s.execute(select(func.count(model.id)).where(*where))).scalar_one()
+
+
+async def _footprint(s, order_id):
+    from app.models import JournalEntry, KitchenEvent, Payment, StockMovement
+
+    line_ids = select(OrderLine.id).where(OrderLine.order_id == order_id)
+    return {
+        "lines": await _count(s, OrderLine, OrderLine.order_id == order_id),
+        "payments": await _count(s, Payment, Payment.order_id == order_id),
+        "journal": await _count(s, JournalEntry, JournalEntry.source_type == "order", JournalEntry.source_id == order_id),
+        "movements": await _count(s, StockMovement, StockMovement.source_id.in_(line_ids)),
+        "kitchen_events": await _count(s, KitchenEvent, KitchenEvent.order_id == order_id),
+    }
+
+
+def _ref():
+    return uuid.uuid4().hex[:20]
+
+
+async def test_3_a_held_order_survives_switching_customers_and_a_refresh(client, session_factory, cafe):
+    c = cafe
+    first = await client.post("/pos/drafts", headers=_auth(c["pos"]), json={
+        "lines": [_line(c, variant="large", mods=["dingin"], notes="es sedikit")], "guest_name": "Mbak Rina", "client_ref": _ref()})
+    assert first.status_code == 201, first.text
+    # The next customer is served while the first finds her wallet.
+    second = await client.post("/pos/drafts", headers=_auth(c["pos"]), json={"lines": [_line(c, item="roti", qty=2)], "order_type": "dine_in", "table_label": "Meja 3"})
+    assert second.status_code == 201, second.text
+    # A refresh is a new request with nothing but the token: both are still there, in arrival order.
+    active = (await client.get("/pos/active-orders", headers=_auth(c["pos"]))).json()
+    assert [a["id"] for a in active] == [first.json()["id"], second.json()["id"]]
+    held = active[0]
+    assert held["payment"] == "unpaid" and held["prep"] is None and held["source"] == "pos" and held["guest_name"] == "Mbak Rina"
+    assert held["staff_name"] == "Sari" and D(held["total"]) == D(22000) and held["rev"] == 0
+    line = held["lines"][0]
+    # Everything needed to reopen the line with the same answers.
+    assert (line["size"], line["modifiers"], line["notes"]) == ("Large", ["Dingin"], "es sedikit")
+    assert line["variant_id"] == str(c["large"]) and line["modifier_ids"] == [str(c["dingin"])]
+    # Nothing was sold: no stock taken, no posting, nothing for the kitchen.
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        assert await _footprint(s, uuid.UUID(held["id"])) == {"lines": 0, "payments": 0, "journal": 0, "movements": 0, "kitchen_events": 0}
+        assert (await s.get(Item, c["americano"])).current_stock == D(40)
+    assert (await client.get("/pos/kitchen", headers=_auth(c["pos"]))).json() == []
+    # A held draft is not a receipt, and cancelling one leaves no "voided sale" behind.
+    second_id = second.json()["id"]
+    cancel = await client.post(f"/pos/tickets/{second_id}/cancel", headers=_auth(c["pos"]), json={"reason": "tidak jadi"})
+    assert cancel.status_code == 200 and cancel.json()["status"] == "voided"
+    assert (await client.get("/pos/orders", headers=_auth(c["pos"]))).json()["rows"] == []
+    assert [a["id"] for a in (await client.get("/pos/active-orders", headers=_auth(c["pos"]))).json()] == [first.json()["id"]]
+
+
+async def test_4_a_qr_order_reaches_the_cashier_and_is_edited_before_settlement(client, session_factory, cafe):
+    c = cafe
+    placed = await client.post(f"/menu/{c['menu']}/orders", json={
+        "lines": [_line(c, variant="standar", mods=["panas"])], "order_type": "takeaway", "guest_name": "Dimas", "client_ref": _ref()})
+    assert placed.status_code == 201, placed.text
+    tid = placed.json()["id"]
+    active = (await client.get("/pos/active-orders", headers=_auth(c["pos"]))).json()
+    assert [(a["id"], a["source"], a["payment"], a["code"]) for a in active] == [(tid, "menu", "unpaid", placed.json()["code"])]
+    # At the counter Dimas makes it a large, iced, and adds a roti.
+    edited = await client.put(f"/pos/open-orders/{tid}", headers=_auth(c["pos"]), json={
+        "rev": 0, "lines": [_line(c, variant="large", mods=["dingin"]), _line(c, item="roti")]})
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["rev"] == 1 and D(edited.json()["total"]) == D(37000)
+    # A second tablet still holding revision 0 cannot overwrite it, nor pay for the old version.
+    stale = await client.put(f"/pos/open-orders/{tid}", headers=_auth(c["pos"]), json={"rev": 0, "lines": [_line(c, item="roti")]})
+    assert stale.status_code == 409 and "diubah di perangkat lain" in stale.json()["detail"]
+    stale_pay = await client.post(f"/pos/tickets/{tid}/settle", headers=_auth(c["pos"]), json={"payments": _cash(18000), "rev": 0})
+    assert stale_pay.status_code == 409
+    # The guest's own page shows the edited order, not the one they sent.
+    watched = (await client.get(f"/menu/{c['menu']}/orders/{tid}")).json()
+    assert D(watched["total"]) == D(37000) and len(watched["lines"]) == 2
+    paid = await client.post(f"/pos/tickets/{tid}/settle", headers=_auth(c["pos"]), json={"payments": _cash(37000), "rev": 1, "client_ref": _ref()})
+    assert paid.status_code == 200, paid.text
+    assert D(paid.json()["total"]) == D(37000) and sorted(l["item_name"] for l in paid.json()["lines"]) == ["Americano", "Roti"]
+    # Paid: it cannot be edited any more.
+    late = await client.put(f"/pos/open-orders/{tid}", headers=_auth(c["pos"]), json={"rev": 1, "lines": [_line(c, item="roti")]})
+    assert late.status_code == 409 and "sudah dibayar" in late.json()["detail"]
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        row = await s.get(Order, uuid.UUID(tid))
+        assert [r["rev"] for r in row.cart["revisions"]] == [0] and row.cart["revisions"][0]["staff_id"] == str(c["sari"])
+
+
+async def test_5_an_unpaid_order_never_reaches_the_kitchen(client, session_factory, cafe):
+    c = cafe
+    draft = (await client.post("/pos/drafts", headers=_auth(c["pos"]), json={"lines": [_line(c, item="roti")]})).json()
+    ticket = (await client.post(f"/menu/{c['menu']}/orders", json={"lines": [_line(c, item="roti")], "order_type": "takeaway"})).json()
+    assert (await client.get("/pos/kitchen", headers=_auth(c["pos"]))).json() == []
+    for oid in (draft["id"], ticket["id"]):
+        refused = await client.post(f"/pos/kitchen/{oid}/state", headers=_auth(c["pos"]), json={"state": "preparing"})
+        assert refused.status_code == 409 and "belum dibayar" in refused.json()["detail"]
+    active = (await client.get("/pos/active-orders", headers=_auth(c["pos"]))).json()
+    assert {a["payment"] for a in active} == {"unpaid"} and {a["prep"] for a in active} == {None}
+
+
+async def test_6_payment_is_exactly_one_posting_and_one_kitchen_ticket(client, session_factory, cafe):
+    c = cafe
+    draft = (await client.post("/pos/drafts", headers=_auth(c["pos"]), json={
+        "lines": [_line(c, variant="large", mods=["panas", "shot"], qty=2), _line(c, item="roti")]})).json()
+    ref = _ref()
+    body = {"payments": _cash(2 * 27000 + 15000), "rev": 0, "client_ref": ref}
+    paid = await client.post(f"/pos/tickets/{draft['id']}/settle", headers=_auth(c["pos"]), json=body)
+    assert paid.status_code == 200, paid.text
+    # The same tap arriving again is the same payment, returned, not repeated.
+    again = await client.post(f"/pos/tickets/{draft['id']}/settle", headers=_auth(c["pos"]), json=body)
+    assert again.status_code == 200 and again.json()["id"] == paid.json()["id"] and again.json()["total"] == paid.json()["total"]
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        assert await _footprint(s, uuid.UUID(draft["id"])) == {"lines": 2, "payments": 1, "journal": 1, "movements": 2, "kitchen_events": 0}
+        assert (await s.get(Item, c["americano"])).current_stock == D(38) and (await s.get(Item, c["roti"])).current_stock == D(29)
+    kitchen = (await client.get("/pos/kitchen", headers=_auth(c["pos"]))).json()
+    assert [k["order_id"] for k in kitchen] == [draft["id"]] and kitchen[0]["state"] == "new"
+    active = (await client.get("/pos/active-orders", headers=_auth(c["pos"]))).json()
+    assert [(a["id"], a["payment"], a["prep"], a["is_estimate"]) for a in active] == [(draft["id"], "paid", "new", False)]
+
+
+async def test_9_retries_double_taps_and_two_devices_do_not_duplicate(client, session_factory, cafe):
+    import asyncio
+
+    c = cafe
+    # The guest's phone resends after a dropped connection: one ticket.
+    ref = _ref()
+    body = {"lines": [_line(c, item="roti")], "order_type": "takeaway", "client_ref": ref}
+    a, b = await asyncio.gather(client.post(f"/menu/{c['menu']}/orders", json=body), client.post(f"/menu/{c['menu']}/orders", json=body))
+    assert a.status_code == b.status_code == 201 and a.json()["id"] == b.json()["id"]
+    # A double tap on "Bayar" at the till: one sale, one stock movement.
+    sale = {"lines": [_line(c, item="roti")], "payments": _cash(15000), "client_ref": _ref()}
+    x, y = await asyncio.gather(client.post("/pos/orders", headers=_auth(c["pos"]), json=sale), client.post("/pos/orders", headers=_auth(c["pos"]), json=sale))
+    assert {x.status_code, y.status_code} <= {200, 201} and x.json()["id"] == y.json()["id"]
+    # Two tablets pay the same QR order at once, each with its own tap: one wins, one is told.
+    tid = a.json()["id"]
+    p1, p2 = await asyncio.gather(
+        client.post(f"/pos/tickets/{tid}/settle", headers=_auth(c["pos"]), json={"payments": _cash(15000), "client_ref": _ref()}),
+        client.post(f"/pos/tickets/{tid}/settle", headers=_auth(c["pos"]), json={"payments": _cash(15000), "client_ref": _ref()}),
+    )
+    assert sorted([p1.status_code, p2.status_code]) == [200, 409]
+    # Two tablets edit the same unpaid draft from the same revision: one edit lands.
+    draft = (await client.post("/pos/drafts", headers=_auth(c["pos"]), json={"lines": [_line(c, item="roti")]})).json()
+    e1, e2 = await asyncio.gather(
+        client.put(f"/pos/open-orders/{draft['id']}", headers=_auth(c["pos"]), json={"rev": 0, "lines": [_line(c, item="roti", qty=2)]}),
+        client.put(f"/pos/open-orders/{draft['id']}", headers=_auth(c["pos"]), json={"rev": 0, "lines": [_line(c, item="roti", qty=3)]}),
+    )
+    assert sorted([e1.status_code, e2.status_code]) == [200, 409]
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        from app.models import Payment
+
+        assert await _count(s, Order, Order.client_ref == ref) == 1
+        assert await _count(s, Order, Order.source == "menu") == 1
+        assert await _footprint(s, uuid.UUID(x.json()["id"])) == {"lines": 1, "payments": 1, "journal": 1, "movements": 1, "kitchen_events": 0}
+        assert await _count(s, Payment, Payment.order_id == uuid.UUID(tid)) == 1
+        assert (await s.get(Item, c["roti"])).current_stock == D(28)

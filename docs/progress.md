@@ -1568,3 +1568,20 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Lines are identities, not items.** Size, every modifier and the preparation note together decide whether two taps merge; editing a line reopens the sheet with that line's answers and merges if the edit makes it equal to another line. Verified in the browser at 1280x800 (till) and 375x812 (menu); option labels wrap instead of truncating on a phone.
 **Deviation:** none.
 **Next:** svc-2 - unpaid orders on the backend: held drafts, edits under a revision guard, idempotent submission, the active-orders list.
+
+
+### [svc-2] Unpaid orders live on the server, and one tap is one order
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** backend/alembic/versions/0035_order_client_ref.py (new), backend/app/models/models.py (`Order.client_ref`), backend/app/services/tickets.py (open orders of both channels: `price_cart`, `hold_draft`, `update_open_order`, `open_orders`, `get_open_order`, `find_by_client_ref`, `replay_created`; settle takes `expected_rev`/`client_ref`), backend/app/services/orders.py (`list_orders` leaves out cancelled unpaid carts), backend/app/schemas/menu.py (`DraftIn`, `OpenOrderUpdateIn`, `ActiveOrderOut`), backend/app/schemas/pos.py (`OrderIn.client_ref`), backend/app/api/pos.py (`POST /pos/drafts`, `GET|PUT /pos/open-orders/{id}`, `GET /pos/active-orders`; settle/cancel accept any open order), backend/app/api/menu.py, backend/tests/test_service_journey.py (tests 3, 4, 5, 6, 9)
+**Gates:** pytest 568 passed 0 skipped (was 563) - migrations round-trip ok (0035 -> 0034 -> 0035) - frontend build ok - seed ok
+**Notes:**
+- **User-directed.** A held order must survive switching customers and a refresh without a second, browser-only order system. A held draft is the same thing a QR ticket already was: an `open` row with a `cart`, no lines, no stock, no posting. `source = 'pos'` tells them apart. Settling either runs the one sale path on the row.
+- **Edits happen under a revision.** `update_open_order` re-prices from today's catalogue and lands only `where status = 'open' and cart.rev = :expected`. A second tablet's stale edit, or a payment for a version the cashier has not seen, is a 409 that says it was changed elsewhere. Who changed it and what each revision came to is appended to `cart.revisions`.
+- **Idempotency is a reference plus a lock.** `client_ref` names the submission that *created* an order (unique per business, migration 0035). `find_by_client_ref` first takes `pg_advisory_xact_lock`, so a second copy arriving mid-flight waits and then finds the first rather than failing on the index. A payment's own reference is kept in `cart.paid_ref`, because a QR order already carries the guest's placement reference in the column. The test caught that the two cannot share it.
+- Test 9 races the pairs with `asyncio.gather`. A resubmitted QR order gives one ticket, a double-tapped sale gives one sale and one stock movement, two tablets paying the same QR order give one 200 and one 409 with one payment row, and two edits from the same revision give one 200 and one 409.
+- **Cancelling an unpaid cart is not a void.** Nothing was taken, so nothing is reversed, and it no longer appears in the till's or owner's receipt list as a "voided sale". It never was one. That also fixes cancelled QR tickets, which previously showed there with zero lines.
+- `test_every_http_exception_detail_is_indonesian` flagged a new message ("Americano sedang habis") whose Indonesian words are not in its marker list. The message was reworded ("Stok ... sedang habis"); the test is unchanged.
+- This overlaps M14-T2 (client idempotency keys) only in part: no client-generated order ids, no replay ordering. M14-T2 remains to be built on top when M14 starts.
+**Deviation:** none.
+**Next:** svc-3 - additions to a paid order as their own linked purchase.

@@ -133,6 +133,8 @@ class OrderIn(BaseModel):
     delivery_address: str | None = Field(default=None, max_length=300)
     guest_name: str | None = Field(default=None, max_length=60)
     guest_phone: str | None = Field(default=None, max_length=32)
+    # svc-2: a double tap on "Bayar" or a retried request is the same sale.
+    client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 # ── Customers at the till (M8-T1) ───────────────────────────────────────────
