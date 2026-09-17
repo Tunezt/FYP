@@ -5,8 +5,8 @@ import { useOwnerData } from "@/lib/hooks";
 import { daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
 import { formatQty, formatRupiah } from "@/lib/format";
 import type { OrderRow, Receipt } from "@/lib/types";
-import { DayHeaderToggle, EmptyState, ErrorState, Glass, ItemIcon, Skeleton } from "@/components/ui";
-import { IconChevronDown } from "@/components/icons";
+import { DayGroup, EmptyState, ErrorState, Glass, ItemIcon, Skeleton } from "@/components/ui";
+import { IconChevronDown, IconReceipt } from "@/components/icons";
 
 /** Riwayat transaksi — one row per receipt, opening to what was ordered.
  *
@@ -40,12 +40,13 @@ function TransactionRow({ order, tz }: { order: OrderRow; tz?: string }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className="list-row list-row-action"
+        style={{ ["--row-inset" as string]: "4.25rem" }}
       >
-        <span className="ink-faint w-11 shrink-0 text-xs tabular-nums">
+        <span className="ink-faint w-11 shrink-0 text-[13px] tabular-nums">
           {timeLabel(new Date(order.sold_at), tz)}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
             <span className="tabular-nums">#{order.number}</span>
             {chip && <span className={chip.cls}>{chip.text}</span>}
             {order.entry_source === "manual_backdated" && (
@@ -88,7 +89,7 @@ function TransactionRow({ order, tz }: { order: OrderRow; tz?: string }) {
             <ul>
               {receipt.data.lines.map((line, i) => (
                 <li key={`${line.name}-${i}`} className="flex items-center gap-3 py-1.5">
-                  <ItemIcon name={line.name} className="h-7 w-7 rounded-lg" />
+                  <ItemIcon name={line.name} className="h-7 w-7 rounded-lg text-[10px]" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">
                       {formatQty(line.quantity)}× {line.name}
@@ -106,8 +107,10 @@ function TransactionRow({ order, tz }: { order: OrderRow; tz?: string }) {
                   </span>
                 </li>
               ))}
-              <li className="mt-1 flex items-center justify-between border-t pt-2 text-sm font-semibold"
-                  style={{ borderColor: "var(--hairline)" }}>
+              <li
+                className="mt-1 flex items-center justify-between border-t pt-2 text-sm font-semibold"
+                style={{ borderColor: "var(--hairline)" }}
+              >
                 <span>Total</span>
                 <span className="tabular-nums">{formatRupiah(receipt.data.total)}</span>
               </li>
@@ -155,7 +158,7 @@ export function TransactionHistory({
     return (
       <Glass className="mt-3">
         <EmptyState
-          emoji="🧾"
+          icon={<IconReceipt className="h-5 w-5" />}
           title={filtered ? "Tidak ada transaksi yang cocok" : "Belum ada transaksi"}
         >
           {filtered
@@ -167,7 +170,7 @@ export function TransactionHistory({
   }
 
   return (
-    <>
+    <div className="mt-4">
       {groups.map((group) => {
         // Voided bills stay in the list (nothing is deleted) but must not be
         // counted into the day's takings.
@@ -176,23 +179,27 @@ export function TransactionHistory({
           0
         );
         return (
-          <div key={group.key}>
-            <DayHeaderToggle
-              label={group.label}
-              sub={daySubLabel(group.date, tz, dayStart)}
-              meta={`${group.rows.length} transaksi · ${formatRupiah(dayTotal)}`}
-              open={isOpen(group.key, group.label)}
-              onToggle={() => toggle(group.key, group.label)}
-              count={group.rows.length}
-            />
-            <ul hidden={!isOpen(group.key, group.label)}>
-              {group.rows.map((order) => (
-                <TransactionRow key={order.id} order={order} tz={tz} />
-              ))}
-            </ul>
-          </div>
+          <DayGroup
+            key={group.key}
+            label={group.label}
+            sub={daySubLabel(group.date, tz, dayStart)}
+            meta={
+              <>
+                <span className="ink-faint font-normal">{group.rows.length} transaksi</span>
+                <span className="ink-faint mx-1.5" aria-hidden>·</span>
+                {formatRupiah(dayTotal)}
+              </>
+            }
+            open={isOpen(group.key, group.label)}
+            onToggle={() => toggle(group.key, group.label)}
+            count={group.rows.length}
+          >
+            {group.rows.map((order) => (
+              <TransactionRow key={order.id} order={order} tz={tz} />
+            ))}
+          </DayGroup>
         );
       })}
-    </>
+    </div>
   );
 }

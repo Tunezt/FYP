@@ -19,7 +19,7 @@ usable, which is the point.
 
 Usage:
 
-    python -m app.bootstrap --name "Kopi Senja" --owner "Ibu Ratna" --phone 081200011112
+    python -m app.bootstrap --name "Poernama" --owner "Ibu Ratna" --phone 081200011112
     ... --pin 1234              # or leave it off and be prompted, so it stays out of history
     ... --timezone Asia/Jakarta --language id --type cafe
 

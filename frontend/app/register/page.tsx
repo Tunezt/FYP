@@ -4,15 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, OWNER_TOKEN_KEY } from "@/lib/api";
-import { CopyField } from "@/components/ui";
-import { IconChat, IconCheck } from "@/components/icons";
+import { BrandMark, CopyField } from "@/components/ui";
+import { IconCamera, IconChat, IconCheck, IconNote, IconPlus } from "@/components/icons";
 import { initials } from "@/lib/format";
 
 const BUSINESS_TYPES = [
-  { value: "cafe", label: "☕ Kafe" },
-  { value: "warung", label: "🍜 Warung" },
-  { value: "toko", label: "🏪 Toko" },
-  { value: "lainnya", label: "✨ Lainnya" },
+  { value: "cafe", label: "Kafe" },
+  { value: "warung", label: "Warung" },
+  { value: "toko", label: "Toko" },
+  { value: "lainnya", label: "Lainnya" },
 ];
 
 const LANGUAGES = [
@@ -26,8 +26,7 @@ type Step = 1 | 2 | 3;
 function ErrorNote({ children }: { children: React.ReactNode }) {
   return (
     <p
-      className="rounded-2xl px-4 py-3 text-sm font-medium"
-      style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+      className="notice notice-bad"
     >
       {children}
     </p>
@@ -64,12 +63,19 @@ export default function RegisterPage() {
     return (
       <main className="flex min-h-screen items-center justify-center px-4">
         <div className="glass-card max-w-md animate-scale-in px-8 py-10 text-center">
-          <p className="text-3xl">🌱</p>
-          <h1 className="mt-4 text-xl font-bold">Daftar Warung Pintar</h1>
-          <ol className="ink-soft mx-auto mt-4 max-w-xs space-y-2 text-left text-sm">
-            <li>1. Masukkan nomor WhatsApp usahamu</li>
-            <li>2. Terima kode masuk di WhatsApp</li>
-            <li>3. Isi profil usaha &amp; PIN kasir — selesai, ±2 menit</li>
+          <span className="flex justify-center">
+            <BrandMark size="md" />
+          </span>
+          <h1 className="mt-5 text-xl font-semibold tracking-[-0.015em]">Daftar ke Poernama</h1>
+          <ol className="mx-auto mt-5 max-w-xs space-y-3 text-left text-sm">
+            {["Masukkan nomor WhatsApp usahamu", "Terima kode masuk di WhatsApp", "Isi profil usaha & PIN kasir — selesai, ±2 menit"].map((text, i) => (
+              <li key={text} className="flex items-start gap-3">
+                <span className="surface-inset ink-soft flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums" style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}>
+                  {i + 1}
+                </span>
+                <span className="ink-soft pt-0.5">{text}</span>
+              </li>
+            ))}
           </ol>
           <Link href="/login" className="btn-accent mt-6 inline-flex px-6 py-3">
             Mulai dengan nomor WhatsApp
@@ -144,9 +150,9 @@ export default function RegisterPage() {
             key={s}
             className={`h-2 rounded-full transition-all duration-300 ${
               s === step
-                ? "w-8 bg-accent-600"
+                ? "w-8 bg-[color:var(--accent-fill)]"
                 : s < step
-                  ? "w-2 bg-accent-600"
+                  ? "w-2 bg-[color:var(--accent-fill)]"
                   : "w-2 bg-[color:var(--hairline)]"
             }`}
           />
@@ -155,31 +161,33 @@ export default function RegisterPage() {
 
       {step === 1 && (
         <div className="glass-card animate-fade-up px-6 py-7 sm:px-8">
-          <h1 className="text-xl font-bold">Cerita dikit soal usahamu</h1>
-          <p className="ink-soft mt-1 text-sm">Nomor WhatsApp sudah terverifikasi ✓</p>
+          <h1 className="text-xl font-semibold tracking-[-0.015em]">Cerita dikit soal usahamu</h1>
+          <p className="mt-1 flex items-center gap-1.5 text-sm text-[color:var(--good)]">
+            <IconCheck className="h-4 w-4" /> Nomor WhatsApp sudah terverifikasi
+          </p>
 
           <div className="mt-5 space-y-4">
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Nama usaha</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama usaha</span>
               <input
                 className="field"
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="cth. Kopi Kenangan Senja"
+                placeholder="cth. Poernama"
                 autoFocus
               />
             </label>
 
             <div>
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Jenis usaha</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Jenis usaha</span>
               <div className="flex flex-wrap gap-2">
                 {BUSINESS_TYPES.map((t) => (
                   <button
                     key={t.value}
+                    type="button"
                     onClick={() => setBusinessType(t.value)}
-                    className={`rounded-2xl px-4 py-2 text-sm font-medium transition-all ${
-                      businessType === t.value ? "btn-accent px-4 py-2" : "btn-quiet px-4 py-2"
-                    }`}
+                    aria-pressed={businessType === t.value}
+                    className="choice-chip px-4 py-2 text-sm"
                   >
                     {t.label}
                   </button>
@@ -189,7 +197,7 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Nama kamu</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama kamu</span>
                 <input
                   className="field"
                   value={ownerName}
@@ -198,7 +206,7 @@ export default function RegisterPage() {
                 />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">
                   PIN kasir kamu (4 angka)
                 </span>
                 <input
@@ -213,17 +221,17 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <span className="ink-soft mb-1.5 block text-xs font-medium">
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">
                 Bahasa asisten WhatsApp
               </span>
               <div className="flex flex-wrap gap-2">
                 {LANGUAGES.map((l) => (
                   <button
                     key={l.value}
+                    type="button"
                     onClick={() => setLanguage(l.value)}
-                    className={`rounded-2xl px-4 py-2 text-sm font-medium ${
-                      language === l.value ? "btn-accent px-4 py-2" : "btn-quiet px-4 py-2"
-                    }`}
+                    aria-pressed={language === l.value}
+                    className="choice-chip px-4 py-2 text-sm"
                   >
                     {l.label}
                   </button>
@@ -239,7 +247,7 @@ export default function RegisterPage() {
               disabled={busy || !businessName.trim() || !ownerName.trim() || ownerPin.length !== 4}
               className="btn-accent w-full py-3.5"
             >
-              {busy ? "Menyiapkan…" : "Buat usaha →"}
+              {busy ? "Menyiapkan…" : "Buat usaha"}
             </button>
           </div>
         </div>
@@ -247,7 +255,7 @@ export default function RegisterPage() {
 
       {step === 2 && (
         <div className="glass-card animate-fade-up px-6 py-7 sm:px-8">
-          <h1 className="text-xl font-bold">Siapa yang jaga kasir?</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.015em]">Siapa yang jaga kasir?</h1>
           <p className="ink-soft mt-1 text-sm">
             Staf masuk ke layar kasir pakai nama + PIN — tanpa akun, tanpa email.
           </p>
@@ -258,10 +266,10 @@ export default function RegisterPage() {
                 {staffList.map((name) => (
                   <li
                     key={name}
-                    className="flex items-center gap-2 rounded-2xl px-3 py-1.5 text-sm font-medium"
-                    style={{ border: "1px solid var(--hairline)" }}
+                    className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-medium"
+                    style={{ boxShadow: "0 0 0 1px var(--hairline-strong)" }}
                   >
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-gradient text-[10px] font-bold text-white">
+                    <span className="surface-inset ink-soft flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold">
                       {initials(name)}
                     </span>
                     {name} <IconCheck className="h-3.5 w-3.5 text-[color:var(--good)]" />
@@ -277,8 +285,9 @@ export default function RegisterPage() {
                 onChange={(e) => setStaffName(e.target.value)}
               />
               <input
-                className="field w-28 tabular-nums"
+                className="field w-24 text-center tabular-nums"
                 placeholder="PIN"
+                aria-label="PIN staf (4 angka)"
                 inputMode="numeric"
                 maxLength={4}
                 value={staffPin}
@@ -287,9 +296,10 @@ export default function RegisterPage() {
               <button
                 onClick={addStaff}
                 disabled={busy || !staffName.trim() || staffPin.length !== 4}
-                className="btn-quiet px-4"
+                className="btn-quiet px-3.5"
+                aria-label="Tambah staf"
               >
-                +
+                <IconPlus className="h-5 w-5" />
               </button>
             </div>
 
@@ -313,7 +323,7 @@ export default function RegisterPage() {
 
             <div className="flex gap-3">
               <button onClick={() => setStep(3)} className="btn-accent flex-1 py-3.5">
-                Lanjut →
+                Lanjut
               </button>
             </div>
             <p className="ink-faint text-center text-xs">Bisa ditambah kapan saja di Pengaturan.</p>
@@ -323,29 +333,29 @@ export default function RegisterPage() {
 
       {step === 3 && (
         <div className="glass-card animate-fade-up px-6 py-7 text-center sm:px-8">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-gradient text-2xl shadow-pop">
-            <IconChat className="h-7 w-7 text-white" />
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl text-[color:var(--accent)]" style={{ background: "var(--accent-soft)" }}>
+            <IconChat className="h-7 w-7" />
           </span>
-          <h1 className="mt-4 text-xl font-bold">Terakhir: isi stok lewat WhatsApp</h1>
+          <h1 className="mt-4 text-xl font-semibold tracking-[-0.015em]">Terakhir: isi stok lewat WhatsApp</h1>
           <p className="ink-soft mx-auto mt-2 max-w-sm text-sm leading-relaxed">
             Mulai sekarang semuanya lewat chat. Kirim ke nomor WhatsApp usaha:
           </p>
-          <div className="mx-auto mt-4 max-w-sm space-y-2 text-left">
-            <div className="rounded-2xl px-4 py-3 text-sm" style={{ border: "1px solid var(--hairline)" }}>
-              📸 <span className="font-medium">Foto buku stok</span>
-              <span className="ink-soft"> — dibaca otomatis, kamu tinggal konfirmasi</span>
-            </div>
-            <div className="rounded-2xl px-4 py-3 text-sm" style={{ border: "1px solid var(--hairline)" }}>
-              📄 <span className="font-medium">File Excel</span>
-              <span className="ink-soft"> — template bisa diunduh di Pengaturan</span>
-            </div>
-            <div className="rounded-2xl px-4 py-3 text-sm" style={{ border: "1px solid var(--hairline)" }}>
-              💬 <span className="font-medium">Atau tanya apa saja</span>
-              <span className="ink-soft"> — &ldquo;stok arabica berapa?&rdquo;</span>
-            </div>
-          </div>
+          <ul className="surface-inset mx-auto mt-5 max-w-sm divide-y divide-[color:var(--hairline)] rounded-2xl text-left text-sm">
+            <li className="flex items-start gap-3 px-4 py-3">
+              <IconCamera className="ink-soft mt-0.5 h-[18px] w-[18px] shrink-0" />
+              <span><span className="font-medium">Foto buku stok</span><span className="ink-soft"> — dibaca otomatis, kamu tinggal konfirmasi</span></span>
+            </li>
+            <li className="flex items-start gap-3 px-4 py-3">
+              <IconNote className="ink-soft mt-0.5 h-[18px] w-[18px] shrink-0" />
+              <span><span className="font-medium">File Excel</span><span className="ink-soft"> — template bisa diunduh di Pengaturan</span></span>
+            </li>
+            <li className="flex items-start gap-3 px-4 py-3">
+              <IconChat className="ink-soft mt-0.5 h-[18px] w-[18px] shrink-0" />
+              <span><span className="font-medium">Atau tanya apa saja</span><span className="ink-soft"> — &ldquo;stok arabica berapa?&rdquo;</span></span>
+            </li>
+          </ul>
           <button onClick={() => router.replace("/overview")} className="btn-accent mt-6 w-full py-3.5">
-            Buka dashboard 🎉
+            Buka dashboard
           </button>
         </div>
       )}

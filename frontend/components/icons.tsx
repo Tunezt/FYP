@@ -1,4 +1,4 @@
-/** Hand-drawn inline icon set — one consistent 24px grid, 1.8px strokes,
+/** Hand-drawn inline icon set — one consistent 24px grid, 1.7px strokes,
  * rounded caps. Deliberately not an icon library. */
 
 type IconProps = { className?: string };
@@ -9,7 +9,7 @@ function Svg({ children, className }: IconProps & { children: React.ReactNode })
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className ?? "h-5 w-5"}
@@ -188,6 +188,122 @@ export const IconTrendUp = (p: IconProps) => (
   </Svg>
 );
 
+export const IconClose = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />
+  </Svg>
+);
+
+export const IconSearch = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m16 16 4 4" />
+  </Svg>
+);
+
+export const IconMore = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="4" y="4" width="6.5" height="6.5" rx="1.8" />
+    <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8" />
+    <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8" />
+    <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" />
+  </Svg>
+);
+
+export const IconBackspace = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 5.5h10a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H9L3.5 12 9 5.5Z" />
+    <path d="m11.5 9.5 5 5M16.5 9.5l-5 5" />
+  </Svg>
+);
+
+export const IconPrinter = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 9V4h10v5" />
+    <rect x="3.5" y="9" width="17" height="8" rx="2" />
+    <path d="M7 14h10v6H7z" />
+  </Svg>
+);
+
+export const IconDownload = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" />
+    <path d="M5 19.5h14" />
+  </Svg>
+);
+
+export const IconUpload = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 15.5v-11M7.5 9 12 4.5 16.5 9" />
+    <path d="M5 19.5h14" />
+  </Svg>
+);
+
+export const IconExternal = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M13.5 5h5.5v5.5M19 5l-8 8" />
+    <path d="M17 13.5V18a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V8.5A1.5 1.5 0 0 1 6 7h4.5" />
+  </Svg>
+);
+
+export const IconPlugOff = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 3.5v4M15 3.5v4" />
+    <path d="M6.5 7.5h11V11a5.5 5.5 0 0 1-11 0V7.5Z" />
+    <path d="M12 16.5v4" />
+    <path d="M4 4l16 16" />
+  </Svg>
+);
+
+export const IconTicket = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h13A1.5 1.5 0 0 1 20 7.5v2a2.5 2.5 0 0 0 0 5v2a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 16.5v-2a2.5 2.5 0 0 0 0-5v-2Z" />
+    <path d="M14 6.5v11" strokeDasharray="1.5 2" />
+  </Svg>
+);
+
+export const IconCamera = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9Z" />
+    <circle cx="12" cy="12.5" r="3.5" />
+  </Svg>
+);
+
+export const IconShield = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3.5 19 6v5.5c0 4.2-3 7.6-7 9-4-1.4-7-4.8-7-9V6l7-2.5Z" />
+    <path d="m9 12 2.2 2.2L15.5 10" />
+  </Svg>
+);
+
+export const IconClock = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 7.5V12l3 2" />
+  </Svg>
+);
+
+export const IconNote = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.5 3.5h8l4 4v11.5a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5.5 19V5a1.5 1.5 0 0 1 1-1.5Z" />
+    <path d="M14 3.5V8h4.5M8.5 12.5h7M8.5 16h5" />
+  </Svg>
+);
+
+export const IconLeaf = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 19c0-8 5-13.5 14-14-.5 9-6 14-14 14Z" />
+    <path d="M5 19c3-3 6-5.5 9.5-7.5" />
+  </Svg>
+);
+
+export const IconAlert = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 8v4.5M12 15.8v.2" />
+  </Svg>
+);
+
 /* ── Product-category icons ── same 24px grid/stroke as above, used by ItemIcon
  * to give stock rows a recognizable mark instead of bare initials. */
 
@@ -325,7 +441,7 @@ export const IconCatBakery = (p: IconProps) => (
 );
 
 export const IconUsers = (p: IconProps) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...p}>
     <circle cx="9" cy="8" r="3.2" />
     <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
     <circle cx="16.5" cy="9.5" r="2.4" />

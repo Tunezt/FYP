@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { IconCalendar, IconChevronLeft, IconChevronRight } from "@/components/icons";
+import { Portal } from "@/components/ui";
 
 /** A date range picked on one calendar, with the span drawn as one band.
  *
@@ -187,11 +188,12 @@ export function DateRangePicker({
       </button>
 
       {open && pos && (
+        <Portal>
         <div
           ref={panelRef}
           role="dialog"
           aria-label="Pilih rentang tanggal"
-          className="popover-panel p-3"
+          className="popover-panel max-h-none p-3"
           style={{ left: pos.left, top: pos.top, width: PANEL_W }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -277,6 +279,7 @@ export function DateRangePicker({
             )}
           </div>
         </div>
+        </Portal>
       )}
     </>
   );

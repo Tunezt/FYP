@@ -115,7 +115,7 @@ const ITEM_SPECS: ItemSpec[] = [
   { name: "Teh Tarik", unit: "cup", stock: 27, cost: 4000, sell: 15000, reorder: 10, usage: 2.4, weight: 4 },
   { name: "Roti Bakar Coklat", unit: "pcs", stock: 15, cost: 9000, sell: 24000, reorder: 8, usage: 1.9, weight: 3 },
   { name: "Croissant", unit: "pcs", stock: 4, cost: 12000, sell: 28000, reorder: 6, usage: 4.3, weight: 3 },
-  { name: "Nasi Goreng Senja", unit: "porsi", stock: 12, cost: 15000, sell: 35000, reorder: 6, usage: 1.5, weight: 2 },
+  { name: "Nasi Goreng Spesial", unit: "porsi", stock: 12, cost: 15000, sell: 35000, reorder: 6, usage: 1.5, weight: 2 },
   { name: "Biji Arabica", unit: "kg", stock: 2.4, cost: 145000, sell: 0, reorder: 3, usage: 0.9, weight: 0 },
   { name: "Gula Aren", unit: "kg", stock: 1.5, cost: 38000, sell: 0, reorder: 2, usage: null, weight: 0 },
   { name: "Susu UHT", unit: "liter", stock: 9, cost: 17000, sell: 0, reorder: 10, usage: null, weight: 0 },
@@ -391,7 +391,7 @@ function buildPnl(months: number): PnlMonth[] {
 
 const BUSINESS: Business = {
   id: "demo-business",
-  name: "Kopi Kenangan Senja",
+  name: "Poernama",
   business_type: "cafe",
   owner_phone: "628120001111",
   language_preference: "id",
@@ -574,8 +574,8 @@ const PROMOS: PromoRow[] = [
 
 const VOUCHERS: VoucherRow[] = [
   { id: "demo-v-1", code: "SELAMAT-DATANG", kind: "amount_off", value: "5000.0000", max_discount: null, min_spend: "25000.00", starts_at: null, expires_at: jktIso(-60, 0), max_uses: 100, uses: 23, batch_id: null, batch_name: null, is_active: true, created_at: jktIso(30, 9) },
-  { id: "demo-v-2", code: "SENJA-7KQ2MN4P", kind: "percent_off", value: "0.2000", max_discount: "15000.00", min_spend: "0.00", starts_at: null, expires_at: jktIso(-30, 0), max_uses: 1, uses: 1, batch_id: "demo-batch-1", batch_name: "Flyer September", is_active: true, created_at: jktIso(10, 9) },
-  { id: "demo-v-3", code: "SENJA-B3XW9RTD", kind: "percent_off", value: "0.2000", max_discount: "15000.00", min_spend: "0.00", starts_at: null, expires_at: jktIso(-30, 0), max_uses: 1, uses: 0, batch_id: "demo-batch-1", batch_name: "Flyer September", is_active: true, created_at: jktIso(10, 9) },
+  { id: "demo-v-2", code: "PRNM-7KQ2MN4P", kind: "percent_off", value: "0.2000", max_discount: "15000.00", min_spend: "0.00", starts_at: null, expires_at: jktIso(-30, 0), max_uses: 1, uses: 1, batch_id: "demo-batch-1", batch_name: "Flyer September", is_active: true, created_at: jktIso(10, 9) },
+  { id: "demo-v-3", code: "PRNM-B3XW9RTD", kind: "percent_off", value: "0.2000", max_discount: "15000.00", min_spend: "0.00", starts_at: null, expires_at: jktIso(-30, 0), max_uses: 1, uses: 0, batch_id: "demo-batch-1", batch_name: "Flyer September", is_active: true, created_at: jktIso(10, 9) },
 ];
 
 function paginate<T>(rows: T[], page: number, pageSize: number, inflateTotal = 0): Page<T> {

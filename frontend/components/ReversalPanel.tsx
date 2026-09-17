@@ -18,7 +18,8 @@ import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { dayLabel, timeLabel } from "@/lib/dates";
 import type { OrderRow, OrdersPage, Receipt, ReversalResult } from "@/lib/types";
-import { EmptyState, Glass, Plate, Skeleton } from "@/components/ui";
+import { EmptyState, Glass, Skeleton } from "@/components/ui";
+import { IconChevronDown, IconReceipt, IconSearch } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -95,7 +96,7 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
 
   return (
     <section>
-      <h2 className="text-base font-bold">Batalkan atau kembalikan transaksi</h2>
+      <h2 className="section-title">Batalkan atau kembalikan transaksi</h2>
       <p className="ink-soft mt-1 text-sm">
         Untuk kesalahan yang baru ketahuan setelah shift ditutup. Kasir bisa membatalkan transaksi
         hari ini sendiri dari layar kasir. Perlu PIN pemilik atau manajer, dan setiap persetujuan
@@ -103,32 +104,30 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
       </p>
 
       {done && (
-        <p
-          className="mt-3 rounded-2xl px-4 py-3 text-sm font-medium"
-          style={{ background: "var(--good-bg)", color: "var(--good)" }}
-        >
-          {done}
-        </p>
+        <p className="notice notice-good mt-3">{done}</p>
       )}
 
-      <Plate className="mt-3 space-y-3 px-6 py-5">
-        <input
-          className="field"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Cari nomor struk, mis. A1B2C3D4"
-        />
+      <Glass className="mt-4 px-5 pb-2 pt-4 md:px-6">
+        <div className="relative">
+          <IconSearch className="ink-faint pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2" />
+          <input
+            className="field pl-10"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Cari nomor struk, mis. A1B2C3D4"
+            aria-label="Cari nomor struk"
+          />
+        </div>
 
         {orders.loading && !orders.data ? (
-          <Skeleton className="h-32" />
+          <Skeleton className="my-3 h-32" />
         ) : rows.length === 0 ? (
-          <Glass>
-            <EmptyState emoji="🧾" title="Tidak ada transaksi">
-              {query ? "Nomor struk itu tidak ditemukan." : "Belum ada transaksi yang tercatat."}
-            </EmptyState>
-          </Glass>
+          <EmptyState icon={<IconReceipt className="h-5 w-5" />} title="Tidak ada transaksi">
+            {query ? "Nomor struk itu tidak ditemukan." : "Belum ada transaksi yang tercatat."}
+          </EmptyState>
         ) : (
-          <ul>
+          <ul className="mt-2">
             {rows.map((row) => {
               const isOpen = openId === row.id;
               const label = STATUS_LABEL[row.status] ?? row.status;
@@ -136,16 +135,17 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                 <li key={row.id} className="hairline-t first:border-t-0">
                   <button
                     onClick={() => (isOpen ? reset() : open(row))}
-                    className="flex w-full items-center gap-3 py-3 text-left"
+                    aria-expanded={isOpen}
+                    className="list-row list-row-action border-b-0"
                   >
-                    <span className="ink-faint w-24 shrink-0 text-xs">
+                    <span className="ink-faint w-20 shrink-0 text-xs">
                       {/* The owner's list spans the whole history, so a bare time
                           would be ambiguous: name the business day too (M15-T4). */}
                       {dayLabel(new Date(row.sold_at), tz, dayStart)}
                       <span className="block tabular-nums">{timeLabel(new Date(row.sold_at), tz)}</span>
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">
+                      <p className="truncate text-sm font-medium">
                         #{row.number}
                         {label && <span className="ink-faint font-normal"> · {label}</span>}
                       </p>
@@ -161,15 +161,19 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                     <span className="shrink-0 text-sm font-semibold tabular-nums">
                       {formatRupiah(row.total)}
                     </span>
+                    <IconChevronDown
+                      className={`row-chevron h-4 w-4 shrink-0 ${isOpen ? "rotate-180" : ""}`}
+                      aria-hidden
+                    />
                   </button>
 
                   {isOpen && (
-                    <div className="pb-4">
+                    <div className="pb-4 sm:pl-[5.75rem]">
                       {!receipt ? (
                         <Skeleton className="h-24" />
                       ) : (
                         <>
-                          <ul className="ink-soft mb-3 space-y-0.5 text-sm">
+                          <ul className="ink-soft surface-inset mb-3 space-y-1 rounded-xl px-3 py-2 text-sm">
                             {receipt.lines
                               .filter((l) => Number(l.quantity) > 0)
                               .map((l, i) => (
@@ -191,20 +195,24 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                             <div className="space-y-3">
                               <div className="grid gap-2 sm:grid-cols-2">
                                 <button
+                                  type="button"
                                   onClick={() => setMode("void")}
-                                  className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${mode === "void" ? "btn-accent" : "btn-quiet"}`}
+                                  aria-pressed={mode === "void"}
+                                  className="choice-card"
                                 >
                                   Batalkan
-                                  <span className="ink-faint block text-[11px] font-normal">
+                                  <span className="ink-faint block text-xs font-normal">
                                     transaksinya tidak pernah terjadi
                                   </span>
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => setMode("refund")}
-                                  className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${mode === "refund" ? "btn-accent" : "btn-quiet"}`}
+                                  aria-pressed={mode === "refund"}
+                                  className="choice-card"
                                 >
                                   Kembalikan
-                                  <span className="ink-faint block text-[11px] font-normal">
+                                  <span className="ink-faint block text-xs font-normal">
                                     uang dikembalikan ke pembeli
                                   </span>
                                 </button>
@@ -213,10 +221,10 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                               {mode && (
                                 <>
                                   {mode === "refund" && (
-                                    <label className="flex items-center justify-between gap-3 text-sm">
+                                    <label className="flex cursor-pointer items-center justify-between gap-3 text-sm">
                                       <span>
                                         Barang kembali ke stok
-                                        <span className="ink-faint block text-[11px]">
+                                        <span className="ink-faint block text-xs">
                                           matikan kalau barangnya sudah terpakai, tumpah, atau dibuang
                                         </span>
                                       </span>
@@ -224,13 +232,12 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                                         type="checkbox"
                                         checked={restock}
                                         onChange={(e) => setRestock(e.target.checked)}
-                                        className="h-5 w-5"
                                       />
                                     </label>
                                   )}
                                   <div className="grid gap-2 sm:grid-cols-2">
                                     <label className="block">
-                                      <span className="ink-soft mb-1.5 block text-xs font-medium">Alasan</span>
+                                      <span className="ink-soft mb-1.5 block text-[13px] font-medium">Alasan</span>
                                       <input
                                         className="field"
                                         value={note}
@@ -239,7 +246,7 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                                       />
                                     </label>
                                     <label className="block">
-                                      <span className="ink-soft mb-1.5 block text-xs font-medium">
+                                      <span className="ink-soft mb-1.5 block text-[13px] font-medium">
                                         PIN pemilik / manajer
                                       </span>
                                       <input
@@ -269,7 +276,7 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                           )}
                         </>
                       )}
-                      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+                      {error && <p className="notice notice-bad mt-3">{error}</p>}
                     </div>
                   )}
                 </li>
@@ -277,7 +284,7 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
             })}
           </ul>
         )}
-      </Plate>
+      </Glass>
     </section>
   );
 }

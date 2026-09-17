@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError, POS_PAIRING_KEY, POS_TOKEN_KEY } from "@/lib/api";
 import { Select } from "@/components/Select";
+import { IconBackspace, IconCheck, IconExternal, IconLock, IconPlugOff } from "@/components/icons";
 import { formatQty, formatRupiah, initials } from "@/lib/format";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 
@@ -246,9 +247,11 @@ export default function PosPage() {
   if (screen.kind === "error") {
     return (
       <Center>
-        <div className="glass-card max-w-md px-8 py-10 text-center">
-          <p className="text-4xl">🔌</p>
-          <h1 className="mt-4 text-xl font-bold">Kasir belum terhubung</h1>
+        <div className="glass-card mx-6 max-w-md px-8 py-10 text-center">
+          <span className="surface-inset ink-faint mx-auto flex h-12 w-12 items-center justify-center rounded-2xl" style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}>
+            <IconPlugOff className="h-6 w-6" />
+          </span>
+          <h1 className="mt-4 text-xl font-semibold tracking-[-0.015em]">Kasir belum terhubung</h1>
           <p className="ink-soft mt-2">{screen.message}</p>
         </div>
       </Center>
@@ -259,10 +262,10 @@ export default function PosPage() {
     return (
       <Center>
         <div className="w-full max-w-2xl animate-fade-up px-6">
-          <p className="ink-soft text-center text-sm font-medium uppercase tracking-widest">
+          <p className="ink-soft text-center text-[15px] font-medium">
             {screen.business.business_name}
           </p>
-          <h1 className="mt-2 text-center text-3xl font-bold tracking-tight">Siapa yang jaga?</h1>
+          <h1 className="mt-1 text-center text-[2rem] font-semibold tracking-[-0.025em]">Siapa yang jaga?</h1>
           <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
             {screen.business.staff.map((s, i) => (
               <button
@@ -270,15 +273,15 @@ export default function PosPage() {
                 onClick={() =>
                   setScreen({ kind: "pin", business: screen.business, staff: s, pin: "", shake: false })
                 }
-                className="glass-card flex flex-col items-center gap-3 px-4 py-8 transition-transform duration-150 hover:scale-[1.03] active:scale-[0.97]"
+                className="glass-card flex flex-col items-center gap-3 px-4 py-8 transition-[transform,box-shadow] duration-150 hover:shadow-key active:scale-[0.98]"
                 style={{ animationDelay: `${i * 60}ms` }}
               >
-                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-gradient text-xl font-bold text-white shadow-pop">
+                <span className="surface-inset ink-soft flex h-16 w-16 items-center justify-center rounded-full text-xl font-semibold" style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}>
                   {initials(s.name)}
                 </span>
-                <span className="text-lg font-semibold">{s.name}</span>
+                <span className="text-[17px] font-semibold">{s.name}</span>
                 {s.role === "owner" && (
-                  <span className="rounded-full bg-accent-gradient-soft px-3 py-0.5 text-xs font-medium text-accent-600">
+                  <span className="pill-good">
                     pemilik
                   </span>
                 )}
@@ -361,14 +364,13 @@ function PinPad({
   return (
     <Center>
       <div className="w-full max-w-sm animate-scale-in px-6 text-center">
-        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent-gradient text-xl font-bold text-white shadow-pop">
+        <span className="surface-inset ink-soft mx-auto flex h-16 w-16 items-center justify-center rounded-full text-xl font-semibold" style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}>
           {initials(staff.name)}
         </span>
-        <h1 className="mt-4 text-2xl font-bold">Halo, {staff.name}</h1>
+        <h1 className="mt-4 text-2xl font-semibold tracking-[-0.02em]">Halo, {staff.name}</h1>
         {notice ? (
           <p
-            className="mx-auto mt-3 max-w-xs rounded-2xl px-4 py-3 text-sm font-medium"
-            style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+            className="mx-auto mt-3 max-w-xs notice notice-bad"
           >
             {notice}
           </p>
@@ -387,9 +389,9 @@ function PinPad({
           {[0, 1, 2, 3].map((i) => (
             <span
               key={i}
-              className={`h-4 w-4 rounded-full border-2 transition-all duration-150 ${
+              className={`h-3.5 w-3.5 rounded-full border-[1.5px] transition-all duration-150 ${
                 i < pin.length
-                  ? "border-accent-500 bg-accent-500 scale-110"
+                  ? "border-[color:var(--accent)] bg-[color:var(--accent-fill)]"
                   : "border-[color:var(--ink-faint)]"
               }`}
             />
@@ -397,13 +399,13 @@ function PinPad({
         </div>
         <style>{`@keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-10px)} 40%{transform:translateX(10px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }`}</style>
 
-        <div className="mx-auto mt-8 grid max-w-xs grid-cols-3 gap-3">
+        <div className="mx-auto mt-8 grid max-w-[18rem] grid-cols-3 gap-x-5 gap-y-4">
           {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
             <PinKey key={d} label={d} onPress={() => onDigit(d)} />
           ))}
           <button
             onClick={onBack}
-            className="rounded-2xl py-5 text-sm font-medium text-[color:var(--ink-soft)] transition-transform active:scale-90"
+            className="rounded-2xl py-5 text-[15px] font-medium text-[color:var(--ink-soft)] transition-colors hover:text-[color:var(--ink)] active:opacity-60"
           >
             batal
           </button>
@@ -411,9 +413,9 @@ function PinPad({
           <button
             onClick={onDelete}
             aria-label="hapus"
-            className="rounded-2xl py-5 text-2xl transition-transform active:scale-90"
+            className="ink-soft flex items-center justify-center rounded-2xl py-5 transition-colors hover:text-[color:var(--ink)] active:opacity-60"
           >
-            ⌫
+            <IconBackspace className="h-7 w-7" />
           </button>
         </div>
       </div>
@@ -425,7 +427,7 @@ function PinKey({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <button
       onClick={onPress}
-      className="glass-card glass-strong rounded-2xl py-5 text-2xl font-semibold shadow-key transition-transform duration-100 active:scale-90"
+      className="rounded-full bg-[color:var(--surface)] py-5 text-[26px] font-normal tabular-nums shadow-key transition-[transform,background-color] duration-100 hover:bg-[color:var(--surface-inset)] active:scale-95 active:bg-[color:var(--row-press)]"
     >
       {label}
     </button>
@@ -887,12 +889,12 @@ function SellScreen({
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-4 pb-8">
-      <header className="hairline-b sticky top-0 z-10 -mx-4 mb-6 flex items-center justify-between bg-[color:var(--bg-base)]/80 px-4 py-4 backdrop-blur-xl">
-        <div>
-          <p className="ink-faint text-xs font-medium uppercase tracking-widest">{businessName}</p>
-          <p className="text-lg font-bold">Kasir · {staffName}</p>
+      <header className="hairline-b sticky-bar sticky top-0 z-10 -mx-4 mb-6 flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:py-4">
+        <div className="min-w-0">
+          <p className="ink-faint truncate text-[13px] font-medium">{businessName}</p>
+          <p className="truncate text-lg font-semibold tracking-[-0.015em]">Kasir · {staffName}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:justify-end sm:overflow-visible sm:px-0 [&>*]:shrink-0">
           {shift === undefined ? null : shift === null ? (
             <button
               onClick={() => {
@@ -909,10 +911,10 @@ function SellScreen({
                 setShiftError(null);
                 setShiftSheet("close");
               }}
-              className="glass-card px-4 py-1.5 text-left"
+              className="btn-quiet flex-col items-start gap-0 px-4 py-1.5 text-left"
               title="Tutup shift"
             >
-              <p className="ink-faint text-[10px] font-medium uppercase tracking-wide">Shift buka · kas seharusnya</p>
+              <p className="ink-faint text-[11px] font-medium">Shift buka · kas seharusnya</p>
               <p className="text-sm font-semibold tabular-nums">{formatRupiah(shift.expected_cash ?? shift.opening_float)}</p>
             </button>
           )}
@@ -927,7 +929,7 @@ function SellScreen({
           >
             Pesanan
             {tickets.length > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-accent-700 shadow-pop">
+              <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[color:var(--surface)] px-1.5 text-[11px] font-bold tabular-nums text-[color:var(--accent)] shadow-key">
                 {tickets.length}
               </span>
             )}
@@ -943,16 +945,16 @@ function SellScreen({
             Kas
           </button>
           <a href={`/kitchen/${pairingToken}`} target="_blank" rel="noreferrer" className="btn-quiet px-4 py-2 text-sm" title="Layar dapur (M11-T2)">
-            Dapur ↗
+            Dapur <IconExternal className="ink-faint h-3.5 w-3.5" />
           </a>
           <button onClick={onLock} className="btn-quiet px-4 py-2 text-sm">
-            🔒 Kunci
+            <IconLock className="h-4 w-4" /> Kunci
           </button>
         </div>
       </header>
 
       {cashDone && (
-        <p className="glass-card mb-4 px-4 py-2 text-sm font-medium">{cashDone}</p>
+        <p className="notice notice-good mb-4">{cashDone}</p>
       )}
 
       {items === null ? (
@@ -979,26 +981,24 @@ function SellScreen({
                   setQty(1);
                   setError(null);
                 }}
-                className={`glass-card relative flex flex-col items-start gap-1 px-5 py-6 text-left transition-transform duration-150 ${
-                  out ? "opacity-40" : "hover:scale-[1.02] active:scale-[0.97]"
+                className={`glass-card relative flex min-h-[8.5rem] flex-col items-start gap-1 px-5 py-5 text-left transition-[transform,box-shadow] duration-150 ${
+                  out ? "opacity-40" : "hover:shadow-key active:scale-[0.98]"
                 }`}
               >
                 {inCart > 0 && (
-                  <span className="absolute right-3 top-3 flex h-7 min-w-7 items-center justify-center rounded-full bg-accent-gradient px-2 text-xs font-bold text-white shadow-pop">
+                  <span className="absolute right-3 top-3 flex h-6 min-w-6 items-center justify-center rounded-full bg-[color:var(--accent-fill)] px-2 text-xs font-bold tabular-nums text-[color:var(--on-accent)]">
                     {inCart}
                   </span>
                 )}
-                <span className="text-base font-bold leading-tight">{item.name}</span>
-                <span className="font-semibold text-accent-700">
+                <span className="pr-6 text-[15px] font-semibold leading-snug">{item.name}</span>
+                <span className="font-semibold tabular-nums text-[color:var(--accent)]">
                   {formatRupiah(item.sell_price)}
-                  {item.variants.length > 1 && (
-                    <span className="ink-faint ml-1 text-xs font-medium">· {item.variants.length} ukuran</span>
-                  )}
                 </span>
                 <span
-                  className={`mt-1 text-xs font-medium ${low ? "" : "ink-faint"}`}
+                  className={`mt-auto pt-2 text-xs font-medium ${low ? "" : "ink-faint"}`}
                   style={low ? { color: "var(--warn)" } : undefined}
                 >
+                  {item.variants.length > 1 ? `${item.variants.length} ukuran · ` : ""}
                   {item.made_to_order ? "dibuat saat dipesan" : out ? "habis" : `sisa ${formatQty(stock)} ${item.unit}`}
                   {low && !out ? " · hampir habis" : ""}
                 </span>
@@ -1011,14 +1011,14 @@ function SellScreen({
       {/* Shift sheet (M7-T1): open with a float, close with a count */}
       {shiftSheet && (
         <div
-          className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          className="sheet-scrim"
           onClick={() => !busy && setShiftSheet(null)}
         >
           <div
-            className="glass-card glass-strong w-full max-w-md animate-fade-up rounded-b-none rounded-t-4xl px-8 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            className="sheet-panel block overflow-y-auto sm:max-w-md px-8 pb-10 pt-6 sm:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-xl font-bold">{shiftSheet === "open" ? "Buka shift" : "Tutup shift"}</p>
+            <p className="text-[19px] font-semibold tracking-[-0.015em]">{shiftSheet === "open" ? "Buka shift" : "Tutup shift"}</p>
             {shiftSheet === "open" ? (
               <p className="ink-soft text-sm">Modal awal di laci kasir.</p>
             ) : shift ? (
@@ -1058,7 +1058,7 @@ function SellScreen({
               </dl>
             ) : null}
             <label className="mt-5 block">
-              <span className="ink-faint text-xs font-medium uppercase tracking-wide">
+              <span className="ink-soft text-[13px] font-medium">
                 {shiftSheet === "open" ? "Modal awal (Rp)" : "Uang dihitung (Rp)"}
               </span>
               <input
@@ -1066,7 +1066,7 @@ function SellScreen({
                 inputMode="numeric"
                 value={shiftAmount}
                 onChange={(e) => setShiftAmount(e.target.value.replace(/[^0-9]/g, ""))}
-                className="glass-card mt-1 w-full rounded-2xl px-4 py-3 text-2xl font-bold tabular-nums"
+                className="field mt-1 w-full py-3 text-2xl font-bold tabular-nums"
                 placeholder="0"
               />
             </label>
@@ -1074,11 +1074,11 @@ function SellScreen({
               <input
                 value={shiftNote}
                 onChange={(e) => setShiftNote(e.target.value)}
-                className="glass-card mt-3 w-full rounded-2xl px-4 py-2 text-sm"
+                className="field mt-3 w-full text-sm"
                 placeholder="Catatan (opsional)"
               />
             )}
-            {shiftError && <p className="mt-3 text-sm text-red-600">{shiftError}</p>}
+            {shiftError && <p className="mt-3 text-sm text-[color:var(--bad)]">{shiftError}</p>}
             <div className="mt-5 flex gap-3">
               <button onClick={() => setShiftSheet(null)} className="btn-quiet flex-1 py-3">
                 Batal
@@ -1094,14 +1094,14 @@ function SellScreen({
       {/* Cash sheet (M7-T2): cash in, petty cash, supplier paid, bank drop */}
       {cashSheet && (
         <div
-          className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          className="sheet-scrim"
           onClick={() => !busy && setCashSheet(false)}
         >
           <div
-            className="glass-card glass-strong w-full max-w-md animate-fade-up rounded-b-none rounded-t-4xl px-8 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            className="sheet-panel block overflow-y-auto sm:max-w-md px-8 pb-10 pt-6 sm:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-xl font-bold">Kas masuk / keluar</p>
+            <p className="text-[19px] font-semibold tracking-[-0.015em]">Kas masuk / keluar</p>
             <p className="ink-soft text-sm">Uang laci di luar penjualan. Semua masuk pembukuan.</p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               {(
@@ -1115,8 +1115,9 @@ function SellScreen({
                 <button
                   key={kind}
                   onClick={() => setCashKind(kind)}
+                  aria-pressed={cashKind === kind}
                   className={`rounded-2xl px-3 py-2.5 text-sm font-semibold transition-colors ${
-                    cashKind === kind ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                    cashKind === kind ? "toggle-on" : "toggle-off"
                   }`}
                 >
                   {label}
@@ -1124,20 +1125,20 @@ function SellScreen({
               ))}
             </div>
             <label className="mt-4 block">
-              <span className="ink-faint text-xs font-medium uppercase tracking-wide">Jumlah (Rp)</span>
+              <span className="ink-soft text-[13px] font-medium">Jumlah (Rp)</span>
               <input
                 autoFocus
                 inputMode="numeric"
                 value={cashInput}
                 onChange={(e) => setCashInput(e.target.value.replace(/[^0-9]/g, ""))}
-                className="glass-card mt-1 w-full rounded-2xl px-4 py-3 text-2xl font-bold tabular-nums"
+                className="field mt-1 w-full py-3 text-2xl font-bold tabular-nums"
                 placeholder="0"
               />
             </label>
             <input
               value={cashReason}
               onChange={(e) => setCashReason(e.target.value)}
-              className="glass-card mt-3 w-full rounded-2xl px-4 py-2 text-sm"
+              className="field mt-3 w-full text-sm"
               placeholder={cashKind === "petty_cash" ? "Beli apa? (mis. es batu)" : "Alasan"}
             />
             {cashKind === "petty_cash" && (
@@ -1146,8 +1147,9 @@ function SellScreen({
                   <button
                     key={cat}
                     onClick={() => setCashCategory(cat)}
-                    className={`rounded-2xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      cashCategory === cat ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                    aria-pressed={cashCategory === cat}
+                  className={`rounded-2xl px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      cashCategory === cat ? "toggle-on" : "toggle-off"
                     }`}
                   >
                     {cat}
@@ -1166,7 +1168,7 @@ function SellScreen({
                 onChange={setCashSupplier}
               />
             )}
-            {cashError && <p className="mt-3 text-sm text-red-600">{cashError}</p>}
+            {cashError && <p className="mt-3 text-sm text-[color:var(--bad)]">{cashError}</p>}
             <div className="mt-5 flex gap-3">
               <button onClick={() => setCashSheet(false)} className="btn-quiet flex-1 py-3">
                 Batal
@@ -1194,34 +1196,34 @@ function SellScreen({
       {/* The e-menu queue (M11-T1): pay a guest's ticket here, or cancel it */}
       {ticketSheet && (
         <div
-          className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          className="sheet-scrim"
           onClick={() => !ticketBusy && setTicketSheet(false)}
         >
           <div
-            className="glass-card glass-strong max-h-[90vh] w-full max-w-lg animate-fade-up overflow-y-auto rounded-b-none rounded-t-4xl px-6 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            className="sheet-panel block overflow-y-auto sm:max-w-lg px-6 pb-10 pt-6 sm:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xl font-bold">Pesanan dari menu QR</p>
+                <p className="text-[19px] font-semibold tracking-[-0.015em]">Pesanan dari menu QR</p>
                 <p className="ink-soft text-sm">Tamu memesan dari meja; bayar di sini, stok dan pembukuan ikut saat dibayar.</p>
               </div>
               <button onClick={() => setTicketSheet(false)} className="ink-soft rounded-full px-3 py-1 text-sm">
                 tutup
               </button>
             </div>
-            {ticketError && <p className="mt-3 text-sm text-red-600">{ticketError}</p>}
+            {ticketError && <p className="mt-3 text-sm text-[color:var(--bad)]">{ticketError}</p>}
             {tickets.length === 0 ? (
-              <p className="glass-card mt-4 px-4 py-6 text-center text-sm">Belum ada pesanan yang menunggu.</p>
+              <p className="surface-inset rounded-2xl mt-4 px-4 py-6 text-center text-sm">Belum ada pesanan yang menunggu.</p>
             ) : (
               <ul className="mt-4 space-y-3">
                 {tickets.map((t) => {
                   const busyHere = ticketBusy === t.id;
                   return (
-                    <li key={t.id} className="glass-card px-4 py-3">
+                    <li key={t.id} className="surface-inset rounded-2xl px-4 py-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-lg font-black tracking-tight">{t.code}</p>
+                          <p className="text-lg font-bold tracking-[-0.02em]">{t.code}</p>
                           <p className="ink-soft text-xs">
                             {t.order_type === "dine_in" ? t.table_label || "Makan di sini" : "Bawa pulang"}
                             {t.guest_name ? ` · ${t.guest_name}` : ""} · {waitingMinutes(t.placed_at)} mnt lalu
@@ -1248,13 +1250,13 @@ function SellScreen({
                             autoFocus
                             value={cancelReason}
                             onChange={(e) => setCancelReason(e.target.value.slice(0, 200))}
-                            className="glass-card flex-1 rounded-2xl px-3 py-2 text-sm"
+                            className="field flex-1 text-sm"
                             placeholder="Alasan (mis. bahan habis)"
                           />
                           <button onClick={() => setCancelFor(null)} className="btn-quiet px-3 py-2 text-sm">
                             Kembali
                           </button>
-                          <button onClick={() => cancelTicket(t)} disabled={busyHere} className="rounded-2xl px-3 py-2 text-sm font-semibold text-red-600">
+                          <button onClick={() => cancelTicket(t)} disabled={busyHere} className="rounded-2xl px-3 py-2 text-sm font-semibold text-[color:var(--bad)]">
                             Batalkan
                           </button>
                         </div>
@@ -1290,11 +1292,11 @@ function SellScreen({
       {/* Shift closed: the count against the expectation */}
       {shiftResult && (
         <div
-          className="fixed inset-0 z-30 flex items-center justify-center bg-black/40"
+          className="sheet-scrim items-center p-6"
           onClick={() => setShiftResult(null)}
         >
           <div
-            className="glass-card glass-strong w-full max-w-sm animate-fade-up rounded-4xl px-8 py-8"
+            className="sheet-panel block w-full max-w-sm overflow-y-auto rounded-4xl px-8 py-8"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="ink-faint text-center text-xs font-medium uppercase tracking-wide">
@@ -1318,7 +1320,7 @@ function SellScreen({
               </div>
               <div className="flex justify-between">
                 <dt className="ink-soft">Selisih</dt>
-                <dd className={`font-bold tabular-nums ${Number(shiftResult.variance) < 0 ? "text-red-600" : ""}`}>
+                <dd className={`font-bold tabular-nums ${Number(shiftResult.variance) < 0 ? "text-[color:var(--bad)]" : ""}`}>
                   {Number(shiftResult.variance) > 0 ? "+" : ""}
                   {formatRupiah(shiftResult.variance ?? 0)}
                 </dd>
@@ -1334,15 +1336,15 @@ function SellScreen({
       {/* Quantity sheet */}
       {selected && (
         <div
-          className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          className="sheet-scrim"
           onClick={() => !busy && setSelected(null)}
         >
           <div
-            className="glass-card glass-strong w-full max-w-md animate-fade-up rounded-b-none rounded-t-4xl px-8 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            className="sheet-panel block overflow-y-auto sm:max-w-md px-8 pb-10 pt-6 sm:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-5 h-1.5 w-10 rounded-full bg-[color:var(--ink-faint)] opacity-40 sm:hidden" />
-            <p className="text-xl font-bold">{selected.name}</p>
+            <p className="text-[19px] font-semibold tracking-[-0.015em]">{selected.name}</p>
             <p className="ink-soft text-sm">
               {formatRupiah(variant?.sell_price ?? selected.sell_price)} / {selected.unit}
               {selected.made_to_order ? " · dibuat saat dipesan" : ` · sisa ${formatQty(selected.current_stock)}`}
@@ -1354,8 +1356,9 @@ function SellScreen({
                   <button
                     key={v.id}
                     onClick={() => setVariant(v)}
-                    className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-colors ${
-                      variant?.id === v.id ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                    aria-pressed={variant?.id === v.id}
+                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-colors ${
+                      variant?.id === v.id ? "toggle-on" : "toggle-off"
                     }`}
                   >
                     {v.name} · {formatRupiah(v.sell_price)}
@@ -1366,7 +1369,7 @@ function SellScreen({
 
             {selected.modifier_groups.map((g) => (
               <div key={g.id} className="mt-4">
-                <p className="ink-soft text-xs font-semibold uppercase tracking-wide">
+                <p className="ink-soft text-[13px] font-semibold">
                   {g.name}
                   {g.is_required ? " · wajib" : g.selection === "multi" ? " · boleh lebih dari satu" : ""}
                 </p>
@@ -1377,8 +1380,9 @@ function SellScreen({
                       <button
                         key={m.id}
                         onClick={() => toggleModifier(g, m)}
-                        className={`rounded-2xl px-3 py-2 text-sm font-medium transition-colors ${
-                          on ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                        aria-pressed={on}
+                  className={`rounded-2xl px-3 py-2 text-sm font-medium transition-colors ${
+                          on ? "toggle-on" : "toggle-off"
                         }`}
                       >
                         {m.name}
@@ -1431,7 +1435,7 @@ function SellScreen({
       {/* Cart bar */}
       {cart.length > 0 && !paying && (
         <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-4">
-          <div className="glass-card glass-strong w-full max-w-2xl animate-fade-up px-5 py-3 shadow-pop">
+          <div className="dock w-full max-w-2xl rounded-3xl px-5 py-3">
             {cartOpen && (
               <ul className="hairline-b mb-3 max-h-64 overflow-y-auto pb-2">
                 {cart.map((l) => {
@@ -1481,14 +1485,14 @@ function SellScreen({
                 })}
               </ul>
             )}
-            <div className="flex items-center gap-4">
-              <button onClick={() => setCartOpen((o) => !o)} className="min-w-0 flex-1 text-left">
-                <p className="ink-faint text-xs font-medium uppercase tracking-wide">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <button onClick={() => setCartOpen((o) => !o)} className="min-w-0 flex-1 basis-full text-left sm:basis-auto">
+                <p className="ink-soft text-[13px] font-medium">
                   {cartCount} item · {cartOpen ? "tutup" : "lihat keranjang"}
                 </p>
                 <p className="text-2xl font-bold tabular-nums">{formatRupiah(cartTotal)}</p>
               </button>
-              <button onClick={() => setCart([])} className="btn-quiet px-3 py-2 text-sm">
+              <button onClick={() => setCart([])} className="btn-quiet px-3 py-2.5 text-sm max-sm:flex-1">
                 Kosongkan
               </button>
               <button
@@ -1496,7 +1500,7 @@ function SellScreen({
                   setError(null);
                   setPaying(true);
                 }}
-                className="btn-accent px-6 py-3 text-lg"
+                className="btn-accent px-7 py-3 text-lg max-sm:flex-[2]"
               >
                 Bayar
               </button>
@@ -1508,21 +1512,21 @@ function SellScreen({
       {/* Line discount (M7-T4b) */}
       {lineDiscountFor && (
         <div
-          className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          className="sheet-scrim z-[55]"
           onClick={() => setLineDiscountFor(null)}
         >
           <div
-            className="glass-card glass-strong w-full max-w-sm animate-fade-up rounded-b-none rounded-t-4xl px-8 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            className="sheet-panel block overflow-y-auto sm:max-w-sm px-8 pb-10 pt-6 sm:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-xl font-bold">Diskon baris</p>
+            <p className="text-[19px] font-semibold tracking-[-0.015em]">Diskon baris</p>
             <p className="ink-soft text-sm">Potongan dalam rupiah untuk baris ini saja.</p>
             <input
               autoFocus
               inputMode="numeric"
               value={lineDiscountDraft}
               onChange={(e) => setLineDiscountDraft(e.target.value.replace(/[^0-9]/g, ""))}
-              className="glass-card mt-4 w-full rounded-2xl px-4 py-3 text-2xl font-bold tabular-nums"
+              className="field mt-4 w-full py-3 text-2xl font-bold tabular-nums"
               placeholder="0"
             />
             <div className="mt-5 flex gap-3">
@@ -1552,25 +1556,26 @@ function SellScreen({
       {/* Payment sheet */}
       {paying && (
         <div
-          className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+          className="sheet-scrim"
           onClick={() => !busy && setPaying(false)}
         >
           <div
-            className="glass-card glass-strong w-full max-w-md animate-fade-up rounded-b-none rounded-t-4xl px-8 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+            className="sheet-panel block overflow-y-auto sm:max-w-md px-8 pb-10 pt-6 sm:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="ink-faint text-xs font-medium uppercase tracking-wide">
+            <p className="ink-soft text-[13px] font-medium">
               {cartCount} item
             </p>
             <p className="text-3xl font-bold tabular-nums">{formatRupiah(cartTotal)}</p>
             {/* Order type (M11-T3): routes service charge / delivery fee and what to collect */}
-            <div className="mt-3 grid grid-cols-4 gap-1.5">
+            <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               {(Object.keys(ORDER_TYPE_LABEL) as OrderType[]).map((kind) => (
                 <button
                   key={kind}
                   onClick={() => setOrderType(kind)}
+                  aria-pressed={orderType === kind}
                   className={`rounded-2xl px-2 py-2 text-xs font-semibold transition-colors ${
-                    orderType === kind ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                    orderType === kind ? "toggle-on" : "toggle-off"
                   }`}
                 >
                   {ORDER_TYPE_LABEL[kind]}
@@ -1581,7 +1586,7 @@ function SellScreen({
               <input
                 value={tableLabel}
                 onChange={(e) => setTableLabel(e.target.value.slice(0, 20))}
-                className="glass-card mt-2 w-full rounded-2xl px-3 py-2 text-sm"
+                className="field mt-2 w-full text-sm"
                 placeholder="Nomor meja (opsional)"
               />
             )}
@@ -1590,20 +1595,20 @@ function SellScreen({
                 <input
                   value={deliveryName}
                   onChange={(e) => setDeliveryName(e.target.value.slice(0, 60))}
-                  className="glass-card rounded-2xl px-3 py-2 text-sm"
+                  className="field text-sm"
                   placeholder="Nama penerima"
                 />
                 <input
                   inputMode="tel"
                   value={deliveryPhone}
                   onChange={(e) => setDeliveryPhone(e.target.value.slice(0, 32))}
-                  className="glass-card rounded-2xl px-3 py-2 text-sm tabular-nums"
+                  className="field text-sm tabular-nums"
                   placeholder={customer?.phone ? `HP: ${customer.phone}` : "Nomor HP penerima"}
                 />
                 <input
                   value={deliveryAddress}
                   onChange={(e) => setDeliveryAddress(e.target.value.slice(0, 300))}
-                  className="glass-card col-span-2 rounded-2xl px-3 py-2 text-sm"
+                  className="field col-span-2 text-sm"
                   placeholder="Alamat pengantaran"
                 />
               </div>
@@ -1670,9 +1675,9 @@ function SellScreen({
             )}
             {/* Customer (M8-T1): optional, by name or phone; quick add inline */}
             <div className="mt-4">
-              <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">Pelanggan (opsional)</span>
+              <span className="ink-soft text-[13px] font-medium">Pelanggan (opsional)</span>
               {customer ? (
-                <div className="glass-card mt-1 flex items-center justify-between rounded-2xl px-3 py-2 text-sm">
+                <div className="surface-inset rounded-2xl mt-1 flex items-center justify-between rounded-2xl px-3 py-2 text-sm">
                   <span className="truncate">
                     <span className="font-semibold">{customer.name}</span>
                     {customer.phone ? <span className="ink-faint"> · {customer.phone}</span> : null}
@@ -1697,14 +1702,14 @@ function SellScreen({
                     autoFocus
                     value={customerNew.name}
                     onChange={(e) => setCustomerNew({ ...customerNew, name: e.target.value })}
-                    className="glass-card rounded-2xl px-3 py-2 text-sm"
+                    className="field text-sm"
                     placeholder="Nama"
                   />
                   <input
                     inputMode="tel"
                     value={customerNew.phone}
                     onChange={(e) => setCustomerNew({ ...customerNew, phone: e.target.value })}
-                    className="glass-card rounded-2xl px-3 py-2 text-sm tabular-nums"
+                    className="field text-sm tabular-nums"
                     placeholder="Nomor HP"
                   />
                   <button onClick={quickAddCustomer} className="btn-accent col-span-1 py-2 text-sm">
@@ -1713,18 +1718,18 @@ function SellScreen({
                   <button onClick={() => setCustomerNew(null)} className="btn-quiet py-2 text-sm">
                     Batal
                   </button>
-                  {customerError && <p className="col-span-2 text-xs text-red-600">{customerError}</p>}
+                  {customerError && <p className="col-span-2 text-xs text-[color:var(--bad)]">{customerError}</p>}
                 </div>
               ) : (
                 <div className="relative mt-1">
                   <input
                     value={customerQuery}
                     onChange={(e) => setCustomerQuery(e.target.value)}
-                    className="glass-card w-full rounded-2xl px-3 py-2 text-sm"
+                    className="field w-full text-sm"
                     placeholder="Cari nama atau nomor HP"
                   />
                   {(customerMatches.length > 0 || customerQuery.trim().length >= 2) && (
-                    <ul className="glass-card glass-strong absolute left-0 right-0 top-full z-10 mt-1 max-h-44 overflow-auto rounded-2xl py-1 text-sm">
+                    <ul className="absolute bg-[color:var(--surface-float)] shadow-pop left-0 right-0 top-full z-10 mt-1 max-h-44 overflow-auto rounded-2xl py-1 text-sm">
                       {customerMatches.map((m) => (
                         <li key={m.id}>
                           <button
@@ -1756,37 +1761,37 @@ function SellScreen({
               )}
             </div>
             <label className="mt-3 block">
-              <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">Kode voucher</span>
+              <span className="ink-soft text-[13px] font-medium">Kode voucher</span>
               <input
                 value={voucherCode}
                 onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                className="glass-card mt-1 w-full rounded-2xl px-3 py-2 font-mono text-sm"
+                className="field mt-1 w-full font-mono text-sm"
                 placeholder="mis. HEMAT5"
               />
               {quote?.voucher_error && voucherCode.trim() && (
-                <span className="mt-1 block text-xs text-red-600">{quote.voucher_error}</span>
+                <span className="mt-1 block text-xs text-[color:var(--bad)]">{quote.voucher_error}</span>
               )}
             </label>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <label className="block">
-                <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">Diskon struk (Rp)</span>
+                <span className="ink-soft text-[13px] font-medium">Diskon struk (Rp)</span>
                 <input
                   inputMode="numeric"
                   value={billDiscount}
                   onChange={(e) => setBillDiscount(e.target.value.replace(/[^0-9]/g, ""))}
-                  className="glass-card mt-1 w-full rounded-2xl px-3 py-2 text-sm tabular-nums"
+                  className="field mt-1 w-full text-sm tabular-nums"
                   placeholder="0"
                 />
               </label>
               {needsPin && (
                 <label className="block">
-                  <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">PIN pemilik / manajer</span>
+                  <span className="ink-soft text-[13px] font-medium">PIN pemilik / manajer</span>
                   <input
                     type="password"
                     inputMode="numeric"
                     value={managerPin}
                     onChange={(e) => setManagerPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
-                    className="glass-card mt-1 w-full rounded-2xl px-3 py-2 text-sm tabular-nums"
+                    className="field mt-1 w-full text-sm tabular-nums"
                     placeholder="••••"
                   />
                 </label>
@@ -1794,7 +1799,7 @@ function SellScreen({
             </div>
 
             {loyalty?.is_active && customer && customer.points_balance >= (loyalty.min_redeem_points || 1) && (
-              <label className="glass-card mt-3 flex items-center justify-between rounded-2xl px-3 py-2 text-sm">
+              <label className="surface-inset rounded-2xl mt-3 flex items-center justify-between rounded-2xl px-3 py-2 text-sm">
                 <span>
                   <input type="checkbox" className="mr-2" checked={usePoints} onChange={(e) => setUsePoints(e.target.checked)} />
                   Pakai poin
@@ -1824,8 +1829,9 @@ function SellScreen({
                 <button
                   key={mode}
                   onClick={() => setPayMode(mode)}
+                  aria-pressed={payMode === mode}
                   className={`rounded-2xl py-3 text-sm font-semibold transition-colors ${
-                    payMode === mode ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                    payMode === mode ? "toggle-on" : "toggle-off"
                   }`}
                 >
                   {label}
@@ -1844,7 +1850,7 @@ function SellScreen({
                   value={cashPart}
                   onChange={(e) => setCashPart(e.target.value.replace(/[^0-9]/g, ""))}
                   placeholder="0"
-                  className="glass-card mt-1 w-full rounded-2xl px-4 py-3 text-xl font-semibold tabular-nums outline-none"
+                  className="field mt-1 w-full py-3 text-xl font-semibold tabular-nums"
                 />
                 <p className="ink-faint mt-2 text-sm">
                   Tunai {formatRupiah(cashAmount)} · QRIS {formatRupiah(Math.max(0, qrisAmount))}
@@ -1876,12 +1882,12 @@ function SellScreen({
       {/* Success flash */}
       {flash && (
         <div className="fixed inset-x-0 bottom-8 z-30 flex justify-center">
-          <div className="glass-card glass-strong animate-scale-in flex items-center gap-3 px-6 py-4 shadow-pop">
+          <div className="dock flex animate-scale-in items-center gap-3 rounded-3xl px-6 py-4">
             <span
-              className="flex h-9 w-9 items-center justify-center rounded-full text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[color:var(--on-accent)]"
               style={{ background: "var(--good)" }}
             >
-              ✓
+              <IconCheck className="h-5 w-5" />
             </span>
             <div>
               <p className="font-semibold">
@@ -1995,16 +2001,16 @@ function ReversalSheet({
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm sm:items-center"
+      className="sheet-scrim"
       onClick={() => !busy && onClose()}
     >
       <div
-        className="glass-card glass-strong max-h-[90vh] w-full max-w-lg animate-fade-up overflow-y-auto rounded-b-none rounded-t-4xl px-6 pb-10 pt-6 sm:rounded-4xl sm:pb-8"
+        className="sheet-panel block overflow-y-auto sm:max-w-lg px-6 pb-10 pt-6 sm:pb-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xl font-bold">Transaksi hari ini</p>
+            <p className="text-[19px] font-semibold tracking-[-0.015em]">Transaksi hari ini</p>
             <p className="ink-soft text-sm">
               Salah pencet? Buka transaksinya, lalu batalkan atau kembalikan. Perlu PIN pemilik atau
               manajer.
@@ -2015,7 +2021,7 @@ function ReversalSheet({
           </button>
         </div>
 
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-3 text-sm text-[color:var(--bad)]">{error}</p>}
 
         {/* 3 — what happened */}
         {done ? (
@@ -2055,9 +2061,9 @@ function ReversalSheet({
             <button onClick={() => setOpen(null)} className="ink-soft text-sm">
               ← kembali ke daftar
             </button>
-            <div className="glass-card mt-3 px-4 py-3">
+            <div className="surface-inset rounded-2xl mt-3 px-4 py-3">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-lg font-black tracking-tight">#{open.number}</p>
+                <p className="text-lg font-bold tracking-[-0.02em]">#{open.number}</p>
                 <p className="text-lg font-bold tabular-nums">{formatRupiah(open.total)}</p>
               </div>
               <p className="ink-soft text-xs">
@@ -2081,7 +2087,7 @@ function ReversalSheet({
             </div>
 
             {open.status !== "completed" ? (
-              <p className="glass-card mt-4 px-4 py-6 text-center text-sm">
+              <p className="surface-inset rounded-2xl mt-4 px-4 py-6 text-center text-sm">
                 Transaksi ini {open.status === "voided" ? "sudah dibatalkan" : "sudah dikembalikan"} —
                 tidak bisa dibalik lagi.
               </p>
@@ -2107,7 +2113,7 @@ function ReversalSheet({
                 {mode && (
                   <div className="mt-4 space-y-3">
                     {mode === "refund" && (
-                      <label className="glass-card flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm">
+                      <label className="surface-inset rounded-2xl flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm">
                         <span>
                           Barang kembali ke stok
                           <span className="ink-faint block text-[11px]">
@@ -2123,22 +2129,22 @@ function ReversalSheet({
                       </label>
                     )}
                     <label className="block">
-                      <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">Alasan</span>
+                      <span className="ink-soft text-[13px] font-medium">Alasan</span>
                       <input
                         value={note}
                         onChange={(e) => setNote(e.target.value.slice(0, 200))}
-                        className="glass-card mt-1 w-full rounded-2xl px-3 py-2 text-sm"
+                        className="field mt-1 w-full text-sm"
                         placeholder="cth. salah pencet menu"
                       />
                     </label>
                     <label className="block">
-                      <span className="ink-faint text-[10px] font-medium uppercase tracking-wide">PIN pemilik / manajer</span>
+                      <span className="ink-soft text-[13px] font-medium">PIN pemilik / manajer</span>
                       <input
                         type="password"
                         inputMode="numeric"
                         value={pin}
                         onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
-                        className="glass-card mt-1 w-full rounded-2xl px-3 py-2 text-sm tabular-nums"
+                        className="field mt-1 w-full text-sm tabular-nums"
                         placeholder="••••"
                       />
                     </label>
@@ -2164,13 +2170,13 @@ function ReversalSheet({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="glass-card w-full rounded-2xl px-4 py-3 text-sm"
+              className="field w-full py-3 text-sm"
               placeholder="Cari nomor struk, mis. A1B2C3D4"
             />
             {rows === null ? (
-              <p className="glass-card mt-4 px-4 py-6 text-center text-sm">Memuat…</p>
+              <p className="surface-inset rounded-2xl mt-4 px-4 py-6 text-center text-sm">Memuat…</p>
             ) : rows.length === 0 ? (
-              <p className="glass-card mt-4 px-4 py-6 text-center text-sm">
+              <p className="surface-inset rounded-2xl mt-4 px-4 py-6 text-center text-sm">
                 {query ? "Nomor struk itu tidak ada hari ini." : "Belum ada transaksi hari ini."}
               </p>
             ) : (
@@ -2179,7 +2185,7 @@ function ReversalSheet({
                   <li key={row.id}>
                     <button
                       onClick={() => openOrder(row)}
-                      className="glass-card flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                      className="surface-inset rounded-2xl flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
                     >
                       <div className="min-w-0">
                         <p className="font-bold tracking-tight">
@@ -2217,7 +2223,7 @@ function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: () => v
   });
   const method = (m: string) => (m === "cash" ? "Tunai" : m.toUpperCase());
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 print:bg-transparent" onClick={onClose}>
+    <div className="sheet-scrim z-[60] items-center p-6 print:bg-transparent print:backdrop-blur-none" onClick={onClose}>
       <style>{`@media print { body * { visibility: hidden; } #receipt, #receipt * { visibility: visible; } #receipt { position: absolute; left: 0; top: 0; width: 80mm; box-shadow: none; border-radius: 0; } }`}</style>
       <div
         id="receipt"

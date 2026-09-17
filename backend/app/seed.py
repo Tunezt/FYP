@@ -1,6 +1,6 @@
 """Seed the demo café: `python -m app.seed`
 
-Creates **Kopi Kenangan Senja** (fictional, Jakarta) with:
+Creates the **Poernama** demo business (Jakarta) with:
 - owner + 2 staff (PINs below)
 - 11 items: sellable drinks/food with stock in servings, plus raw materials in kg/liter
 - 30 days of deterministic pseudo-random sales history (weekend bumps, one
@@ -93,7 +93,7 @@ ITEMS = [
     ("Teh Tarik", "cup", 30, 4000, 15000, 10, 4),
     ("Roti Bakar Coklat", "pcs", 18, 9000, 24000, 8, 3),
     ("Croissant", "pcs", 12, 12000, 28000, 6, 3),
-    ("Nasi Goreng Senja", "porsi", 15, 15000, 35000, 6, 2),
+    ("Nasi Goreng Spesial", "porsi", 15, 15000, 35000, 6, 2),
     # Raw materials — restocked via receipts, queried by kg on WhatsApp
     ("Biji Arabica", "kg", 8, 145000, 0, 3, 0),
     ("Gula Aren", "kg", 5, 38000, 0, 2, 0),
@@ -138,7 +138,7 @@ async def seed(confirm: bool = False) -> None:
             await session.delete(existing)  # cascades to all business data
             await session.flush()
         business = Business(
-            name="Kopi Kenangan Senja",
+            name="Poernama",
             business_type="cafe",
             owner_phone=OWNER_PHONE,
             language_preference="id",
@@ -258,7 +258,7 @@ async def seed(confirm: bool = False) -> None:
                     status="completed", subtotal=total, total=total, sold_at=sold_at,
                     created_at=sold_at, customer_id=regular.id if regular is not None else None,
                     table_label=f"Meja {rng.randint(1, 8)}" if order_type == "dine_in" else None,
-                    delivery_address="Jl. Kenanga 12, Senja" if order_type == "delivery" else None,
+                    delivery_address="Jl. Kenanga 12" if order_type == "delivery" else None,
                     guest_phone="0812-0000-1111" if order_type == "delivery" else None,
                 )
                 session.add(order)
@@ -349,7 +349,7 @@ async def seed(confirm: bool = False) -> None:
         # Vouchers (M8-T4): one named welcome code and a batch of ten single-use 20% codes.
         await create_vouchers(session, business_id, kind="amount_off", value=Decimal(5000), code="SELAMAT-DATANG",
                               min_spend=Decimal(25000), max_uses=100, expires_at=now + timedelta(days=60))
-        await create_vouchers(session, business_id, kind="percent_off", value=Decimal("0.20"), count=10, prefix="SENJA",
+        await create_vouchers(session, business_id, kind="percent_off", value=Decimal("0.20"), count=10, prefix="PRNM",
                               batch_name="Flyer September", max_discount=Decimal(15000), expires_at=now + timedelta(days=30))
 
         # Books (M6-T4/M6-T5): the opening stock is capitalised as owner's
@@ -379,7 +379,7 @@ async def seed(confirm: bool = False) -> None:
                 description=description, source="manual", occurred_at=now - timedelta(days=days_ago),
             )
 
-    print(f"Seeded 'Kopi Kenangan Senja' (business_id={business_id})")
+    print(f"Seeded 'Poernama' (business_id={business_id})")
     print(f"Owner phone {OWNER_PHONE} | owner PIN 1234 | Sari 2345 | Budi 3456")
 
 

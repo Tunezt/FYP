@@ -1,14 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#5e5ce6"/>
-      <stop offset="0.6" stop-color="#8b5cf6"/>
-      <stop offset="1" stop-color="#a855f7"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="15" fill="url(#g)"/>
-  <!-- chat bubble with a rising trend line: WhatsApp assistant + insight -->
-  <path d="M32 14c-10.5 0-19 7.4-19 16.5 0 5.2 2.8 9.9 7.2 12.9L18 50l8.6-3.3c1.7.4 3.5.6 5.4.6 10.5 0 19-7.4 19-16.5S42.5 14 32 14Z" fill="rgba(255,255,255,0.94)"/>
-  <path d="M23 35.5l5.5-5 4.5 3.5 8-8" fill="none" stroke="#5e5ce6" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="41.5" cy="25.5" r="2.4" fill="#a855f7"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
+  <circle cx="320" cy="320" r="320" fill="#242426"/>
+  <path fill="#FFF4DE" fill-rule="evenodd" transform="translate(-756.90 -181.34) scale(1.68196)" d="M 737.6461 196.8011 C 757.5160 214.0587 771.4175 238.0437 777.3484 263.6143 C 807.9353 395.4870 642.0167 485.8207 542.3725 399.7657 C 523.1361 383.1527 511.2103 362.3810 504.5404 337.9646 C 468.2521 205.1251 635.4372 108.0298 737.6461 196.8011 Z M 573.2304 207.3837 C 540.1215 238.9705 548.6423 313.1125 596.1435 328.9731 C 602.1404 374.1419 646.1318 402.3634 689.8250 398.5367 C 696.2207 397.9765 704.6815 398.0203 710.6493 395.5229 C 716.7008 392.9904 740.0811 369.4392 744.9152 363.2667 C 829.3155 255.4996 672.9091 112.2872 573.2304 207.3837 Z"/>
 </svg>

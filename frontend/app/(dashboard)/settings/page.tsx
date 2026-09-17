@@ -8,7 +8,7 @@ import { ORDER_TYPE_LABEL, type Business, type LoyaltySettings, type OrderType, 
 import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { PinLockouts } from "@/components/PinLockouts";
-import { IconPlus } from "@/components/icons";
+import { IconCheck, IconDownload, IconPlus, IconUpload } from "@/components/icons";
 import { initials } from "@/lib/format";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -271,17 +271,17 @@ export default function SettingsPage() {
 
   return (
     <div className="animate-fade-up max-w-3xl space-y-8">
-      <h1 className="text-[1.65rem] font-bold tracking-tight md:text-3xl">Pengaturan</h1>
+      <h1 className="page-title">Pengaturan</h1>
 
       {/* Business profile */}
       <section>
-        <h2 className="mb-2 text-base font-bold">Profil usaha</h2>
+        <h2 className="mb-2 section-title">Profil usaha</h2>
         {business.loading ? (
           <Skeleton className="h-40" />
         ) : (
           <Plate className="space-y-3 px-6 py-5">
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Nama usaha</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama usaha</span>
               <input
                 className="field"
                 value={draft.name}
@@ -289,7 +289,7 @@ export default function SettingsPage() {
               />
             </label>
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Jenis usaha</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Jenis usaha</span>
               <input
                 className="field"
                 value={draft.business_type}
@@ -335,7 +335,7 @@ export default function SettingsPage() {
 
       {/* Pricing (M7-T4): tax, service charge, rounding, discount gate */}
       <section>
-        <h2 className="mb-2 flex items-center gap-2 text-base font-bold">
+        <h2 className="mb-2 flex items-center gap-2 section-title">
           Pajak, service &amp; pembulatan
           <HelpTip title="Cara struk dihitung">
             Pajak bisa sudah termasuk di harga menu (harga yang tertulis = yang dibayar) atau
@@ -350,7 +350,7 @@ export default function SettingsPage() {
           <Plate className="space-y-4 px-6 py-5">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Pajak (%)</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Pajak (%)</span>
                 <input
                   className="field"
                   inputMode="decimal"
@@ -360,7 +360,7 @@ export default function SettingsPage() {
                 />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Service charge (%)</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Service charge (%)</span>
                 <input
                   className="field"
                   inputMode="decimal"
@@ -402,7 +402,7 @@ export default function SettingsPage() {
             </label>
             {/* Order type routing (M11-T3) */}
             <div>
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Service charge berlaku untuk</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Service charge berlaku untuk</span>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(ORDER_TYPE_LABEL) as OrderType[]).map((kind) => {
                   const on = pricingForm.service_types.includes(kind);
@@ -418,10 +418,10 @@ export default function SettingsPage() {
                             : [...pricingForm.service_types, kind],
                         })
                       }
-                      className={`rounded-2xl px-3 py-1.5 text-xs font-semibold ${
-                        on ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
-                      }`}
+                      aria-pressed={on}
+                      className="choice-chip"
                     >
+                      {on && <IconCheck className="h-3.5 w-3.5" />}
                       {ORDER_TYPE_LABEL[kind]}
                     </button>
                   );
@@ -433,7 +433,7 @@ export default function SettingsPage() {
               </span>
             </div>
             <label className="block sm:w-1/2">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Ongkos kirim pesanan antar (Rp)</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Ongkos kirim pesanan antar (Rp)</span>
               <input
                 className="field"
                 inputMode="numeric"
@@ -447,7 +447,7 @@ export default function SettingsPage() {
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Pembulatan total (Rp)</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Pembulatan total (Rp)</span>
                 <Select
                   variant="field"
                   allowEmpty={false}
@@ -464,7 +464,7 @@ export default function SettingsPage() {
                 />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Arah pembulatan</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Arah pembulatan</span>
                 <Select
                   variant="field"
                   allowEmpty={false}
@@ -496,7 +496,7 @@ export default function SettingsPage() {
                 </span>
               </span>
             </label>
-            {pricingError && <p className="text-sm text-red-600">{pricingError}</p>}
+            {pricingError && <p className="notice notice-bad">{pricingError}</p>}
             {pricingDraft && (
               <button onClick={savePricing} disabled={pricingBusy} className="btn-accent px-5 py-2.5 text-sm">
                 {pricingBusy ? "Menyimpan…" : "Simpan perubahan"}
@@ -508,7 +508,7 @@ export default function SettingsPage() {
 
       {/* Points programme (M8-T2) */}
       <section>
-        <h2 className="mb-2 flex items-center gap-2 text-base font-bold">
+        <h2 className="mb-2 flex items-center gap-2 section-title">
           Program poin
           <HelpTip title="Cara poin bekerja">
             Pelanggan yang dikaitkan di kasir dapat poin dari bagian yang dibayar uang (bukan dari poin).
@@ -534,7 +534,7 @@ export default function SettingsPage() {
             </label>
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Belanja per 1 poin (Rp)</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Belanja per 1 poin (Rp)</span>
                 <input
                   className="field"
                   inputMode="numeric"
@@ -543,7 +543,7 @@ export default function SettingsPage() {
                 />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Nilai 1 poin saat dipakai (Rp)</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nilai 1 poin saat dipakai (Rp)</span>
                 <input
                   className="field"
                   inputMode="numeric"
@@ -552,7 +552,7 @@ export default function SettingsPage() {
                 />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Minimal tukar (poin)</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Minimal tukar (poin)</span>
                 <input
                   className="field"
                   inputMode="numeric"
@@ -565,7 +565,7 @@ export default function SettingsPage() {
               Contoh: belanja Rp {Number(loyaltyForm.rupiah_per_point || 0).toLocaleString("id-ID")} = 1 poin; 100 poin = Rp{" "}
               {(100 * Number(loyaltyForm.point_value || 0)).toLocaleString("id-ID")} potongan.
             </p>
-            {loyaltyError && <p className="text-sm text-red-600">{loyaltyError}</p>}
+            {loyaltyError && <p className="notice notice-bad">{loyaltyError}</p>}
             {loyaltyDraft && (
               <button onClick={saveLoyalty} disabled={loyaltyBusy} className="btn-accent px-5 py-2.5 text-sm">
                 {loyaltyBusy ? "Menyimpan…" : "Simpan perubahan"}
@@ -577,8 +577,8 @@ export default function SettingsPage() {
 
       {/* Staff */}
       <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-base font-bold">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 section-title">
             Staf kasir
             <HelpTip title="Manajer">
               Batal transaksi, refund dan diskon perlu PIN manajer. Kalau kamu tidak selalu di
@@ -587,17 +587,24 @@ export default function SettingsPage() {
               persetujuan tercatat: siapa yang menyetujui, siapa yang minta, dan berapa nilainya.
             </HelpTip>
           </h2>
-          <button onClick={() => setStaffSheet(true)} className="btn-quiet px-3 py-1.5 text-sm">
+          <button onClick={() => setStaffSheet(true)} className="btn-quiet px-3.5 py-2 text-sm">
             <IconPlus className="h-4 w-4" /> Tambah staf
           </button>
         </div>
         {staff.loading ? (
           <Skeleton className="h-24" />
         ) : (
-          <ul>
+          <ul className="group-card group-body">
             {(staff.data ?? []).map((member) => (
-              <li key={member.id} className={`list-row ${member.is_active ? "" : "opacity-45"}`}>
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-gradient text-sm font-bold text-white">
+              <li
+                key={member.id}
+                className={`list-row flex-wrap ${member.is_active ? "" : "opacity-50"}`}
+                style={{ ["--row-inset" as string]: "4.25rem" }}
+              >
+                <span
+                  className="surface-inset ink-soft flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold"
+                  style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}
+                >
                   {initials(member.name)}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -613,13 +620,13 @@ export default function SettingsPage() {
                       setPinDraft("");
                       setPinFor(member);
                     }}
-                    className="ink-faint shrink-0 text-xs hover:text-[color:var(--ink)]"
+                    className="chip-btn shrink-0"
                   >
                     ganti PIN
                   </button>
                 )}
                 {member.role !== "owner" && member.is_active && (
-                  <div className="flex shrink-0 items-center gap-3">
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 max-sm:w-full max-sm:pl-[3.25rem]">
                     <button
                       onClick={async () => {
                         await mutate(
@@ -629,7 +636,7 @@ export default function SettingsPage() {
                         );
                         staff.reload();
                       }}
-                      className="ink-faint text-xs hover:text-[color:var(--ink)]"
+                      className="chip-btn"
                     >
                       {member.role === "manager" ? "cabut manajer" : "jadikan manajer"}
                     </button>
@@ -638,7 +645,7 @@ export default function SettingsPage() {
                         setPinDraft("");
                         setPinFor(member);
                       }}
-                      className="ink-faint text-xs hover:text-[color:var(--ink)]"
+                      className="chip-btn"
                     >
                       ganti PIN
                     </button>
@@ -647,7 +654,7 @@ export default function SettingsPage() {
                         await mutate(`/auth/staff/${member.id}/deactivate`);
                         staff.reload();
                       }}
-                      className="ink-faint text-xs hover:text-[color:var(--bad)]"
+                      className="chip-btn hover:!text-[color:var(--bad)]"
                     >
                       nonaktifkan
                     </button>
@@ -664,7 +671,7 @@ export default function SettingsPage() {
 
       {/* POS pairing */}
       <section>
-        <h2 className="mb-2 flex items-center gap-2 text-base font-bold">
+        <h2 className="mb-2 flex items-center gap-2 section-title">
           Layar kasir (POS)
           <HelpTip title="Layar kasir">
             Buka tautan ini sekali di browser tablet/HP kasir. Setelah itu perangkat selalu
@@ -703,8 +710,7 @@ export default function SettingsPage() {
                   <button
                     onClick={repairDevices}
                     disabled={pairingBusy}
-                    className="rounded-2xl px-4 py-2 text-sm font-semibold"
-                    style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+                    className="btn-danger px-4 py-2 text-sm"
                   >
                     {pairingBusy ? "Memutuskan…" : "Ya, putuskan semua"}
                   </button>
@@ -727,7 +733,7 @@ export default function SettingsPage() {
 
       {/* QR e-menu (M11-T1) */}
       <section>
-        <h2 className="mb-2 flex items-center gap-2 text-base font-bold">
+        <h2 className="mb-2 flex items-center gap-2 section-title">
           Menu QR untuk meja
           <HelpTip title="Menu QR">
             Cetak kode QR ini dan tempel di tiap meja. Tamu memindai, memilih pesanan, lalu mendapat
@@ -762,7 +768,7 @@ export default function SettingsPage() {
 
       {/* Stock template */}
       <section>
-        <h2 className="mb-2 text-base font-bold">Template stok</h2>
+        <h2 className="mb-2 section-title">Template stok</h2>
         <p className="ink-soft mb-3 max-w-lg text-sm">
           Isi template Excel ini lalu kirim ke asisten WhatsApp untuk mengisi stok awal sekaligus.
           Bisa juga langsung foto buku stok — nanti dibaca otomatis.
@@ -785,15 +791,15 @@ export default function SettingsPage() {
                 URL.revokeObjectURL(url);
               });
           }}
-          className="btn-quiet inline-flex px-5 py-2.5 text-sm"
+          className="btn-quiet inline-flex px-4 py-2.5 text-sm"
         >
-          ⬇︎ Unduh template-stok.xlsx
+          <IconDownload className="h-4 w-4" /> Unduh template-stok.xlsx
         </a>
       </section>
 
       {/* Catalogue import (M4-T6) */}
       <section>
-        <h2 className="mb-2 text-base font-bold">Impor katalog</h2>
+        <h2 className="mb-2 section-title">Impor katalog</h2>
         <p className="ink-soft mb-3 max-w-lg text-sm">
           Satu berkas Excel untuk barang, ukuran (varian), pilihan tambahan, satuan, konversi, dan resep.
           Semua baris diperiksa dulu — kalau ada yang salah, tidak ada yang disimpan dan setiap baris bermasalah disebutkan.
@@ -815,16 +821,20 @@ export default function SettingsPage() {
                   URL.revokeObjectURL(url);
                 });
             }}
-            className="btn-quiet px-5 py-2.5 text-sm"
+            className="btn-quiet px-4 py-2.5 text-sm"
           >
-            ⬇︎ Unduh template-katalog.xlsx
+            <IconDownload className="h-4 w-4" /> Unduh template-katalog.xlsx
           </button>
-          <label className="btn-accent cursor-pointer px-5 py-2.5 text-sm">
-            {importBusy ? "Memeriksa…" : "⬆︎ Impor berkas Excel"}
+          <label className="btn-accent cursor-pointer px-4 py-2.5 text-sm focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--accent)]">
+            {importBusy ? "Memeriksa…" : (
+              <>
+                <IconUpload className="h-4 w-4" /> Impor berkas Excel
+              </>
+            )}
             <input
               type="file"
               accept=".xlsx"
-              className="hidden"
+              className="sr-only"
               disabled={importBusy}
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -835,14 +845,7 @@ export default function SettingsPage() {
           </label>
         </div>
         {importResult && (
-          <p
-            className="mt-3 max-w-lg rounded-2xl px-4 py-3 text-sm"
-            style={
-              importResult.ok
-                ? { background: "var(--good-bg, var(--accent-soft))", color: "var(--good)" }
-                : { background: "var(--bad-bg)", color: "var(--bad)" }
-            }
-          >
+          <p className={`notice mt-3 max-w-lg ${importResult.ok ? "notice-good" : "notice-bad"}`}>
             {importResult.message}
           </p>
         )}
@@ -855,7 +858,7 @@ export default function SettingsPage() {
             berubah — PIN cuma kunci, bukan identitas.
           </p>
           <label className="block">
-            <span className="ink-soft mb-1.5 block text-xs font-medium">PIN baru (4 angka)</span>
+            <span className="ink-soft mb-1.5 block text-[13px] font-medium">PIN baru (4 angka)</span>
             <input
               className="field tabular-nums"
               inputMode="numeric"
@@ -878,7 +881,7 @@ export default function SettingsPage() {
       <Sheet open={staffSheet} onClose={() => setStaffSheet(false)} title="Staf baru">
         <div className="space-y-3">
           <label className="block">
-            <span className="ink-soft mb-1.5 block text-xs font-medium">Nama</span>
+            <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama</span>
             <input
               className="field"
               value={staffDraft.name}
@@ -887,7 +890,7 @@ export default function SettingsPage() {
             />
           </label>
           <label className="block">
-            <span className="ink-soft mb-1.5 block text-xs font-medium">PIN kasir (4 angka)</span>
+            <span className="ink-soft mb-1.5 block text-[13px] font-medium">PIN kasir (4 angka)</span>
             <input
               className="field tabular-nums"
               inputMode="numeric"
@@ -898,7 +901,7 @@ export default function SettingsPage() {
             />
           </label>
           <label className="block">
-            <span className="ink-soft mb-1.5 block text-xs font-medium">Peran</span>
+            <span className="ink-soft mb-1.5 block text-[13px] font-medium">Peran</span>
             <Select
               variant="field"
               allowEmpty={false}
@@ -913,8 +916,7 @@ export default function SettingsPage() {
           </label>
           {staffError && (
             <p
-              className="rounded-2xl px-4 py-3 text-sm font-medium"
-              style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
+              className="notice notice-bad"
             >
               {staffError}
             </p>

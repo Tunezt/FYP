@@ -237,8 +237,8 @@ export default function MenuPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-md px-4 pb-32">
-      <header className="hairline-b sticky top-0 z-10 -mx-4 mb-4 bg-[color:var(--bg-base)]/85 px-4 py-4 backdrop-blur-xl">
-        <p className="ink-faint text-[11px] font-medium uppercase tracking-widest">Menu</p>
+      <header className="hairline-b sticky top-0 z-10 -mx-4 mb-4 sticky-bar px-4 py-4">
+        <p className="ink-faint text-[13px] font-medium">Menu</p>
         <p className="text-xl font-bold leading-tight">{menu?.business_name ?? "…"}</p>
         <p className="ink-soft mt-1 text-xs">Pilih pesanan, lalu bayar di kasir. Tidak perlu daftar.</p>
       </header>
@@ -266,15 +266,16 @@ export default function MenuPage() {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-base font-bold">{item.name}</p>
-                    <p className="text-sm font-semibold text-accent-700">
+                    <p className="text-sm font-semibold text-[color:var(--accent)]">
                       {formatRupiah(item.sell_price)}
                       {item.variants.length > 1 && <span className="ink-faint ml-1 text-xs font-medium">· {item.variants.length} ukuran</span>}
                     </p>
                     {!item.available && <p className="ink-faint text-xs">habis</p>}
                   </div>
                   <span
-                    className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full px-3 text-sm font-bold ${
-                      inCart > 0 ? "bg-accent-gradient text-white shadow-pop" : "glass-card"
+                    aria-pressed={inCart > 0}
+                  className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full px-3 text-sm font-bold ${
+                      inCart > 0 ? "toggle-on" : "toggle-off"
                     }`}
                   >
                     {inCart > 0 ? inCart : "+"}
@@ -306,21 +307,22 @@ export default function MenuPage() {
 
       {/* Size & extras picker */}
       {picker && (
-        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm" onClick={() => setPicker(null)}>
+        <div className="sheet-scrim sm:items-end" onClick={() => setPicker(null)}>
           <div
-            className="glass-card glass-strong max-h-[88vh] w-full max-w-md animate-fade-up overflow-y-auto rounded-b-none rounded-t-4xl px-6 pb-8 pt-5"
+            className="sheet-panel block overflow-y-auto sm:max-w-md px-6 pb-8 pt-5"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-xl font-bold">{picker.name}</p>
             {picker.variants.length > 1 && (
               <div className="mt-3">
-                <p className="ink-faint text-xs font-medium uppercase tracking-wide">Ukuran</p>
+                <p className="ink-soft text-[13px] font-medium">Ukuran</p>
                 <div className="mt-1 flex flex-wrap gap-2">
                   {picker.variants.map((v) => (
                     <button
                       key={v.id}
                       onClick={() => setVariant(v)}
-                      className={`rounded-2xl px-3 py-2 text-sm font-semibold ${variant?.id === v.id ? "bg-accent-gradient text-white shadow-pop" : "glass-card"}`}
+                      aria-pressed={variant?.id === v.id}
+                  className={`rounded-2xl px-3 py-2 text-sm font-semibold ${variant?.id === v.id ? "toggle-on" : "toggle-off"}`}
                     >
                       {v.name} · {formatRupiah(v.sell_price)}
                     </button>
@@ -330,7 +332,7 @@ export default function MenuPage() {
             )}
             {picker.modifier_groups.map((g) => (
               <div key={g.id} className="mt-3">
-                <p className="ink-faint text-xs font-medium uppercase tracking-wide">
+                <p className="ink-soft text-[13px] font-medium">
                   {g.name}
                   {g.is_required ? " · wajib" : ""}
                   {g.selection === "multi" && g.max_select !== null ? ` · maks ${g.max_select}` : ""}
@@ -343,7 +345,8 @@ export default function MenuPage() {
                       <button
                         key={m.id}
                         onClick={() => toggleModifier(g, m)}
-                        className={`rounded-2xl px-3 py-2 text-sm font-semibold ${on ? "bg-accent-gradient text-white shadow-pop" : "glass-card"}`}
+                        aria-pressed={on}
+                  className={`rounded-2xl px-3 py-2 text-sm font-semibold ${on ? "toggle-on" : "toggle-off"}`}
                       >
                         {m.name}
                         {delta !== 0 ? ` ${delta > 0 ? "+" : "−"}${formatRupiah(Math.abs(delta))}` : ""}
@@ -356,11 +359,11 @@ export default function MenuPage() {
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value.slice(0, 200))}
-              className="glass-card mt-4 w-full rounded-2xl px-4 py-2 text-sm"
+              className="field mt-4 w-full text-sm"
               placeholder="Catatan (mis. tanpa gula)"
             />
             <div className="mt-4 flex items-center justify-between">
-              <div className="glass-card flex items-center gap-1 rounded-2xl p-1">
+              <div className="surface-inset flex items-center gap-1 rounded-2xl p-1">
                 <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="h-10 w-10 rounded-xl text-xl font-bold">
                   −
                 </button>
@@ -388,9 +391,9 @@ export default function MenuPage() {
 
       {/* Checkout */}
       {checkout && (
-        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 backdrop-blur-sm" onClick={() => !busy && setCheckout(false)}>
+        <div className="sheet-scrim sm:items-end" onClick={() => !busy && setCheckout(false)}>
           <div
-            className="glass-card glass-strong max-h-[92vh] w-full max-w-md animate-fade-up overflow-y-auto rounded-b-none rounded-t-4xl px-6 pb-8 pt-5"
+            className="sheet-panel block overflow-y-auto sm:max-w-md px-6 pb-8 pt-5"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-xl font-bold">Pesanan kamu</p>
@@ -404,7 +407,7 @@ export default function MenuPage() {
                       {l.notes && <p className="ink-faint truncate text-xs">{l.notes}</p>}
                       <p className="ink-soft text-xs">{formatRupiah(linePrice(l))}</p>
                     </div>
-                    <div className="glass-card flex shrink-0 items-center gap-1 rounded-2xl p-0.5">
+                    <div className="surface-inset flex shrink-0 items-center gap-1 rounded-2xl p-0.5">
                       <button onClick={() => changeLine(key, -1)} className="h-8 w-8 rounded-xl font-bold">
                         −
                       </button>
@@ -427,7 +430,8 @@ export default function MenuPage() {
                 <button
                   key={kind}
                   onClick={() => setOrderType(kind)}
-                  className={`rounded-2xl px-3 py-2.5 text-sm font-semibold ${orderType === kind ? "bg-accent-gradient text-white shadow-pop" : "glass-card"}`}
+                  aria-pressed={orderType === kind}
+                  className={`rounded-2xl px-3 py-2.5 text-sm font-semibold ${orderType === kind ? "toggle-on" : "toggle-off"}`}
                 >
                   {label}
                 </button>
@@ -438,7 +442,7 @@ export default function MenuPage() {
                 <input
                   value={table}
                   onChange={(e) => setTable(e.target.value.slice(0, 20))}
-                  className="glass-card w-full rounded-2xl px-4 py-2.5 text-sm"
+                  className="field w-full text-sm"
                   placeholder="Nomor meja"
                   autoFocus
                 />
@@ -446,14 +450,14 @@ export default function MenuPage() {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value.slice(0, 60))}
-                className={`glass-card w-full rounded-2xl px-4 py-2.5 text-sm ${orderType === "dine_in" ? "" : "col-span-2"}`}
+                className={`field text-sm ${orderType === "dine_in" ? "" : "col-span-2"}`}
                 placeholder="Nama (opsional)"
               />
             </div>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value.slice(0, 200))}
-              className="glass-card mt-2 w-full rounded-2xl px-4 py-2.5 text-sm"
+              className="field mt-2 w-full text-sm"
               placeholder="Pesan untuk dapur (opsional)"
             />
             <div className="mt-4 flex items-center justify-between">
@@ -461,7 +465,7 @@ export default function MenuPage() {
               <span className="text-2xl font-bold tabular-nums">{formatRupiah(cartTotal)}</span>
             </div>
             <p className="ink-faint mt-1 text-xs">Pajak/servis (jika ada) dihitung di kasir. Bayar setelah pesanan diterima.</p>
-            {submitError && <p className="mt-3 text-sm text-red-600">{submitError}</p>}
+            {submitError && <p className="mt-3 text-sm text-[color:var(--bad)]">{submitError}</p>}
             <button onClick={placeOrder} disabled={busy || cart.length === 0} className="btn-accent mt-4 w-full py-3.5 text-lg disabled:opacity-50">
               {busy ? "Mengirim…" : "Kirim pesanan"}
             </button>
@@ -477,10 +481,10 @@ function TicketView({ ticket, businessName, onAgain }: { ticket: Ticket; busines
   const paid = ticket.status === "completed" || ticket.status === "refunded";
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col px-4 py-6">
-      <p className="ink-faint text-[11px] font-medium uppercase tracking-widest">{businessName}</p>
-      <div className="glass-card glass-strong mt-3 px-6 py-8 text-center">
+      <p className="ink-faint text-[13px] font-medium">{businessName}</p>
+      <div className="glass-card mt-3 px-6 py-8 text-center">
         <p className="ink-soft text-sm">{waiting ? "Kode pesanan kamu" : paid ? "Sudah dibayar" : "Pesanan dibatalkan"}</p>
-        <p className="mt-1 text-5xl font-black tracking-tight">{ticket.code}</p>
+        <p className="mt-1 text-5xl font-bold tracking-[-0.02em]">{ticket.code}</p>
         <p className="mt-3 text-sm font-medium">
           {waiting
             ? "Tunjukkan kode ini ke kasir untuk membayar. Pesanan mulai disiapkan setelah dibayar."
@@ -497,11 +501,11 @@ function TicketView({ ticket, businessName, onAgain }: { ticket: Ticket; busines
         {ticket.table_label && <p className="ink-faint mt-2 text-xs">{ticket.table_label}{ticket.guest_name ? ` · ${ticket.guest_name}` : ""}</p>}
         {waiting && (
           <p className="ink-faint mt-3 flex items-center justify-center gap-2 text-xs">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent-gradient" /> menunggu kasir…
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[color:var(--accent-fill)]" /> menunggu kasir…
           </p>
         )}
       </div>
-      <ul className="glass-card mt-4 divide-y divide-black/5 px-5">
+      <ul className="glass-card mt-4 divide-y divide-[color:var(--hairline)] px-5">
         {ticket.lines.map((l, i) => (
           <li key={i} className="flex items-start justify-between gap-3 py-3 text-sm">
             <div className="min-w-0">

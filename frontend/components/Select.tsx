@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { IconCheck, IconChevronDown } from "@/components/icons";
+import { Portal } from "@/components/ui";
 
 /** A dropdown that belongs to this interface.
  *
@@ -166,6 +167,7 @@ export function Select({
       </button>
 
       {open && pos && (
+        <Portal>
         <div
           ref={panelRef}
           id={listId}
@@ -198,6 +200,7 @@ export function Select({
             );
           })}
         </div>
+        </Portal>
       )}
     </>
   );

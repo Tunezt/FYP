@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { daySubLabel, groupByDay } from "@/lib/dates";
 import type { AlertRow, Business } from "@/lib/types";
-import { DayHeaderToggle, EmptyState, ErrorState, Glass, SeverityBadge, Skeleton } from "@/components/ui";
+import { DayGroup, EmptyState, ErrorState, Glass, SeverityBadge, Skeleton } from "@/components/ui";
 import { HistoryFilters } from "@/components/HistoryFilters";
 import { HelpTip } from "@/components/HelpTip";
 import { IconBell, IconBox, IconCheck, IconTrendUp } from "@/components/icons";
@@ -62,7 +62,7 @@ export default function AlertsPage() {
   return (
     <div className="animate-fade-up space-y-7">
       <header>
-        <h1 className="flex items-center gap-2 text-[1.65rem] font-bold tracking-tight md:text-3xl">
+        <h1 className="flex items-center gap-2 page-title">
           Peringatan
           <HelpTip title="Dari mana peringatan ini?">
             Tiap malam sistem membandingkan penjualan &amp; pengeluaran hari itu dengan rata-rata
@@ -102,7 +102,7 @@ export default function AlertsPage() {
       ) : open.length === 0 && done.length === 0 ? (
         <Glass>
           <EmptyState
-            emoji="🔔"
+            icon={<IconBell className="h-5 w-5" />}
             title={filtered ? "Tidak ada peringatan yang cocok" : "Belum ada peringatan"}
           >
             {filtered
@@ -114,23 +114,22 @@ export default function AlertsPage() {
         <>
           {open.length > 0 && (
             <section>
-              <div className="mb-1 flex items-baseline gap-2">
-                <h2 className="text-base font-bold">Perlu ditindak</h2>
-                <span className="pill-warn">{open.length}</span>
+              <div className="mb-3 flex items-baseline gap-2">
+                <h2 className="section-title">Perlu ditindak</h2>
+                <span className="pill-warn tabular-nums">{open.length}</span>
               </div>
               {openGroups.map((group) => (
-                <div key={group.key}>
-                  <DayHeaderToggle
-                    label={group.label}
-                    sub={daySubLabel(group.date, tz, dayStart)}
-                    meta={`${group.rows.length} peringatan`}
-                    open={dayOpen(group.key, group.label)}
-                    onToggle={() => toggleDay(group.key, group.label)}
-                    count={group.rows.length}
-                  />
-                  <ul hidden={!dayOpen(group.key, group.label)}>
+                <DayGroup
+                  key={group.key}
+                  label={group.label}
+                  sub={daySubLabel(group.date, tz, dayStart)}
+                  meta={`${group.rows.length} peringatan`}
+                  open={dayOpen(group.key, group.label)}
+                  onToggle={() => toggleDay(group.key, group.label)}
+                  count={group.rows.length}
+                >
                     {group.rows.map((alert) => (
-                      <li key={alert.id} className="list-row">
+                      <li key={alert.id} className="list-row flex-wrap sm:flex-nowrap" style={{ ["--row-inset" as string]: "4.25rem" }}>
                         <span
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
                           style={{
@@ -151,6 +150,7 @@ export default function AlertsPage() {
                             {ALERT_LABEL[alert.type] ?? alert.type}
                           </p>
                         </div>
+                        <div className="flex shrink-0 items-center gap-2 max-sm:w-full max-sm:justify-between max-sm:pl-[3.25rem]">
                         <SeverityBadge severity={alert.severity} />
                         <button
                           onClick={() => acknowledge(alert.id)}
@@ -160,22 +160,22 @@ export default function AlertsPage() {
                         >
                           <IconCheck className="h-4 w-4" /> beres
                         </button>
+                        </div>
                       </li>
                     ))}
-                  </ul>
-                </div>
+                </DayGroup>
               ))}
             </section>
           )}
 
           {done.length > 0 && (
             <section>
-              <h2 className="mb-1 text-base font-bold">Sudah dibaca</h2>
-              <ul className="opacity-55">
+              <h2 className="mb-3 section-title">Sudah dibaca</h2>
+              <ul className="group-card group-body">
                 {done.slice(0, 20).map((alert) => (
-                  <li key={alert.id} className="list-row">
-                    <IconBell className="ink-faint h-4 w-4 shrink-0" />
-                    <p className="min-w-0 flex-1 truncate text-sm">{alert.message}</p>
+                  <li key={alert.id} className="list-row" style={{ ["--row-inset" as string]: "2.75rem" }}>
+                    <IconCheck className="ink-faint h-4 w-4 shrink-0" />
+                    <p className="ink-soft min-w-0 flex-1 truncate text-sm">{alert.message}</p>
                     <span className="ink-faint shrink-0 text-xs">
                       {new Date(alert.created_at).toLocaleDateString("id-ID", {
                         day: "numeric",

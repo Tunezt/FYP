@@ -2,178 +2,242 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Warung Pintar design system — "warung hangat" warm-light glass ──────────
-   Owner-approved direction (session 2): warm off-white surfaces, frosted white
-   cards, forest-green accent, one hero glass surface per page, day-grouped
-   open lists. Dark variant follows the same warmth (deep green-tinted).
-   The POS route forces light via data-theme="pos-light" on <html>. */
+/* ── Poernama design system — A1 "Porcelain & ink" ─────────────────────────────
+   Approved direction. Everything visual in the app reads from the tokens in
+   this block; components never hard-code a colour.
+
+   Materials, in order of height:
+     canvas   porcelain ground with one warm source: a soft wash near the top of
+              the sidebar, as if the lit sign were hanging there. The rest of
+              the page stays neutral.
+     card     porcelain surface with a hairline border and the faintest lift.
+     inset    a neutral fill inside a card (receipt lines, segmented track).
+     shell    the sidebar and phone tab bar — solid ink, floating and
+              rounded, so the way around the app never reads as content.
+     float    popovers and sheets — opaque, above everything.
+
+   Colour carries meaning, not mood. Brand is ink on porcelain; green, amber
+   and red appear only as status (success/connected, warning, error) and are
+   kept apart from the brand tokens below. The one sanctioned exception is
+   light: the illuminated wordmark and the warm air around it (--lit-*,
+   --ambient-*). Warmth never reaches data surfaces.
+
+   The POS, kitchen and menu routes force light via data-theme="pos-light"
+   on <html> — a counter in daylight. */
 
 :root {
-  --bg-base: #f4f4f2;
-  /* Warm-white wash over the blurred backdrop photo — keeps the page reading
-     "clean white" while the photo's soft bokeh texture still shows through. */
-  --bg-scrim: rgba(250, 249, 247, 0.82);
-  --ink: #1d221e;
-  --ink-soft: #545f58;
-  --ink-faint: #6e7972; /* ≥4.5:1 on --bg-base — meta text stays readable */
-  --glass: rgba(255, 255, 255, 0.72);
-  --glass-strong: rgba(255, 255, 255, 0.92);
-  --glass-border: rgba(29, 34, 30, 0.07);
-  /* Popover/tooltip float over arbitrary page content — must stay opaque so
-     text behind never bleeds through (unlike glass cards, which sit on a
-     predictable page background). */
-  --popover-surface: #ffffff;
-  --hairline: rgba(29, 34, 30, 0.09);
-  /* Pointer feedback on interactive rows — the surface darkens toward ink,
-     never a new colour: a row is still a row while you are over it. */
-  --row-hover: rgba(29, 34, 30, 0.045);
-  --row-press: rgba(29, 34, 30, 0.08);
-  --accent: #2b7a4e;
-  --accent-deep: #236743;
-  --accent-soft: rgba(43, 122, 78, 0.1);
-  --chart-1: #2b7a4e; /* validated vs #fbfaf8 (dataviz six checks) */
-  --chart-2: #c2703d;
-  --chart-grid: rgba(29, 34, 30, 0.07);
-  --good: #2b7a4e;
-  --warn: #a05c10;
-  --warn-bg: rgba(180, 106, 28, 0.13);
-  --bad: #b3423a;
-  --bad-bg: rgba(179, 66, 58, 0.11);
+  /* Brand — light */
+  --canvas: #f0f0ed; /* page background */
+  --surface: #fcfcfa; /* cards and content */
+  --surface-float: #fcfcfa; /* sheets, popovers */
+  --fill: #e3e3df; /* subtle neutral fill */
+  --surface-inset: #f3f3f0; /* recessed area inside a card (fill → surface) */
+  --border: #d9dad5; /* card edges, fields, dividers */
+  --hairline: #e6e6e2; /* row separators inside a card (quieter than --border) */
+  --hairline-strong: #c9cac4; /* field borders on hover */
+
+  --ink: #242426; /* main text */
+  --ink-soft: #636462; /* secondary text — 5.2:1 on canvas */
+  --ink-faint: #696a67; /* tertiary/meta — 4.8:1 on canvas, 5.3:1 on surface */
+
+  --accent: #242426; /* links, selection marks, focus ring */
+  --accent-fill: #29292b; /* primary action */
+  --accent-fill-hover: #3b3b3e;
+  --on-accent: #fcfcfa; /* 14:1 on the primary action */
+  --accent-soft: rgba(36, 36, 38, 0.06); /* selected-state wash */
+  --accent-ring: rgba(36, 36, 38, 0.16);
+
+  --row-hover: rgba(36, 36, 38, 0.035);
+  --row-press: rgba(36, 36, 38, 0.07);
+
+  /* Shell (sidebar, tab bar) */
+  --shell-bg: #242426;
+  --shell-ink: #f5f5ef;
+  --shell-ink-soft: #babbb5; /* 8.0:1 on the shell, 6.0:1 on the active fill */
+  --shell-active: #39393b;
+  --shell-active-ink: #f4f4ed;
+  --shell-hover: rgba(245, 245, 239, 0.06);
+  --shell-divider: rgba(245, 245, 239, 0.1);
+  --shell-shadow: 0 1px 2px rgba(20, 20, 22, 0.12), 0 18px 40px -20px rgba(20, 20, 22, 0.45);
+
+  /* Data */
+  --chart-1: #29292b; /* money in */
+  --chart-2: #8c8d87; /* money out — 3.3:1 on surface */
+  --chart-grid: #e6e6e2;
+
+  /* Status — separate from the brand */
+  --good: #2c7a4f;
+  --good-bg: rgba(44, 122, 79, 0.1);
+  --warn: #8a560b;
+  --warn-bg: rgba(186, 120, 24, 0.13);
+  --bad: #b0382f;
+  --bad-bg: rgba(176, 56, 47, 0.09);
+
+  --shadow-card: 0 0 0 1px var(--border), 0 1px 2px rgba(36, 36, 38, 0.04),
+    0 12px 28px -18px rgba(36, 36, 38, 0.2);
+  --shadow-raised: 0 0 0 1px var(--border), 0 1px 2px rgba(36, 36, 38, 0.05);
+
+  /* Atmosphere: one warm source near the upper sidebar, a faint cool floor. */
+  --ambient-warm: rgba(232, 188, 128, 0.16);
+  --ambient-warm-far: rgba(240, 214, 176, 0.09);
+  --ambient-top: #f3f2ee;
+  --ambient-bottom: #ecece9;
+
+  /* The illuminated wordmark: warm ivory letters, a tight amber halo and a
+     wider, fainter spill onto the charcoal shell. */
+  --lit-ink: #fff4de;
+  --lit-core: rgba(255, 226, 170, 0.75);
+  --lit-halo: rgba(255, 170, 72, 0.5);
+  --lit-halo-far: rgba(255, 150, 52, 0.26);
+  --shell-spill: rgba(255, 170, 80, 0.085);
+  --shell-edge: rgba(255, 222, 176, 0.07);
+  --shadow-float: 0 0 0 1px var(--border), 0 4px 12px rgba(36, 36, 38, 0.06),
+    0 24px 48px -16px rgba(36, 36, 38, 0.2);
+  --scrim: rgba(25, 25, 27, 0.32);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: light;
 }
 
-/* Dark theme is opt-in via data-theme="dark" on <html> (set by the theme toggle
-   in the dashboard, persisted to localStorage). Light is the true default for
-   everyone regardless of OS setting — the owner-approved reference is light, and
-   auto-following prefers-color-scheme silently hid every light-mode change. */
+/* Dark is opt-in (the theme toggle writes data-theme="dark"). */
 :root[data-theme="dark"] {
-  --bg-base: #10160f;
-  /* Deep green-tinted wash — the photo is barely visible through it, just
-     enough texture to avoid a flat fill. */
-  --bg-scrim: rgba(11, 16, 12, 0.88);
-  --ink: #eaf0ea;
-  --ink-soft: #a4b1a7;
-  --ink-faint: #7f8b81; /* ≥4.5:1 on the dark base */
-  --glass: rgba(255, 255, 255, 0.055);
-  --glass-strong: rgba(255, 255, 255, 0.09);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  /* Opaque, green-tinted dark surface — see note in :root. */
-  --popover-surface: #1c261e;
-  --hairline: rgba(255, 255, 255, 0.09);
-  --row-hover: rgba(255, 255, 255, 0.06);
-  --row-press: rgba(255, 255, 255, 0.1);
-  --accent: #3f9a68;
-  --accent-deep: #55b184;
-  --accent-soft: rgba(63, 154, 104, 0.16);
-  --chart-1: #3f9a68; /* validated vs #15211b */
-  --chart-2: #c97e46;
-  --chart-grid: rgba(255, 255, 255, 0.08);
-  --good: #55b184;
-  --warn: #d99a3e;
-  --warn-bg: rgba(217, 154, 62, 0.14);
-  --bad: #d9705f;
-  --bad-bg: rgba(217, 112, 95, 0.13);
+  --canvas: #19191b;
+  --surface: #242426;
+  --surface-float: #2b2b2d;
+  --fill: #363638;
+  --surface-inset: #2c2c2e;
+  --border: #414145;
+  --hairline: #333336;
+  --hairline-strong: #55555a;
+
+  --ink: #f1f1ee;
+  --ink-soft: #b3b4ae; /* 7.4:1 on surface */
+  --ink-faint: #9d9e98; /* 5.7:1 on surface */
+
+  --accent: #f1f1ee;
+  --accent-fill: #e3e4dc;
+  --accent-fill-hover: #f0f1ea;
+  --on-accent: #202022; /* 12.7:1 on the primary action */
+  --accent-soft: rgba(241, 241, 238, 0.08);
+  --accent-ring: rgba(241, 241, 238, 0.24);
+
+  --row-hover: rgba(241, 241, 238, 0.04);
+  --row-press: rgba(241, 241, 238, 0.08);
+
+  --shell-bg: #101012;
+  --shell-ink: #f1f1ee;
+  --shell-ink-soft: #b3b4ae;
+  --shell-active: #262628;
+  --shell-active-ink: #f4f4ed;
+  --shell-hover: rgba(241, 241, 238, 0.05);
+  --shell-divider: rgba(241, 241, 238, 0.08);
+  --shell-shadow: 0 0 0 1px rgba(241, 241, 238, 0.06), 0 20px 44px -16px rgba(0, 0, 0, 0.7);
+
+  --chart-1: #e3e4dc;
+  --chart-2: #85867f; /* 4.2:1 on surface */
+  --chart-grid: #333336;
+
+  --good: #72c393;
+  --good-bg: rgba(114, 195, 147, 0.13);
+  --warn: #e3ac62;
+  --warn-bg: rgba(227, 172, 98, 0.14);
+  --bad: #f08c7e;
+  --bad-bg: rgba(240, 140, 126, 0.13);
+
+  --shadow-card: 0 0 0 1px var(--border), inset 0 1px 0 rgba(255, 255, 255, 0.025),
+    0 14px 32px -18px rgba(0, 0, 0, 0.7);
+  --shadow-raised: 0 0 0 1px var(--border), 0 1px 2px rgba(0, 0, 0, 0.3);
+
+  --ambient-warm: rgba(255, 164, 72, 0.075);
+  --ambient-warm-far: rgba(255, 190, 120, 0.035);
+  --ambient-top: #1c1c1e;
+  --ambient-bottom: #161618;
+
+  /* Darker room, so the same sign needs less halo to read as lit. */
+  --lit-ink: #fff1d8;
+  --lit-core: rgba(255, 222, 160, 0.62);
+  --lit-halo: rgba(255, 164, 66, 0.4);
+  --lit-halo-far: rgba(255, 146, 48, 0.2);
+  --shell-spill: rgba(255, 160, 70, 0.09);
+  --shell-edge: rgba(255, 222, 176, 0.05);
+  --shadow-float: 0 0 0 1px var(--border), 0 24px 48px -12px rgba(0, 0, 0, 0.65);
+  --scrim: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
 }
 
 html,
 body {
-  height: 100%;
-}
-
-/* Keyboard focus must survive glass surfaces — a visible accent ring, only
-   for keyboard navigation (:focus-visible), never removed. */
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 4px;
+  min-height: 100%;
 }
 
 body {
   color: var(--ink);
-  background-color: var(--bg-base);
-  /* Real out-of-focus photo backdrop (soft neutral bokeh, no recognizable
-     objects) — matches the reference's clean-white-with-texture-blur look.
-     The scrim layer (::before) sits on top so text/cards keep exact contrast. */
-  background-image: url("/bg-ambient.jpg");
-  background-size: cover;
-  background-position: center;
+  background-color: var(--canvas);
+  background-image: linear-gradient(180deg, var(--ambient-top) 0%, var(--ambient-bottom) 100%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "cv11"; /* Inter: open single-story a alternative off; keep defaults otherwise */
+  font-optical-sizing: auto;
+  font-feature-settings: "cv11", "ss03";
 }
 
-/* Theme-tinted scrim over the photo — light: warm-white wash (texture still
-   faintly visible); dark: near-opaque green-tinted wash (photo mostly hidden,
-   keeps the dark theme's own identity). Sits above the photo, below content. */
+/* The warm source. A fixed layer so it stays anchored to the sidebar's top
+   while content scrolls; it fades out well before the data area's middle. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: var(--bg-scrim);
+  background:
+    radial-gradient(26rem 20rem at 150px 70px, var(--ambient-warm), transparent 72%),
+    radial-gradient(60rem 30rem at 0% 0%, var(--ambient-warm-far), transparent 70%);
 }
 
-/* Fine film grain — sits above the scrim but behind all app content via
-   z-index:-1 (document order puts it above ::before in the same stacking
-   context), so it textures the backdrop only. Inline SVG turbulence: no
-   extra image asset, no network request. */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.035;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 140px 140px;
-}
-
-:root[data-theme="dark"] body::after {
-  opacity: 0.06;
-  mix-blend-mode: soft-light;
-}
-
-/* POS is a bright counter kiosk — keep its forced-light surface flat and
-   clean, no photo texture or grain (max legibility at a busy counter). */
-:root[data-theme="pos-light"] body {
-  background-image: none;
-}
-
-:root[data-theme="pos-light"] body::before,
-:root[data-theme="pos-light"] body::after {
+:root[data-theme="pos-light"] body::before {
   display: none;
 }
 
+::selection {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+/* Keyboard focus: one ring everywhere, only for keyboard (:focus-visible). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+input,
+textarea {
+  caret-color: var(--ink);
+}
+
+/* Quiet scrollbars inside scrolling panels (sheets, popovers, tables). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Numbers in this product are money and stock: they always align. */
+.tabular-nums,
+table {
+  font-variant-numeric: tabular-nums;
+}
+
 @layer components {
-  /* Frosted card — the HERO surface. One per page; everything else is plate/rows. */
-  .glass-card {
-    @apply rounded-3xl border backdrop-blur-xl;
-    background: var(--glass);
-    border-color: var(--glass-border);
-    box-shadow: 0 1px 2px rgba(24, 32, 26, 0.04), 0 10px 30px rgba(24, 32, 26, 0.07);
+  /* ── Type roles ──────────────────────────────────────────────────────── */
+  .page-title {
+    @apply text-[1.625rem] font-semibold leading-tight md:text-[1.875rem];
+    letter-spacing: -0.024em;
   }
 
-  .glass-strong {
-    background: var(--glass-strong);
-  }
-
-  /* Quiet secondary surface — tinted flat, no blur, lighter shadow. */
-  .plate {
-    @apply rounded-3xl;
-    background: var(--glass-strong);
-    border: 1px solid var(--glass-border);
-    box-shadow: 0 1px 2px rgba(24, 32, 26, 0.03);
-  }
-
-  .hairline-b {
-    border-bottom: 1px solid var(--hairline);
-  }
-
-  .hairline-t {
-    border-top: 1px solid var(--hairline);
+  .section-title {
+    @apply text-[15px] font-semibold leading-snug;
+    letter-spacing: -0.012em;
   }
 
   .ink-soft {
@@ -184,13 +248,78 @@ body::after {
     color: var(--ink-faint);
   }
 
-  /* Day header for chronological lists — the scanning anchor. */
-  .day-header {
-    @apply sticky top-0 z-10 -mx-1 flex items-baseline justify-between gap-3 px-1 pb-2 pt-4;
-    background: linear-gradient(to bottom, var(--bg-base) 75%, transparent);
+  .hairline-b {
+    border-bottom: 1px solid var(--hairline);
   }
 
-  /* Open list row — quiet, hairline-separated, no per-row container. */
+  .hairline-t {
+    border-top: 1px solid var(--hairline);
+  }
+
+  /* ── Surfaces ────────────────────────────────────────────────────────── */
+  /* The card. Historically named "glass"; it is porcelain now — opaque, a
+     hairline border, the faintest lift. */
+  .glass-card {
+    @apply rounded-3xl;
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  .glass-strong {
+    background: var(--surface);
+  }
+
+  /* A quieter card: the same porcelain, border only. */
+  .plate {
+    @apply rounded-3xl;
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+
+  .surface-inset {
+    background: var(--surface-inset);
+  }
+
+  /* Grouped section (iOS inset-grouped list): a day, a category. The header is
+     the first row of its own card, so a folded group is a tidy single line
+     and an open one reads as one object. */
+  .group-card {
+    @apply overflow-hidden rounded-3xl;
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  .group-card + .group-card {
+    @apply mt-2.5;
+  }
+
+  .day-header {
+    @apply flex min-h-[3.25rem] w-full items-center gap-3 px-4 py-2.5 text-left md:px-5;
+  }
+
+  .day-header-toggle {
+    @apply cursor-pointer select-none;
+    transition: background-color 150ms ease-out;
+  }
+
+  .day-header-toggle:hover {
+    background: var(--row-hover);
+  }
+
+  .day-header-toggle:active {
+    background: var(--row-press);
+  }
+
+  .day-header-toggle:focus-visible {
+    outline-offset: -2px;
+    border-radius: 0;
+  }
+
+  .group-card .group-body {
+    border-top: 1px solid var(--hairline);
+  }
+
+  /* ── Rows ────────────────────────────────────────────────────────────── */
   .list-row {
     @apply flex items-center gap-3 py-3;
     border-bottom: 1px solid var(--hairline);
@@ -200,15 +329,33 @@ body::after {
     border-bottom: none;
   }
 
-  /* A row that DOES something. Quiet like any other row until pointed at —
-     then the surface itself answers, rather than a border or a colour change.
-     The tint runs a little past the text so it reads as one band, and the
-     chevron nudges toward the direction it will take you. Only ever on rows
-     that are genuinely interactive: a hover state on a row that does nothing
-     is a promise the interface cannot keep. */
+  /* Inside a group card the rows own the card's padding, and the hairline
+     starts at the text column (iOS inset separators). */
+  .group-body .list-row {
+    @apply px-4 md:px-5;
+    border-bottom: none;
+    position: relative;
+  }
+
+  .group-body > li + li > .list-row::before,
+  .group-body > .list-row + .list-row::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: var(--row-inset, 1rem);
+    border-top: 1px solid var(--hairline);
+  }
+
+  /* A row that DOES something: quiet until pointed at, then the surface
+     answers and the chevron nudges toward where it goes. */
   .list-row-action {
     @apply -mx-2 w-[calc(100%+1rem)] cursor-pointer rounded-xl px-2 text-left;
-    transition: background-color 150ms ease-out, opacity 120ms ease-out;
+    transition: background-color 150ms ease-out;
+  }
+
+  .group-body .list-row-action {
+    @apply mx-0 w-full rounded-none px-4 md:px-5;
   }
 
   .list-row-action:hover {
@@ -224,75 +371,265 @@ body::after {
     outline-offset: -2px;
   }
 
-  .list-row-action .row-chevron {
+  .row-chevron {
     color: var(--ink-faint);
-    transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms ease-out;
+    transition: transform 200ms var(--ease-out), color 150ms ease-out;
   }
 
-  .list-row-action:hover .row-chevron {
+  .list-row-action:hover .row-chevron,
+  .day-header-toggle:hover .row-chevron {
     color: var(--ink-soft);
-    transform: translateX(2px);
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .list-row-action,
-    .list-row-action .row-chevron {
-      transition: none;
-    }
-
-    .list-row-action:hover .row-chevron {
-      transform: none;
-    }
+  /* ── Controls ────────────────────────────────────────────────────────── */
+  .btn-accent {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[15px] font-semibold;
+    background: var(--accent-fill);
+    color: var(--on-accent);
+    box-shadow: 0 1px 2px rgba(20, 20, 22, 0.16);
+    transition: background-color 150ms ease-out, transform 120ms var(--ease-out), opacity 150ms ease-out;
   }
 
-/* ── Controls: ours, not the operating system's ────────────────────────────
-     A native <select> or date input renders the OS widget — a blue Windows
-     listbox and mm/dd/yyyy inside a warm Indonesian café dashboard. These
-     carry the same field grammar as .field, at the smaller size a filter bar
-     wants. */
-  .control-field {
-    @apply h-10 w-full cursor-pointer rounded-xl border px-3 text-sm;
-    background: var(--glass-strong);
-    border-color: var(--hairline);
+  .btn-accent:hover {
+    background: var(--accent-fill-hover);
+  }
+
+  .btn-accent:active {
+    transform: scale(0.98);
+  }
+
+  .btn-accent:disabled {
+    @apply cursor-not-allowed;
+    opacity: 0.32;
+    transform: none;
+  }
+
+  .btn-quiet {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[15px] font-medium;
+    background: var(--surface);
     color: var(--ink);
-    transition: border-color 150ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out;
+    box-shadow: var(--shadow-raised);
+    transition: background-color 150ms ease-out, transform 120ms var(--ease-out), opacity 150ms ease-out;
+  }
+
+  .btn-quiet:hover {
+    background: var(--surface-inset);
+    box-shadow: 0 0 0 1px var(--hairline-strong), 0 1px 2px rgba(36, 36, 38, 0.05);
+  }
+
+  .btn-quiet:active {
+    transform: scale(0.98);
+  }
+
+  .btn-quiet:disabled {
+    @apply cursor-not-allowed;
+    opacity: 0.45;
+    transform: none;
+  }
+
+  /* Destructive confirmation — tinted, never a loud red fill. */
+  .btn-danger {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-2xl font-semibold;
+    background: var(--bad-bg);
+    color: var(--bad);
+    transition: filter 150ms ease-out, transform 120ms var(--ease-out);
+  }
+
+  .btn-danger:hover {
+    box-shadow: inset 0 0 0 1px currentColor;
+  }
+
+  .btn-danger:active {
+    transform: scale(0.98);
+  }
+
+  .btn-danger:disabled {
+    opacity: 0.45;
+  }
+
+  .field {
+    @apply w-full rounded-2xl px-3.5 py-2.5 text-[15px] outline-none;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+
+  .field:hover {
+    border-color: var(--hairline-strong);
+  }
+
+  .field:focus,
+  .field:focus-visible {
+    outline: none;
+    border-color: var(--ink);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+
+  .field[aria-invalid="true"] {
+    border-color: var(--bad);
+    box-shadow: 0 0 0 3px var(--bad-bg);
+  }
+
+  .field::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .field:disabled {
+    @apply cursor-not-allowed;
+    background: var(--surface-inset);
+    color: var(--ink-soft);
+  }
+
+  /* Filter-bar size of the same grammar. */
+  .control-field {
+    @apply h-10 w-full cursor-pointer rounded-xl px-3 text-sm;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--shadow-raised);
+    transition: box-shadow 150ms ease-out, background-color 150ms ease-out;
   }
 
   .control-field:hover {
-    background: var(--row-press);
+    background: var(--surface-inset);
   }
 
   .control-field:focus-visible {
     outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
+    box-shadow: 0 0 0 1px var(--ink), 0 0 0 4px var(--accent-ring);
   }
 
-  .control-field-open {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
+  .control-field-open,
+  .field.control-field-open {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 1px var(--ink), 0 0 0 4px var(--accent-ring);
   }
 
-  /* Floating panel for the listbox and the calendar. Fixed-positioned by the
-     component, so a card's own overflow can never clip it. */
-  .popover-panel {
-    @apply fixed z-50 max-h-72 overflow-auto rounded-2xl border p-1.5;
-    background: var(--popover-surface);
-    border-color: var(--hairline);
-    box-shadow: 0 12px 32px rgba(24, 32, 26, 0.16);
-    animation: popover-in 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  .field.control-field-open {
+    box-shadow: 0 0 0 3px var(--accent-ring);
   }
 
-  @keyframes popover-in {
-    from {
-      opacity: 0;
-      transform: translateY(-4px) scale(0.985);
-    }
+  /* Checkbox and radio — drawn, not the OS's blue square. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    @apply shrink-0 cursor-pointer;
+    appearance: none;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    display: inline-grid;
+    place-content: center;
+    background: var(--surface);
+    border: 1.5px solid var(--hairline-strong);
+    border-radius: 0.3125rem;
+    transition: background-color 150ms ease-out, border-color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+
+  input[type="radio"] {
+    border-radius: 999px;
+  }
+
+  input[type="checkbox"]::after {
+    content: "";
+    width: 0.625rem;
+    height: 0.625rem;
+    transform: scale(0);
+    transition: transform 160ms var(--ease-out);
+    background: var(--on-accent);
+    clip-path: polygon(14% 52%, 0 66%, 38% 100%, 100% 26%, 86% 12%, 37% 72%);
+  }
+
+  input[type="radio"]::after {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    transform: scale(0);
+    transition: transform 160ms var(--ease-out);
+    background: var(--on-accent);
+  }
+
+  input[type="checkbox"]:checked,
+  input[type="radio"]:checked {
+    background: var(--accent-fill);
+    border-color: var(--accent-fill);
+  }
+
+  input[type="checkbox"]:checked::after,
+  input[type="radio"]:checked::after {
+    transform: scale(1);
+  }
+
+  input[type="checkbox"]:hover:not(:checked),
+  input[type="radio"]:hover:not(:checked) {
+    border-color: var(--ink-faint);
+  }
+
+  input[type="checkbox"]:focus-visible,
+  input[type="radio"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+
+  input[type="checkbox"]:disabled,
+  input[type="radio"]:disabled {
+    @apply cursor-not-allowed;
+    opacity: 0.45;
+  }
+
+  /* Native number/time internals that leak OS chrome. */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    opacity: 0.45;
+    cursor: pointer;
+  }
+
+  :root[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+
+  /* Segmented control: a recessed track, the chosen segment is raised paper. */
+  .segmented {
+    @apply inline-flex rounded-xl p-[3px];
+    background: var(--fill);
+  }
+
+  .segmented-item {
+    @apply rounded-[9px] px-3.5 py-1.5 text-sm font-medium;
+    color: var(--ink-soft);
+    transition: background-color 180ms var(--ease-out), color 150ms ease-out, box-shadow 180ms var(--ease-out);
+  }
+
+  .segmented-item:hover {
+    color: var(--ink);
+  }
+
+  .segmented-item[aria-selected="true"],
+  .segmented-item[aria-pressed="true"] {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 0 0 0.5px rgba(36, 36, 38, 0.08), 0 1px 3px rgba(36, 36, 38, 0.12);
+  }
+
+  :root[data-theme="dark"] .segmented-item[aria-selected="true"],
+  :root[data-theme="dark"] .segmented-item[aria-pressed="true"] {
+    background: #4a4a4e;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 
   .icon-btn {
-    @apply flex h-8 w-8 items-center justify-center rounded-lg transition-colors;
+    @apply flex h-8 w-8 items-center justify-center rounded-lg;
     color: var(--ink-soft);
+    transition: background-color 150ms ease-out, color 150ms ease-out;
   }
 
   .icon-btn:hover {
@@ -300,20 +637,255 @@ body::after {
     color: var(--ink);
   }
 
+  .icon-btn:active {
+    background: var(--row-press);
+  }
+
   .chip-btn {
-    @apply rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors;
-    background: var(--row-hover);
+    @apply rounded-lg px-2.5 py-1.5 text-xs font-semibold;
+    background: var(--surface-inset);
+    box-shadow: inset 0 0 0 1px var(--hairline);
     color: var(--ink-soft);
+    transition: background-color 150ms ease-out, color 150ms ease-out;
   }
 
   .chip-btn:hover {
-    background: var(--row-press);
+    background: var(--fill);
     color: var(--ink);
   }
 
-  /* Calendar: the selected span is drawn as ONE band, not two circled dates.
-     The cell carries the connecting tint and squares off the inner edge; the
-     day button carries the cap. */
+  /* Choice chip (multi-select like "Service charge berlaku untuk"). */
+  .choice-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium;
+    background: var(--surface);
+    color: var(--ink-soft);
+    box-shadow: 0 0 0 1px var(--border);
+    transition: background-color 150ms ease-out, color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+
+  .choice-chip:hover {
+    color: var(--ink);
+  }
+
+  .choice-chip[aria-pressed="true"] {
+    background: var(--accent-fill);
+    color: var(--on-accent);
+    box-shadow: 0 0 0 1px var(--accent-fill);
+  }
+
+  /* Choice card: pick one of a few consequential options (void vs refund,
+     order type). The chosen one carries the accent ring, not a fill, so its
+     explanatory line stays readable. */
+  .choice-card {
+    @apply rounded-2xl px-4 py-3 text-left text-sm font-semibold;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 0 0 1px var(--border);
+    transition: box-shadow 150ms ease-out, background-color 150ms ease-out;
+  }
+
+  .choice-card:hover {
+    background: var(--surface-inset);
+  }
+
+  .choice-card[aria-pressed="true"] {
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 1.5px var(--accent);
+  }
+
+  /* On/off option buttons in kiosk and menu sheets (size, extras, order type,
+     payment method): the same grammar as .choice-card, applied by state. */
+  .toggle-off,
+  .toggle-on {
+    transition: box-shadow 150ms ease-out, background-color 150ms ease-out, color 150ms ease-out;
+  }
+
+  .toggle-off {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+
+  .toggle-off:hover {
+    background: var(--surface-inset);
+  }
+
+  .toggle-on {
+    background: var(--accent-soft);
+    color: var(--accent);
+    box-shadow: 0 0 0 1.5px var(--accent);
+  }
+
+  /* ── Floating layer ──────────────────────────────────────────────────── */
+  .popover-panel {
+    @apply fixed z-[60] max-h-72 overflow-auto rounded-2xl p-1.5;
+    background: var(--surface-float);
+    box-shadow: var(--shadow-float);
+    animation: popover-in 160ms var(--ease-out);
+  }
+
+  @keyframes popover-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
+
+  .sheet-scrim {
+    @apply fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6;
+    background: var(--scrim);
+    animation: scrim-in 200ms ease-out;
+  }
+
+  .sheet-panel {
+    @apply flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-4xl sm:max-h-[min(88dvh,760px)] sm:rounded-4xl;
+    background: var(--surface-float);
+    box-shadow: var(--shadow-float);
+    animation: sheet-up 320ms var(--ease-out);
+  }
+
+  @media (min-width: 640px) {
+    .sheet-panel {
+      animation: sheet-pop 220ms var(--ease-out);
+    }
+  }
+
+  @keyframes scrim-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes sheet-pop {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.985);
+    }
+  }
+
+  /* The shell: sidebar panel and phone tab bar. Solid ink, rounded, floating
+     a step above the canvas. No blur, no gradient — the contrast does the
+     work. Everything inside reads from the --shell-* tokens. */
+  .shell-panel,
+  .float-bar {
+    background: var(--shell-bg);
+    color: var(--shell-ink);
+    box-shadow: var(--shell-shadow);
+  }
+
+  /* Light from the sign falls on the panel's upper third and fades before the
+     navigation; the top edge catches a trace of it. */
+  .shell-panel {
+    background:
+      radial-gradient(120% 15rem at 50% 2.75rem, var(--shell-spill), transparent 72%),
+      var(--shell-bg);
+    box-shadow: inset 0 1px 0 var(--shell-edge), var(--shell-shadow);
+  }
+
+  /* The illuminated wordmark. The letters paint crisp in warm ivory; the
+     drop-shadows stack behind them (a near core, an amber halo, a far spill),
+     so fine strokes and the eclipse O keep their edges. The brand zone around
+     it leaves room for the halo, so nothing clips. */
+  .wordmark-lit {
+    color: var(--lit-ink);
+    filter: drop-shadow(0 0 0.6px var(--lit-core)) drop-shadow(0 0 5px var(--lit-halo))
+      drop-shadow(0 0 16px var(--lit-halo-far));
+  }
+
+  @media (prefers-contrast: more) {
+    .wordmark-lit {
+      filter: none;
+    }
+  }
+
+  .shell-panel :focus-visible,
+  .float-bar :focus-visible {
+    outline-color: var(--shell-ink);
+  }
+
+  .shell-panel .ink-faint,
+  .shell-panel .ink-soft {
+    color: var(--shell-ink-soft);
+  }
+
+  .shell-panel .icon-btn {
+    color: var(--shell-ink-soft);
+  }
+
+  .shell-panel .icon-btn:hover {
+    background: var(--shell-hover);
+    color: var(--shell-ink);
+  }
+
+  /* A dock: a floating bar that carries *content* (the POS cart, a sale
+     confirmation) — porcelain, not the ink shell, so controls inside it keep
+     the ordinary light-surface grammar. */
+  .dock {
+    background: var(--surface-float);
+    color: var(--ink);
+    box-shadow: var(--shadow-float);
+  }
+
+  .shell-divider {
+    background: var(--shell-divider);
+  }
+
+  .nav-item {
+    @apply relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium;
+    color: var(--shell-ink-soft);
+    transition: background-color 160ms ease-out, color 160ms ease-out;
+  }
+
+  .nav-item:hover {
+    background: var(--shell-hover);
+    color: var(--shell-ink);
+  }
+
+  .nav-item[aria-current="page"] {
+    background: var(--shell-active);
+    color: var(--shell-active-ink);
+  }
+
+  .nav-item .nav-icon {
+    color: currentColor;
+    opacity: 0.85;
+  }
+
+  .nav-item[aria-current="page"] .nav-icon {
+    opacity: 1;
+  }
+
+  /* The contained account area at the foot of the shell. */
+  .shell-well {
+    background: var(--shell-active);
+    color: var(--shell-ink);
+  }
+
+  /* Phone tab bar items */
+  .tab-item {
+    @apply flex flex-col items-center gap-1 rounded-2xl py-1.5 text-[11px] font-medium;
+    color: var(--shell-ink-soft);
+    transition: background-color 160ms ease-out, color 160ms ease-out;
+  }
+
+  .tab-item[aria-current="page"],
+  .tab-item[data-active="true"] {
+    background: var(--shell-active);
+    color: var(--shell-active-ink);
+  }
+
+  /* A header content scrolls beneath (POS, kitchen, menu). */
+  .sticky-bar {
+    background: var(--canvas);
+  }
+
+  /* ── Calendar ────────────────────────────────────────────────────────── */
   .cal-cell {
     @apply relative flex h-9 items-center justify-center;
   }
@@ -333,8 +905,9 @@ body::after {
   }
 
   .cal-day {
-    @apply flex h-9 w-9 items-center justify-center rounded-full text-sm tabular-nums transition-colors;
+    @apply flex h-9 w-9 items-center justify-center rounded-full text-sm tabular-nums;
     color: var(--ink);
+    transition: background-color 150ms ease-out;
   }
 
   .cal-day:hover {
@@ -342,143 +915,139 @@ body::after {
   }
 
   .cal-day-on {
-    background: var(--accent);
-    color: #fff;
-    font-weight: 700;
-  }
-
-  .cal-day-on:hover {
-    background: var(--accent-deep);
-  }
-
-  /* Today is always findable, even when it is not part of the range. */
-  .cal-day-today {
-    box-shadow: inset 0 0 0 1.5px var(--accent);
+    background: var(--accent-fill);
+    color: var(--on-accent);
     font-weight: 600;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .popover-panel {
-      animation: none;
-    }
-
-    .control-field,
-    .cal-day,
-    .icon-btn,
-    .chip-btn {
-      transition: none;
-    }
+  .cal-day-on:hover {
+    background: var(--accent-fill-hover);
   }
 
-  .btn-accent {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-semibold text-white transition-all duration-200 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100;
-    background: var(--accent);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 5px 16px rgba(43, 122, 78, 0.3);
+  .cal-day-today {
+    position: relative;
+    font-weight: 700;
   }
 
-  .btn-accent:hover {
-    background: var(--accent-deep);
+  .cal-day-today::after {
+    content: "";
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    width: 3px;
+    height: 3px;
+    border-radius: 999px;
+    transform: translateX(-50%);
+    background: currentColor;
   }
 
-  .btn-quiet {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl border px-5 py-3 font-medium transition-all duration-200 active:scale-[0.97];
-    background: var(--glass-strong);
-    border-color: var(--glass-border);
-    color: var(--ink);
-    box-shadow: 0 1px 2px rgba(24, 32, 26, 0.04);
+  /* ── Status ──────────────────────────────────────────────────────────── */
+  .pill-good,
+  .pill-warn,
+  .pill-bad,
+  .pill-quiet {
+    @apply inline-flex items-center whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11.5px] font-semibold leading-4;
   }
 
-  .btn-quiet:hover {
-    border-color: var(--hairline);
-    background: var(--row-press);
-  }
-
-  .field {
-    @apply w-full rounded-2xl border px-4 py-3 outline-none transition-shadow duration-200;
-    background: var(--glass-strong);
-    border-color: var(--hairline);
-    color: var(--ink);
-  }
-
-  .field:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-  }
-
-  .field::placeholder {
-    color: var(--ink-faint);
-  }
-
-  /* Status pills (quantity/severity) — icon-adjacent text, never color alone. */
   .pill-good {
-    @apply rounded-full px-2.5 py-0.5 text-xs font-semibold;
-    background: var(--accent-soft);
+    background: var(--good-bg);
     color: var(--good);
   }
 
   .pill-warn {
-    @apply rounded-full px-2.5 py-0.5 text-xs font-semibold;
     background: var(--warn-bg);
     color: var(--warn);
   }
 
   .pill-bad {
-    @apply rounded-full px-2.5 py-0.5 text-xs font-semibold;
     background: var(--bad-bg);
     color: var(--bad);
   }
 
-  /* Neutral tag — a fact about the row, not a status ("dari nota kertas"). */
   .pill-quiet {
-    @apply rounded-full px-2.5 py-0.5 text-xs font-medium;
-    background: var(--row-hover);
+    @apply font-medium;
+    background: var(--fill);
     color: var(--ink-soft);
   }
 
-  /* The opened receipt under a transaction row: indented to the row's text
-     column so the items read as belonging to it, on a quieter ground. */
+  .notice {
+    @apply rounded-2xl px-4 py-3 text-sm font-medium;
+  }
+
+  .notice-good {
+    background: var(--good-bg);
+    color: var(--good);
+  }
+
+  .notice-warn {
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+
+  .notice-bad {
+    background: var(--bad-bg);
+    color: var(--bad);
+  }
+
+  /* The opened receipt under a transaction row: set in from the row's text
+     column on a recessed ground, so the items read as belonging to it. */
   .receipt-lines {
-    @apply mb-1 ml-14 mr-1 rounded-xl px-3 py-2;
-    background: var(--row-hover);
+    @apply mb-3 ml-[4.25rem] mr-4 rounded-xl px-3 py-2 md:mr-5;
+    background: var(--surface-inset);
+  }
+
+  /* Data table header. */
+  .table-head {
+    @apply text-[11.5px] font-medium;
+    color: var(--ink-faint);
+  }
+
+  /* Page entrance: opacity only, and never left applied (fill "backwards"),
+     so no transformed ancestor can ever trap a fixed-position sheet. */
+  .animate-fade-up {
+    animation: page-in 260ms ease-out backwards;
+  }
+
+  @keyframes page-in {
+    from {
+      opacity: 0;
+    }
   }
 }
 
-/* driver.js tour popover — restyled to the system. Uses an OPAQUE surface, not
-   the translucent glass token: the popover is positioned over arbitrary page
-   content, so at low opacity (the dark-theme glass is only ~9%) the content
-   behind bleeds through and collides with the popover's own text. */
+/* driver.js tour popover — restyled to the float material. */
 .driver-popover {
-  background: var(--popover-surface) !important;
+  background: var(--surface-float) !important;
   color: var(--ink) !important;
-  border: 1px solid var(--glass-border);
-  border-radius: 1.25rem !important;
-  box-shadow: 0 12px 40px rgba(24, 32, 26, 0.22) !important;
+  border: none;
+  border-radius: 1rem !important;
+  box-shadow: var(--shadow-float) !important;
   font-family: inherit;
+  padding: 18px 18px 14px !important;
 }
 
-/* The arrow is a CSS triangle driver.js hardcodes to white — repoint the
-   visible side to our surface so it matches in dark mode too. */
 .driver-popover-arrow-side-left.driver-popover-arrow {
-  border-left-color: var(--popover-surface) !important;
+  border-left-color: var(--surface-float) !important;
 }
 .driver-popover-arrow-side-right.driver-popover-arrow {
-  border-right-color: var(--popover-surface) !important;
+  border-right-color: var(--surface-float) !important;
 }
 .driver-popover-arrow-side-top.driver-popover-arrow {
-  border-top-color: var(--popover-surface) !important;
+  border-top-color: var(--surface-float) !important;
 }
 .driver-popover-arrow-side-bottom.driver-popover-arrow {
-  border-bottom-color: var(--popover-surface) !important;
+  border-bottom-color: var(--surface-float) !important;
 }
 
 .driver-popover-title {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 1rem;
+  letter-spacing: -0.01em;
 }
 
 .driver-popover-description {
   color: var(--ink-soft) !important;
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   line-height: 1.55;
 }
 
@@ -488,23 +1057,23 @@ body::after {
 }
 
 .driver-popover-navigation-btns button {
-  border-radius: 0.9rem !important;
+  border-radius: 0.625rem !important;
   padding: 0.4rem 0.9rem !important;
   font-weight: 600;
   text-shadow: none !important;
-  border: 1px solid var(--glass-border) !important;
-  background: var(--glass) !important;
+  border: none !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-raised);
   color: var(--ink) !important;
 }
 
 .driver-popover-navigation-btns button.driver-popover-next-btn,
 .driver-popover-navigation-btns button.driver-popover-done-btn {
-  background: var(--accent) !important;
-  color: #fff !important;
-  border: none !important;
+  background: var(--accent-fill) !important;
+  color: var(--on-accent) !important;
+  box-shadow: none;
 }
 
-/* Reduce motion for users who ask for it */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -6,7 +6,7 @@ import { formatQty, formatRupiah } from "@/lib/format";
 import type { InventoryItem } from "@/lib/types";
 import { EmptyState, ErrorState, Glass, ItemIcon, RowChevron, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
-import { IconPlus } from "@/components/icons";
+import { IconBox, IconPlus } from "@/components/icons";
 
 type Draft = {
   name: string;
@@ -111,10 +111,10 @@ export default function InventoryPage() {
   const sheetOpen = adding || editing !== null;
 
   return (
-    <div className="animate-fade-up space-y-7">
+    <div className="animate-fade-up space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[1.65rem] font-bold tracking-tight md:text-3xl">Stok</h1>
+          <h1 className="page-title">Stok</h1>
           <p className="ink-soft mt-1 flex items-center gap-2 text-sm">
             Perkiraan hari tersisa dihitung dari penjualan 14 hari terakhir
             <HelpTip title="Hari tersisa">
@@ -136,7 +136,7 @@ export default function InventoryPage() {
         </Glass>
       ) : !items.data || items.data.length === 0 ? (
         <Glass>
-          <EmptyState emoji="📦" title="Stok masih kosong">
+          <EmptyState icon={<IconBox className="h-5 w-5" />} title="Stok masih kosong">
             Tambah barang di sini, atau kirim foto buku stok / file Excel ke asisten WhatsApp —
             nanti terisi otomatis.
           </EmptyState>
@@ -145,19 +145,19 @@ export default function InventoryPage() {
         <>
           {risky.length > 0 && (
             <section>
-              <div className="mb-1 flex items-baseline gap-2">
-                <h2 className="text-base font-bold">Perlu perhatian</h2>
-                <span className="pill-warn">{risky.length}</span>
+              <div className="mb-3 flex items-baseline gap-2">
+                <h2 className="section-title">Perlu perhatian</h2>
+                <span className="pill-warn tabular-nums">{risky.length}</span>
               </div>
               <ItemRows items={risky} onEdit={openEdit} />
             </section>
           )}
           <section>
-            <h2 className="mb-1 text-base font-bold">
+            <h2 className="mb-3 section-title">
               {risky.length > 0 ? "Aman" : "Semua barang"}
             </h2>
             {safe.length === 0 ? (
-              <p className="ink-faint py-4 text-sm">Semua barang sedang butuh perhatian 😅</p>
+              <p className="ink-faint group-card px-5 py-4 text-sm">Semua barang sedang butuh perhatian.</p>
             ) : (
               <ItemRows items={safe} onEdit={openEdit} />
             )}
@@ -229,7 +229,7 @@ export default function InventoryPage() {
             />
           </Field>
           {error && (
-            <p className="rounded-2xl px-4 py-3 text-sm font-medium" style={{ background: "var(--bad-bg)", color: "var(--bad)" }}>
+            <p className="notice notice-bad">
               {error}
             </p>
           )}
@@ -248,16 +248,20 @@ export default function InventoryPage() {
 
 function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: InventoryItem) => void }) {
   return (
-    <ul>
+    <ul className="group-card group-body">
       {items.map((item) => {
         const pill = riskPill(item);
         return (
           <li key={item.id}>
-            <button onClick={() => onEdit(item)} className="list-row list-row-action">
+            <button
+              onClick={() => onEdit(item)}
+              className="list-row list-row-action"
+              style={{ ["--row-inset" as string]: "4.25rem" }}
+            >
               <ItemIcon name={item.name} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{item.name}</p>
-                <p className="ink-faint text-xs">
+                <p className="truncate text-sm font-medium">{item.name}</p>
+                <p className="ink-faint truncate text-xs">
                   {Number(item.sell_price) > 0
                     ? `jual ${formatRupiah(item.sell_price)}`
                     : "bahan baku"}
@@ -265,7 +269,7 @@ function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: Inven
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-sm font-bold tabular-nums">
+                <p className="mb-0.5 text-sm font-semibold tabular-nums">
                   {formatQty(item.current_stock)}{" "}
                   <span className="ink-faint text-xs font-normal">{item.unit}</span>
                 </p>
@@ -283,7 +287,7 @@ function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: Inven
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="ink-soft mb-1.5 block text-xs font-medium">{label}</span>
+      <span className="ink-soft mb-1.5 block text-[13px] font-medium">{label}</span>
       {children}
     </label>
   );

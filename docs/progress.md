@@ -1540,3 +1540,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Reduced motion drops the panel animation and every transition.
 **Deviation:** none.
 **Next:** deploy when the owner says to push; nothing here changes the API contract.
+
+
+### [svc-0] Baseline: the Poernama restyle already in the working tree
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** the 37 modified files and 2 new files that were uncommitted when this session started (frontend/app/globals.css, tailwind.config.ts, components/ui.tsx, icons.tsx, Wordmark.tsx (new), every dashboard page, the POS/kitchen/menu layouts and pages, backend/app/seed.py and bootstrap.py demo naming, scripts/wa-sim.py (new)). No edits made by this session.
+**Gates:** pytest 561 passed 0 skipped - migrations round-trip ok (0034 -> 0033 -> 0034) - frontend build ok - seed ok
+**Notes:**
+- **User-directed sequence, outside the roadmap:** revise the cashier, kitchen and QR ordering experience (tasks `svc-1` onwards). The dashboard is described as "already polished" and must keep its design language - that polish is this uncommitted A1 "Porcelain & ink" restyle from the previous session.
+- **Committed first and on its own** so every `svc-*` commit contains only its own change. The POS, kitchen and menu pages are touched by both, and folding a 2,500-line restyle into "[svc-1] product choices" would make either one impossible to review or revert.
+- Gates were run against exactly this tree before committing; nothing was changed to make them pass.
+**Deviation:** none.
+**Next:** svc-1 - deliberate product choices on the till and the QR menu.

@@ -6,9 +6,9 @@ import { Select } from "@/components/Select";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import type { InventoryItem, PromoCondition, PromoRow, VoucherRow } from "@/lib/types";
-import { EmptyState, ErrorState, Plate, Sheet, Skeleton } from "@/components/ui";
+import { EmptyState, ErrorState, Glass, Plate, Sheet, Skeleton, TimeField } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
-import { IconPlus } from "@/components/icons";
+import { IconCheck, IconPlus, IconSearch, IconSpark, IconTicket } from "@/components/icons";
 
 const DAYS = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 const KIND_LABEL: Record<PromoRow["kind"], string> = {
@@ -225,7 +225,7 @@ export default function PromosPage() {
     <div className="animate-fade-up space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-[1.65rem] font-bold tracking-tight md:text-3xl">
+          <h1 className="flex items-center gap-2 page-title">
             Promo
             <HelpTip title="Promo">
               Promo menyala sendiri saat semua syaratnya terpenuhi di kasir — hari, jam, tanggal, minimal
@@ -234,7 +234,7 @@ export default function PromosPage() {
             </HelpTip>
           </h1>
         </div>
-        <button onClick={() => open("new")} className="btn-accent flex items-center gap-2 px-4 py-2.5 text-sm">
+        <button onClick={() => open("new")} className="btn-accent px-4 py-2.5 text-sm">
           <IconPlus className="h-4 w-4" /> Promo baru
         </button>
       </header>
@@ -242,24 +242,27 @@ export default function PromosPage() {
       {promos.loading ? (
         <Skeleton className="h-56" />
       ) : promos.error && !promos.data ? (
-        <Plate>
+        <Glass>
           <ErrorState onRetry={promos.reload} />
-        </Plate>
+        </Glass>
       ) : !promos.data || promos.data.length === 0 ? (
         <Plate>
-          <EmptyState emoji="🎉" title="Belum ada promo">
+          <EmptyState icon={<IconSpark className="h-5 w-5" />} title="Belum ada promo">
             Buat beli 1 gratis 1, diskon jam sepi, atau potongan untuk belanja di atas nominal tertentu.
           </EmptyState>
         </Plate>
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
           {promos.data.map((p) => (
-            <li key={p.id}>
-              <Plate className={`flex h-full flex-col px-5 py-4 ${p.is_active ? "" : "opacity-60"}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{p.name}</p>
-                    <p className="ink-soft text-xs">
+            <li key={p.id} className="min-w-0">
+              <Glass className="flex h-full flex-col px-5 py-4">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className={`flex min-w-0 items-center gap-2 text-[15px] font-semibold ${p.is_active ? "" : "ink-soft"}`}>
+                      <span className="truncate">{p.name}</span>
+                      {!p.is_active && <span className="pill-quiet shrink-0">mati</span>}
+                    </p>
+                    <p className="ink-soft mt-0.5 text-[13px] leading-snug">
                       {KIND_LABEL[p.kind]}
                       {p.kind === "percent_off" ? ` · ${Math.round(Number(p.value) * 10000) / 100}%` : ""}
                       {p.kind === "amount_off" ? ` · ${formatRupiah(p.value)}` : ""}
@@ -268,23 +271,23 @@ export default function PromosPage() {
                       {p.max_per_order ? ` · maks ${p.max_per_order}×/struk` : ""}
                     </p>
                   </div>
-                  <div className="flex shrink-0 gap-1">
-                    <button onClick={() => open(p)} className="btn-quiet px-2.5 py-1 text-xs">Ubah</button>
-                    <button onClick={() => toggle(p)} className="btn-quiet px-2.5 py-1 text-xs">{p.is_active ? "Matikan" : "Nyalakan"}</button>
+                  <div className="flex shrink-0 gap-1.5">
+                    <button onClick={() => open(p)} className="chip-btn">Ubah</button>
+                    <button onClick={() => toggle(p)} className="chip-btn">{p.is_active ? "Matikan" : "Nyalakan"}</button>
                   </div>
                 </div>
-                <p className="ink-faint mt-2 text-xs">{describeConditions(p.conditions).join(" · ")}</p>
-                <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <p className="ink-faint mb-3 mt-2 text-xs">{describeConditions(p.conditions).join(" · ")}</p>
+                <dl className="hairline-t mt-auto grid grid-cols-2 gap-2 pt-3 text-xs">
                   <div>
                     <dt className="ink-faint">Dipakai</dt>
-                    <dd className="font-semibold tabular-nums">{p.applications}×</dd>
+                    <dd className="mt-0.5 text-sm font-semibold tabular-nums">{p.applications}×</dd>
                   </div>
                   <div>
                     <dt className="ink-faint">Biaya promo</dt>
-                    <dd className="font-semibold tabular-nums">{formatRupiah(p.given_away)}</dd>
+                    <dd className="mt-0.5 text-sm font-semibold tabular-nums">{formatRupiah(p.given_away)}</dd>
                   </div>
                 </dl>
-              </Plate>
+              </Glass>
             </li>
           ))}
         </ul>
@@ -293,7 +296,7 @@ export default function PromosPage() {
       {/* Vouchers (M8-T4) */}
       <section className="space-y-3 pt-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 className="flex items-center gap-2 text-base font-bold">
+          <h2 className="flex items-center gap-2 section-title">
             Voucher
             <HelpTip title="Voucher">
               Kode yang diketik kasir saat bayar. Satu kode bisa sekali pakai atau berkali-kali, punya masa
@@ -301,37 +304,45 @@ export default function PromosPage() {
               berhasil.
             </HelpTip>
           </h2>
-          <div className="flex items-center gap-2">
-            <input className="field max-w-[12rem]" placeholder="Cari kode" value={voucherQuery} onChange={(e) => setVoucherQuery(e.target.value)} />
-            <button onClick={() => { setVerror(null); setVoucherSheet(true); }} className="btn-quiet flex items-center gap-2 px-3 py-2 text-sm">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <div className="relative min-w-0 flex-1 sm:w-48 sm:flex-none">
+              <IconSearch className="ink-faint pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+              <input className="control-field cursor-text pl-9" type="search" aria-label="Cari kode voucher" placeholder="Cari kode" value={voucherQuery} onChange={(e) => setVoucherQuery(e.target.value)} />
+            </div>
+            <button onClick={() => { setVerror(null); setVoucherSheet(true); }} className="btn-quiet shrink-0 px-3.5 py-2 text-sm">
               <IconPlus className="h-4 w-4" /> Buat voucher
             </button>
           </div>
         </div>
         {made && made.length > 0 && (
-          <Plate className="px-5 py-4">
-            <p className="text-sm font-semibold">{made.length} kode dibuat{made[0].batch_name ? ` — ${made[0].batch_name}` : ""}</p>
-            <p className="mt-1 break-words font-mono text-xs">{made.map((m) => m.code).join("  ")}</p>
-            <button onClick={() => setMade(null)} className="ink-soft mt-2 text-xs">tutup</button>
-          </Plate>
+          <Glass className="px-5 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-[color:var(--good)]">
+                <IconCheck className="h-4 w-4" />
+                {made.length} kode dibuat{made[0].batch_name ? ` — ${made[0].batch_name}` : ""}
+              </p>
+              <button onClick={() => setMade(null)} className="chip-btn">tutup</button>
+            </div>
+            <p className="surface-inset mt-3 break-words rounded-xl px-3 py-2 font-mono text-xs leading-relaxed">{made.map((m) => m.code).join("  ")}</p>
+          </Glass>
         )}
         {vouchers.loading ? (
           <Skeleton className="h-32" />
         ) : !vouchers.data || vouchers.data.length === 0 ? (
           <Plate>
-            <EmptyState emoji="🎟️" title="Belum ada voucher">Buat satu kode, atau sekaligus banyak untuk dibagikan.</EmptyState>
+            <EmptyState icon={<IconTicket className="h-5 w-5" />} title="Belum ada voucher">Buat satu kode, atau sekaligus banyak untuk dibagikan.</EmptyState>
           </Plate>
         ) : (
-          <Plate className="overflow-x-auto px-0 py-0">
-            <table className="w-full text-sm">
-              <thead className="ink-faint text-left text-xs uppercase tracking-wide">
+          <Glass className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="table-head text-left">
                 <tr>
-                  <th className="px-4 py-2">Kode</th>
-                  <th className="px-4 py-2">Potongan</th>
-                  <th className="px-4 py-2">Dipakai</th>
-                  <th className="px-4 py-2">Berlaku sampai</th>
-                  <th className="px-4 py-2">Batch</th>
-                  <th className="px-4 py-2" />
+                  <th className="px-5 pb-2 pt-3 font-medium">Kode</th>
+                  <th className="px-4 pb-2 pt-3 font-medium">Potongan</th>
+                  <th className="px-4 pb-2 pt-3 text-right font-medium">Dipakai</th>
+                  <th className="px-4 pb-2 pt-3 font-medium">Berlaku sampai</th>
+                  <th className="px-4 pb-2 pt-3 font-medium">Batch</th>
+                  <th className="px-5 pb-2 pt-3" />
                 </tr>
               </thead>
               <tbody>
@@ -339,63 +350,64 @@ export default function PromosPage() {
                   const spent = v.uses >= v.max_uses;
                   const expired = v.expires_at ? new Date(v.expires_at) <= new Date() : false;
                   return (
-                    <tr key={v.id} className={`hairline-t ${!v.is_active || spent || expired ? "opacity-60" : ""}`}>
-                      <td className="px-4 py-2 font-mono font-semibold">{v.code}</td>
-                      <td className="px-4 py-2 tabular-nums">
+                    <tr key={v.id} className={`hairline-t ${!v.is_active || spent || expired ? "ink-faint" : ""}`}>
+                      <td className="px-5 py-3 font-mono text-[13px] font-medium">{v.code}</td>
+                      <td className="px-4 py-3 tabular-nums">
                         {v.kind === "percent_off" ? `${Math.round(Number(v.value) * 10000) / 100}%` : formatRupiah(v.value)}
                         {v.max_discount ? ` (maks ${formatRupiah(v.max_discount)})` : ""}
                         {Number(v.min_spend) > 0 ? ` · min ${formatRupiah(v.min_spend)}` : ""}
                       </td>
-                      <td className="px-4 py-2 tabular-nums">{v.uses} / {v.max_uses}</td>
-                      <td className="px-4 py-2">{v.expires_at ? new Date(v.expires_at).toLocaleDateString("id-ID") : "—"}{expired ? " · kedaluwarsa" : ""}</td>
-                      <td className="ink-soft px-4 py-2">{v.batch_name ?? "—"}</td>
-                      <td className="px-4 py-2 text-right">
-                        <button onClick={() => toggleVoucher(v)} className="btn-quiet px-2.5 py-1 text-xs">{v.is_active ? "Matikan" : "Nyalakan"}</button>
+                      <td className="px-4 py-3 text-right tabular-nums">{v.uses} / {v.max_uses}</td>
+                      <td className="px-4 py-3 tabular-nums">{v.expires_at ? new Date(v.expires_at).toLocaleDateString("id-ID") : "—"}{expired ? " · kedaluwarsa" : ""}</td>
+                      <td className="px-4 py-3">{v.batch_name ?? "—"}</td>
+                      <td className="px-5 py-3 text-right">
+                        <button onClick={() => toggleVoucher(v)} className="chip-btn">{v.is_active ? "Matikan" : "Nyalakan"}</button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </Plate>
+          </Glass>
         )}
       </section>
 
       {voucherSheet && (
         <Sheet open title="Buat voucher" onClose={() => !vbusy && setVoucherSheet(false)}>
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="segmented flex w-full" role="group" aria-label="Jumlah kode">
               {(["single", "batch"] as const).map((m) => (
                 <button key={m} type="button" onClick={() => setVdraft({ ...vdraft, mode: m })}
-                  className={`rounded-xl py-2 text-sm font-medium ${vdraft.mode === m ? "bg-accent-gradient text-white" : "glass-card"}`}>
+                  aria-pressed={vdraft.mode === m}
+                  className="segmented-item flex-1">
                   {m === "single" ? "Satu kode" : "Banyak kode (batch)"}
                 </button>
               ))}
             </div>
             {vdraft.mode === "single" ? (
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Kode</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Kode</span>
                 <input className="field font-mono" placeholder="HEMAT5" value={vdraft.code} onChange={(e) => setVdraft({ ...vdraft, code: e.target.value.toUpperCase() })} autoFocus />
               </label>
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 <label className="block">
-                  <span className="ink-soft mb-1.5 block text-xs font-medium">Jumlah kode</span>
+                  <span className="ink-soft mb-1.5 block text-[13px] font-medium">Jumlah kode</span>
                   <input className="field" inputMode="numeric" value={vdraft.count} onChange={(e) => setVdraft({ ...vdraft, count: e.target.value.replace(/[^0-9]/g, "") })} />
                 </label>
                 <label className="block">
-                  <span className="ink-soft mb-1.5 block text-xs font-medium">Awalan</span>
-                  <input className="field font-mono" placeholder="SENJA" value={vdraft.prefix} onChange={(e) => setVdraft({ ...vdraft, prefix: e.target.value.toUpperCase() })} />
+                  <span className="ink-soft mb-1.5 block text-[13px] font-medium">Awalan</span>
+                  <input className="field font-mono" placeholder="PRNM" value={vdraft.prefix} onChange={(e) => setVdraft({ ...vdraft, prefix: e.target.value.toUpperCase() })} />
                 </label>
                 <label className="block">
-                  <span className="ink-soft mb-1.5 block text-xs font-medium">Nama batch</span>
+                  <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama batch</span>
                   <input className="field" placeholder="Flyer September" value={vdraft.batch_name} onChange={(e) => setVdraft({ ...vdraft, batch_name: e.target.value })} />
                 </label>
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Jenis</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Jenis</span>
                 <Select
                   variant="field"
                   allowEmpty={false}
@@ -409,21 +421,21 @@ export default function PromosPage() {
                 />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">{vdraft.kind === "percent_off" ? "Diskon (%)" : "Potongan (Rp)"}</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">{vdraft.kind === "percent_off" ? "Diskon (%)" : "Potongan (Rp)"}</span>
                 <input className="field" inputMode="decimal" value={vdraft.value} onChange={(e) => setVdraft({ ...vdraft, value: e.target.value.replace(/[^0-9.]/g, "") })} />
               </label>
               {vdraft.kind === "percent_off" && (
                 <label className="block">
-                  <span className="ink-soft mb-1.5 block text-xs font-medium">Maksimal potongan (Rp)</span>
+                  <span className="ink-soft mb-1.5 block text-[13px] font-medium">Maksimal potongan (Rp)</span>
                   <input className="field" inputMode="numeric" value={vdraft.max_discount} onChange={(e) => setVdraft({ ...vdraft, max_discount: e.target.value.replace(/[^0-9]/g, "") })} />
                 </label>
               )}
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Minimal belanja (Rp)</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Minimal belanja (Rp)</span>
                 <input className="field" inputMode="numeric" value={vdraft.min_spend} onChange={(e) => setVdraft({ ...vdraft, min_spend: e.target.value.replace(/[^0-9]/g, "") })} />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Berlaku sampai</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Berlaku sampai</span>
                 <DateRangePicker
                   single
                   variant="field"
@@ -434,12 +446,12 @@ export default function PromosPage() {
                 />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Pemakaian per kode</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Pemakaian per kode</span>
                 <input className="field" inputMode="numeric" value={vdraft.max_uses} onChange={(e) => setVdraft({ ...vdraft, max_uses: e.target.value.replace(/[^0-9]/g, "") })} />
               </label>
             </div>
-            {verror && <p className="text-sm text-red-600">{verror}</p>}
-            <button onClick={saveVoucher} disabled={vbusy} className="btn-accent px-5 py-2.5 text-sm">
+            {verror && <p className="notice notice-bad">{verror}</p>}
+            <button onClick={saveVoucher} disabled={vbusy} className="btn-accent w-full py-3.5">
               {vbusy ? "Membuat…" : vdraft.mode === "batch" ? `Buat ${vdraft.count || 1} kode` : "Buat kode"}
             </button>
           </div>
@@ -450,12 +462,12 @@ export default function PromosPage() {
         <Sheet open title={editing === "new" ? "Promo baru" : "Ubah promo"} onClose={() => !busy && setEditing(null)}>
           <div className="space-y-3">
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Nama</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama</span>
               <input className="field" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus />
             </label>
             {editing === "new" && (
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Jenis</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Jenis</span>
                 <Select
                   variant="field"
                   allowEmpty={false}
@@ -472,13 +484,13 @@ export default function PromosPage() {
             )}
             {draft.kind !== "bonus_item" && (
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">{draft.kind === "percent_off" ? "Diskon (%)" : "Potongan (Rp)"}</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">{draft.kind === "percent_off" ? "Diskon (%)" : "Potongan (Rp)"}</span>
                 <input className="field" inputMode="decimal" value={draft.value} onChange={(e) => setDraft({ ...draft, value: e.target.value.replace(/[^0-9.]/g, "") })} />
               </label>
             )}
             {editing === "new" && (
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">{draft.kind === "bonus_item" ? "Barang yang dibeli" : "Berlaku untuk"}</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">{draft.kind === "bonus_item" ? "Barang yang dibeli" : "Berlaku untuk"}</span>
                 <Select
                   variant="field"
                   placeholder={draft.kind === "bonus_item" ? "— pilih barang —" : "Seluruh struk"}
@@ -492,16 +504,16 @@ export default function PromosPage() {
             {draft.kind === "bonus_item" && (
               <div className="grid grid-cols-3 gap-2">
                 <label className="block">
-                  <span className="ink-soft mb-1.5 block text-xs font-medium">Beli (pcs)</span>
+                  <span className="ink-soft mb-1.5 block text-[13px] font-medium">Beli (pcs)</span>
                   <input className="field" inputMode="numeric" value={draft.buy_quantity} onChange={(e) => setDraft({ ...draft, buy_quantity: e.target.value.replace(/[^0-9]/g, "") })} />
                 </label>
                 <label className="block">
-                  <span className="ink-soft mb-1.5 block text-xs font-medium">Gratis (pcs)</span>
+                  <span className="ink-soft mb-1.5 block text-[13px] font-medium">Gratis (pcs)</span>
                   <input className="field" inputMode="numeric" value={draft.bonus_quantity} onChange={(e) => setDraft({ ...draft, bonus_quantity: e.target.value.replace(/[^0-9]/g, "") })} />
                 </label>
                 {editing === "new" && (
                   <label className="block">
-                    <span className="ink-soft mb-1.5 block text-xs font-medium">Barang gratis</span>
+                    <span className="ink-soft mb-1.5 block text-[13px] font-medium">Barang gratis</span>
                     <Select
                       variant="field"
                       placeholder="Barang yang sama"
@@ -516,19 +528,22 @@ export default function PromosPage() {
             )}
             {draft.kind !== "bonus_item" && draft.item_id && (
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Tiap berapa pcs (kelipatan)</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Tiap berapa pcs (kelipatan)</span>
                 <input className="field" inputMode="numeric" value={draft.buy_quantity} onChange={(e) => setDraft({ ...draft, buy_quantity: e.target.value.replace(/[^0-9]/g, "") })} />
               </label>
             )}
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Maksimal per struk (kosong = tanpa batas)</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Maksimal per struk (kosong = tanpa batas)</span>
               <input className="field" inputMode="numeric" value={draft.max_per_order} onChange={(e) => setDraft({ ...draft, max_per_order: e.target.value.replace(/[^0-9]/g, "") })} />
             </label>
 
-            <p className="ink-soft pt-1 text-xs font-semibold uppercase tracking-wide">Syarat (kosong = selalu)</p>
+            <div className="hairline-t !mt-5 pt-4">
+              <p className="text-[15px] font-semibold">Syarat</p>
+              <p className="ink-faint text-xs">Kosongkan kalau promo berlaku setiap saat.</p>
+            </div>
             <div>
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Hari</span>
-              <div className="flex flex-wrap gap-1">
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Hari</span>
+              <div className="flex flex-wrap gap-1.5">
                 {DAYS.map((d, i) => {
                   const on = draft.days.includes(i);
                   return (
@@ -536,7 +551,8 @@ export default function PromosPage() {
                       key={d}
                       type="button"
                       onClick={() => setDraft({ ...draft, days: on ? draft.days.filter((x) => x !== i) : [...draft.days, i] })}
-                      className={`rounded-xl px-2.5 py-1 text-xs font-medium ${on ? "bg-accent-gradient text-white" : "glass-card"}`}
+                      aria-pressed={on}
+                      className="choice-chip min-w-[3rem] justify-center"
                     >
                       {d}
                     </button>
@@ -546,15 +562,15 @@ export default function PromosPage() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Jam mulai</span>
-                <input className="field" type="time" value={draft.time_start} onChange={(e) => setDraft({ ...draft, time_start: e.target.value })} />
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Jam mulai</span>
+                <TimeField value={draft.time_start} onChange={(v) => setDraft({ ...draft, time_start: v })} />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Jam selesai</span>
-                <input className="field" type="time" value={draft.time_end} onChange={(e) => setDraft({ ...draft, time_end: e.target.value })} />
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Jam selesai</span>
+                <TimeField value={draft.time_end} onChange={(v) => setDraft({ ...draft, time_end: v })} />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Mulai tanggal</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Mulai tanggal</span>
                 <DateRangePicker
                   single
                   variant="field"
@@ -565,7 +581,7 @@ export default function PromosPage() {
                 />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Sampai tanggal (tidak termasuk)</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Sampai tanggal (tidak termasuk)</span>
                 <DateRangePicker
                   single
                   variant="field"
@@ -577,11 +593,11 @@ export default function PromosPage() {
               </label>
             </div>
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Minimal belanja (Rp)</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Minimal belanja (Rp)</span>
               <input className="field" inputMode="numeric" value={draft.min_spend} onChange={(e) => setDraft({ ...draft, min_spend: e.target.value.replace(/[^0-9]/g, "") })} />
             </label>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <button onClick={save} disabled={busy} className="btn-accent px-5 py-2.5 text-sm">
+            {error && <p className="notice notice-bad">{error}</p>}
+            <button onClick={save} disabled={busy} className="btn-accent w-full py-3.5">
               {busy ? "Menyimpan…" : "Simpan"}
             </button>
           </div>

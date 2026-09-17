@@ -67,7 +67,7 @@ export function PinLockouts({ tz }: { tz?: string }) {
 
   return (
     <section>
-      <h2 className="mb-2 flex items-center gap-2 text-base font-bold">
+      <h2 className="mb-3 flex items-center gap-2 section-title">
         Percobaan PIN
         <HelpTip title="Kenapa ada daftar ini">
           Kalau PIN salah berkali-kali, kasir diminta menunggu sebentar sebelum boleh mencoba lagi —
@@ -80,7 +80,7 @@ export function PinLockouts({ tz }: { tz?: string }) {
       {lockouts.loading && !lockouts.data ? (
         <Skeleton className="h-20" />
       ) : (
-        <Plate className="px-6 py-4">
+        <Plate className="px-5 py-4">
           <ul className="space-y-3">
             {rows.map((row) => (
               <li key={row.id} className="flex items-center gap-3">

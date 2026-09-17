@@ -6,6 +6,7 @@ import { useOwnerData } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import type { Business, OrdersPage, StaffMember, TrendPoint } from "@/lib/types";
 import { ErrorState, Glass, Segmented, Skeleton } from "@/components/ui";
+import { IconChevronLeft, IconChevronRight } from "@/components/icons";
 import { TransactionHistory } from "@/components/TransactionHistory";
 import { HistoryFilters } from "@/components/HistoryFilters";
 import { ReversalPanel } from "@/components/ReversalPanel";
@@ -56,10 +57,10 @@ export default function SalesPage() {
 
 
   return (
-    <div className="animate-fade-up space-y-7">
+    <div className="animate-fade-up space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[1.65rem] font-bold tracking-tight md:text-3xl">Penjualan</h1>
+          <h1 className="page-title">Penjualan</h1>
           {trend.data && !trend.loading && (
             <p className="ink-soft mt-1 text-sm">
               <span className="font-semibold tabular-nums">{formatRupiah(rangeTotal)}</span> dari{" "}
@@ -67,23 +68,23 @@ export default function SalesPage() {
             </p>
           )}
         </div>
-        <Segmented options={[...RANGES]} value={range} onChange={setRange} />
+        <Segmented options={[...RANGES]} value={range} onChange={setRange} className="w-full sm:w-auto" />
       </header>
 
-      {/* HERO — trend */}
-      <Glass className="overflow-hidden pt-5">
-        <div className="h-56 w-full">
+      {/* Trend */}
+      <Glass className="overflow-hidden pt-4">
+        <div className="h-56 w-full md:h-64">
           {trend.loading ? (
             <Skeleton className="mx-6 h-44" />
           ) : trend.error ? (
             <ErrorState onRetry={trend.reload} />
           ) : trend.data ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trend.data} margin={{ top: 8, left: 8, right: 8, bottom: 4 }}>
+              <AreaChart data={trend.data} margin={{ top: 12, left: 16, right: 16, bottom: 8 }}>
                 <defs>
                   <linearGradient id="rev-sales" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.24} />
-                    <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.02} />
+                    <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.14} />
+                    <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
@@ -96,20 +97,23 @@ export default function SalesPage() {
                   axisLine={false}
                   tickLine={false}
                   interval="preserveStartEnd"
+                  padding={{ left: 16, right: 16 }}
                   minTickGap={44}
+                  tickMargin={8}
                 />
                 <YAxis hide />
                 <Tooltip
+                  cursor={{ stroke: "var(--hairline-strong)", strokeWidth: 1 }}
                   content={({ active, payload }) =>
                     active && payload?.length ? (
-                      <div className="plate px-3 py-2 text-xs shadow-pop">
+                      <div className="rounded-xl bg-[color:var(--surface-float)] px-3 py-2 text-xs shadow-pop">
                         <p className="ink-soft">
                           {new Date((payload[0].payload as TrendPoint).date).toLocaleDateString(
                             "id-ID",
                             { weekday: "short", day: "numeric", month: "short" }
                           )}
                         </p>
-                        <p className="font-bold tabular-nums">
+                        <p className="text-sm font-semibold tabular-nums">
                           {formatRupiah(payload[0].value as number)}
                         </p>
                         <p className="ink-soft">
@@ -123,9 +127,9 @@ export default function SalesPage() {
                   type="monotone"
                   dataKey="revenue"
                   stroke="var(--chart-1)"
-                  strokeWidth={2}
+                  strokeWidth={1.75}
                   fill="url(#rev-sales)"
-                  activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--glass-strong)" }}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--surface)" }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -135,21 +139,10 @@ export default function SalesPage() {
         </div>
       </Glass>
 
-      {/* M15-T10 — a sale that happened on paper, entered afterwards */}
-      <BackdatedSaleForm
-        onRecorded={() => {
-          trend.reload();
-          sales.reload();
-        }}
-      />
-
-      {/* M15-T11 — reverse a sale found after the shift closed */}
-      <ReversalPanel tz={tz} dayStart={dayStart} />
-
-      {/* Day-grouped history — open rows on the page background */}
+      {/* Day-grouped history — one card per day */}
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-bold">
+          <h2 className="section-title">
             Riwayat transaksi
             {filtered && sales.data && (
               <span className="ink-soft ml-2 text-sm font-medium tabular-nums">
@@ -190,25 +183,37 @@ export default function SalesPage() {
         {totalPages > 1 && (
           <div className="mt-5 flex items-center justify-between">
             <button
-              className="btn-quiet px-4 py-2 text-sm disabled:opacity-40"
+              className="btn-quiet gap-1 px-3.5 py-2 text-sm"
               disabled={page <= 1}
               onClick={() => setPage((p) => p - 1)}
             >
-              ← Lebih baru
+              <IconChevronLeft className="h-4 w-4" /> Lebih baru
             </button>
             <span className="ink-soft text-sm tabular-nums">
               {page} / {totalPages}
             </span>
             <button
-              className="btn-quiet px-4 py-2 text-sm disabled:opacity-40"
+              className="btn-quiet gap-1 px-3.5 py-2 text-sm"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => p + 1)}
             >
-              Lebih lama →
+              Lebih lama <IconChevronRight className="h-4 w-4" />
             </button>
           </div>
         )}
       </section>
+
+      {/* Corrections — occasional work, below the everyday list.
+          M15-T10 — a sale that happened on paper, entered afterwards */}
+      <BackdatedSaleForm
+        onRecorded={() => {
+          trend.reload();
+          sales.reload();
+        }}
+      />
+
+      {/* M15-T11 — reverse a sale found after the shift closed */}
+      <ReversalPanel tz={tz} dayStart={dayStart} />
     </div>
   );
 }

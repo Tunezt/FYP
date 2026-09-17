@@ -1,11 +1,12 @@
 "use client";
 
+import { BrandMark } from "@/components/ui";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, OWNER_TOKEN_KEY } from "@/lib/api";
 import { demoAllowed, enableDemo } from "@/lib/demo";
-import { IconChat, IconShop } from "@/components/icons";
+import { IconChat } from "@/components/icons";
 
 type Step = "phone" | "code";
 
@@ -78,18 +79,16 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm animate-scale-in">
         <div className="mb-8 text-center">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-gradient text-white shadow-pop">
-            <IconShop className="h-7 w-7" />
-          </span>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight">Warung Pintar</h1>
-          <p className="ink-soft mt-1 text-sm">Kelola usahamu, makin mudah.</p>
+          <h1 className="flex justify-center">
+            <BrandMark size="lg" />
+          </h1>
         </div>
 
-        <div className="glass-card px-6 py-6">
+        <div className="glass-card px-6 pb-6 pt-5">
           {step === "phone" ? (
             <>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">
                   Nomor WhatsApp usaha
                 </span>
                 <input
@@ -120,7 +119,7 @@ export default function LoginPage() {
                 Kode 6 angka terkirim ke <span className="font-semibold">{phone}</span>
               </p>
               <input
-                className="field mt-3 text-center text-2xl font-bold tabular-nums tracking-[0.4em]"
+                className="field mt-3 py-3 text-center text-2xl font-semibold tabular-nums tracking-[0.45em]"
                 inputMode="numeric"
                 maxLength={6}
                 placeholder="······"
@@ -152,21 +151,14 @@ export default function LoginPage() {
             </>
           )}
 
-          {error && (
-            <p
-              className="mt-4 rounded-2xl px-4 py-3 text-sm font-medium"
-              style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
-            >
-              {error}
-            </p>
-          )}
+          {error && <p className="notice notice-bad mt-4">{error}</p>}
 
           {showDemo && (
-            <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--hairline)" }}>
+            <div className="hairline-t mt-5 pt-5">
               <button onClick={startDemo} className="btn-quiet w-full py-3 text-sm">
                 Lihat mode demo (tanpa database)
               </button>
-              <p className="ink-faint mt-2 text-center text-[11px] leading-relaxed">
+              <p className="ink-faint mt-2 text-center text-xs leading-relaxed">
                 Menampilkan dashboard dengan data contoh — untuk melihat tampilan saat database
                 belum terhubung.
               </p>
@@ -174,9 +166,9 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="ink-faint mt-6 text-center text-xs">
+        <p className="ink-faint mx-auto mt-6 max-w-xs text-center text-[13px] leading-relaxed">
           Belum punya akun? Masukkan nomormu — pendaftaran otomatis dimulai. Atau lihat{" "}
-          <Link href="/register" className="font-semibold text-accent-500">
+          <Link href="/register" className="font-semibold text-[color:var(--accent)] hover:underline">
             cara kerjanya
           </Link>
           .

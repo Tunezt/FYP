@@ -6,9 +6,9 @@ import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import { dayLabel } from "@/lib/dates";
 import type { Business, CustomerRow, Page, PointsMovementRow } from "@/lib/types";
-import { EmptyState, ErrorState, Plate, Sheet, Skeleton } from "@/components/ui";
+import { EmptyState, ErrorState, Glass, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
-import { IconPlus } from "@/components/icons";
+import { IconChevronLeft, IconChevronRight, IconPlus, IconSearch, IconUsers } from "@/components/icons";
 import { initials } from "@/lib/format";
 
 type Draft = { name: string; phone: string; address: string; birthday: string; notes: string };
@@ -106,7 +106,7 @@ export default function CustomersPage() {
     <div className="animate-fade-up space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-[1.65rem] font-bold tracking-tight md:text-3xl">
+          <h1 className="flex items-center gap-2 page-title">
             Pelanggan
             <HelpTip title="Pelanggan">
               Nomor HP adalah kuncinya — satu nomor satu pelanggan, dan nanti jadi tujuan poin dan promo
@@ -115,14 +115,18 @@ export default function CustomersPage() {
           </h1>
           {customers.data && <p className="ink-soft mt-1 text-sm">{customers.data.total} pelanggan</p>}
         </div>
-        <button onClick={() => open("new")} className="btn-accent flex items-center gap-2 px-4 py-2.5 text-sm">
+        <button onClick={() => open("new")} className="btn-accent px-4 py-2.5 text-sm">
           <IconPlus className="h-4 w-4" /> Tambah pelanggan
         </button>
       </header>
 
       <div className="flex flex-wrap items-center gap-3">
-        <input
-          className="field max-w-xs"
+        <div className="relative w-full sm:max-w-xs">
+          <IconSearch className="ink-faint pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+          <input
+          className="control-field cursor-text pl-9"
+          type="search"
+          aria-label="Cari pelanggan"
           placeholder="Cari nama atau nomor HP"
           value={q}
           onChange={(e) => {
@@ -130,7 +134,8 @@ export default function CustomersPage() {
             setPage(1);
           }}
         />
-        <label className="ink-soft flex items-center gap-2 text-sm">
+        </div>
+        <label className="ink-soft flex cursor-pointer items-center gap-2 text-sm">
           <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
           Tampilkan yang nonaktif
         </label>
@@ -139,56 +144,59 @@ export default function CustomersPage() {
       {customers.loading ? (
         <Skeleton className="h-64" />
       ) : customers.error && !customers.data ? (
-        <Plate>
+        <Glass>
           <ErrorState onRetry={customers.reload} />
-        </Plate>
+        </Glass>
       ) : !customers.data || customers.data.rows.length === 0 ? (
-        <Plate>
-          <EmptyState emoji="🙋" title={q ? "Tidak ketemu" : "Belum ada pelanggan"}>
+        <Glass>
+          <EmptyState icon={<IconUsers className="h-5 w-5" />} title={q ? "Tidak ketemu" : "Belum ada pelanggan"}>
             {q
               ? "Coba nama lain atau sebagian nomor HP."
               : "Kasir bisa mengaitkan pelanggan saat bayar, atau tambahkan di sini."}
           </EmptyState>
-        </Plate>
+        </Glass>
       ) : (
         <>
           <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {customers.data.rows.map((c) => (
               <li key={c.id}>
-                <Plate className={`flex h-full flex-col px-5 py-4 ${c.is_active ? "" : "opacity-60"}`}>
+                <Glass className="flex h-full flex-col px-5 py-4">
                   <div className="flex items-start gap-3">
                     <span
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-                      style={{ background: "var(--accent)" }}
+                      className="surface-inset ink-soft flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold"
+                      style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}
                     >
                       {initials(c.name)}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">{c.name}</p>
+                      <p className={`flex items-center gap-2 truncate text-[15px] font-semibold ${c.is_active ? "" : "ink-soft"}`}>
+                        {c.name}
+                        {!c.is_active && <span className="pill-quiet">nonaktif</span>}
+                      </p>
                       <p className="ink-soft text-xs tabular-nums">{prettyPhone(c.phone)}</p>
                     </div>
-                    <button onClick={() => open(c)} className="btn-quiet px-2.5 py-1 text-xs">
+                    <button onClick={() => open(c)} className="chip-btn shrink-0">
                       Ubah
                     </button>
                   </div>
-                  <dl className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                  <dl className="hairline-t mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 pt-3 text-xs">
                     <div>
                       <dt className="ink-faint">Poin</dt>
-                      <dd className="font-semibold tabular-nums" style={c.points_balance < 0 ? { color: "var(--bad)" } : undefined}>
+                      <dd className="mt-0.5 text-sm font-semibold tabular-nums" style={c.points_balance < 0 ? { color: "var(--bad)" } : undefined}>
                         {c.points_balance}
                       </dd>
                     </div>
                     <div>
                       <dt className="ink-faint">Kunjungan</dt>
-                      <dd className="font-semibold tabular-nums">{c.visits}×</dd>
+                      <dd className="mt-0.5 text-sm font-semibold tabular-nums">{c.visits}×</dd>
                     </div>
                     <div>
                       <dt className="ink-faint">Belanja</dt>
-                      <dd className="font-semibold tabular-nums">{formatRupiah(c.total_spent)}</dd>
+                      <dd className="mt-0.5 text-sm font-semibold tabular-nums">{formatRupiah(c.total_spent)}</dd>
                     </div>
                     <div>
                       <dt className="ink-faint">Terakhir</dt>
-                      <dd className="font-semibold">{c.last_visit ? dayLabel(new Date(c.last_visit), tz, dayStart) : "—"}</dd>
+                      <dd className="mt-0.5 text-sm font-semibold">{c.last_visit ? dayLabel(new Date(c.last_visit), tz, dayStart) : "—"}</dd>
                     </div>
                   </dl>
                   {(c.address || c.birthday || c.notes) && (
@@ -198,21 +206,20 @@ export default function CustomersPage() {
                         .join(" · ")}
                     </p>
                   )}
-                  {!c.is_active && <p className="ink-faint mt-2 text-[11px] uppercase tracking-wide">nonaktif</p>}
-                </Plate>
+                </Glass>
               </li>
             ))}
           </ul>
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
-              <button className="btn-quiet px-3 py-1.5 text-sm disabled:opacity-40" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                ← Sebelumnya
+              <button className="btn-quiet gap-1 px-3.5 py-2 text-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                <IconChevronLeft className="h-4 w-4" /> Sebelumnya
               </button>
               <span className="ink-soft text-sm tabular-nums">
                 {page} / {totalPages}
               </span>
-              <button className="btn-quiet px-3 py-1.5 text-sm disabled:opacity-40" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                Berikutnya →
+              <button className="btn-quiet gap-1 px-3.5 py-2 text-sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                Berikutnya <IconChevronRight className="h-4 w-4" />
               </button>
             </div>
           )}
@@ -223,11 +230,11 @@ export default function CustomersPage() {
         <Sheet open title={editing === "new" ? "Pelanggan baru" : "Ubah pelanggan"} onClose={() => !busy && setEditing(null)}>
           <div className="space-y-3">
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Nama</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama</span>
               <input className="field" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus />
             </label>
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Nomor HP (WhatsApp)</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nomor HP (WhatsApp)</span>
               <input
                 className="field"
                 inputMode="tel"
@@ -237,11 +244,11 @@ export default function CustomersPage() {
               />
             </label>
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Alamat</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Alamat</span>
               <input className="field" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
             </label>
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Tanggal lahir</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Tanggal lahir</span>
               <DateRangePicker
                 single
                 variant="field"
@@ -252,7 +259,7 @@ export default function CustomersPage() {
               />
             </label>
             <label className="block">
-              <span className="ink-soft mb-1.5 block text-xs font-medium">Catatan</span>
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Catatan</span>
               <input className="field" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
             </label>
             {editingId && (
@@ -274,12 +281,12 @@ export default function CustomersPage() {
                     value={adjust.notes}
                     onChange={(e) => setAdjust({ ...adjust, notes: e.target.value })}
                   />
-                  <button onClick={saveAdjust} disabled={adjustBusy || !Number(adjust.delta)} className="btn-quiet px-3 text-sm disabled:opacity-40">
+                  <button onClick={saveAdjust} disabled={adjustBusy || !Number(adjust.delta)} className="btn-quiet px-3 text-sm">
                     Sesuaikan
                   </button>
                 </div>
                 {history.data && history.data.length > 0 && (
-                  <ul className="mt-2 max-h-40 space-y-1 overflow-auto text-xs">
+                  <ul className="surface-inset mt-3 max-h-40 space-y-1 overflow-auto rounded-xl px-3 py-2 text-xs">
                     {history.data.map((m) => (
                       <li key={m.id} className="flex justify-between gap-2">
                         <span className="ink-soft truncate">
@@ -296,13 +303,13 @@ export default function CustomersPage() {
                 )}
               </div>
             )}
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <div className="flex items-center gap-2 pt-1">
-              <button onClick={save} disabled={busy} className="btn-accent px-5 py-2.5 text-sm">
+            {error && <p className="notice notice-bad">{error}</p>}
+            <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row">
+              <button onClick={save} disabled={busy} className="btn-accent flex-1 py-3">
                 {busy ? "Menyimpan…" : "Simpan"}
               </button>
               {editing !== "new" && (
-                <button onClick={() => toggleActive(editing)} className="btn-quiet px-4 py-2.5 text-sm">
+                <button onClick={() => toggleActive(editing)} className="btn-quiet px-4 py-3">
                   {editing.is_active ? "Nonaktifkan" : "Aktifkan lagi"}
                 </button>
               )}

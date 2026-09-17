@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { IconCheck, IconLock, IconPlugOff } from "@/components/icons";
 import { formatQty } from "@/lib/format";
 
 // Kitchen display (M11-T2). Same pairing link as the till, a different page:
@@ -92,7 +93,10 @@ export default function KitchenPage() {
     return (
       <main className="flex min-h-screen items-center justify-center px-6 text-center">
         <div className="glass-card px-6 py-8">
-          <p className="text-lg font-bold">Layar dapur tidak bisa dibuka</p>
+          <span className="surface-inset ink-faint mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl" style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}>
+            <IconPlugOff className="h-6 w-6" />
+          </span>
+          <p className="text-lg font-semibold tracking-[-0.015em]">Layar dapur tidak bisa dibuka</p>
           <p className="ink-soft mt-2 text-sm">{bootError}</p>
         </div>
       </main>
@@ -105,8 +109,8 @@ export default function KitchenPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
-      <p className="ink-faint text-xs font-medium uppercase tracking-widest">{business?.business_name ?? "…"}</p>
-      <h1 className="mt-1 text-2xl font-bold">Layar dapur</h1>
+      <p className="ink-faint text-[13px] font-medium">{business?.business_name ?? "…"}</p>
+      <h1 className="mt-1 text-[1.75rem] font-semibold tracking-[-0.025em]">Layar dapur</h1>
       <p className="ink-soft mt-1 text-sm">Siapa yang jaga dapur? Pilih nama, masukkan PIN kasir.</p>
       <div className="mt-5 grid grid-cols-2 gap-2">
         {(business?.staff ?? []).map((s) => (
@@ -117,7 +121,8 @@ export default function KitchenPage() {
               setPin("");
               setLoginError(null);
             }}
-            className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold ${staff?.id === s.id ? "bg-accent-gradient text-white shadow-pop" : "glass-card"}`}
+            aria-pressed={staff?.id === s.id}
+            className="choice-card px-4 py-3.5 text-[15px]"
           >
             {s.name}
           </button>
@@ -132,15 +137,16 @@ export default function KitchenPage() {
             value={pin}
             onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
             onKeyDown={(e) => e.key === "Enter" && login()}
-            className="glass-card flex-1 rounded-2xl px-4 py-3 text-center text-2xl font-bold tracking-[0.5em]"
+            aria-label="PIN kasir"
+            className="field flex-1 py-3 text-center text-2xl font-semibold tracking-[0.5em] placeholder:tracking-normal"
             placeholder="PIN"
           />
-          <button onClick={login} disabled={pin.length < 4} className="btn-accent px-6 py-3 text-base disabled:opacity-50">
+          <button onClick={login} disabled={pin.length < 4} className="btn-accent px-6 py-3">
             Masuk
           </button>
         </div>
       )}
-      {loginError && <p className="mt-3 text-sm text-red-600">{loginError}</p>}
+      {loginError && <p className="notice notice-bad mt-4">{loginError}</p>}
     </main>
   );
 }
@@ -201,22 +207,27 @@ function Board({
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 pb-8">
-      <header className="hairline-b sticky top-0 z-10 -mx-4 mb-5 flex items-center justify-between bg-[color:var(--bg-base)]/80 px-4 py-3 backdrop-blur-xl">
-        <div>
-          <p className="ink-faint text-xs font-medium uppercase tracking-widest">{businessName}</p>
-          <p className="text-lg font-bold">Dapur · {staffName}</p>
+      <header className="hairline-b sticky-bar sticky top-0 z-10 -mx-4 mb-5 flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <p className="ink-faint truncate text-[13px] font-medium">{businessName}</p>
+          <p className="truncate text-lg font-semibold tracking-[-0.015em]">Dapur · {staffName}</p>
         </div>
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <span className="glass-card px-3 py-1.5">Baru {counts.new}</span>
-          <span className="glass-card px-3 py-1.5">Disiapkan {counts.preparing}</span>
-          <span className="glass-card px-3 py-1.5">Siap {counts.ready}</span>
-          <button onClick={onLock} className="btn-quiet px-4 py-2">
-            🔒 Kunci
+        <div className="flex items-center gap-2 text-sm">
+          <div className="segmented pointer-events-none" aria-label="Jumlah pesanan">
+            {([["Baru", counts.new], ["Disiapkan", counts.preparing], ["Siap", counts.ready]] as const).map(([label, n]) => (
+              <span key={label} className="segmented-item flex items-center gap-1.5 px-3">
+                {label}
+                <span className="font-semibold tabular-nums text-[color:var(--ink)]">{n}</span>
+              </span>
+            ))}
+          </div>
+          <button onClick={onLock} className="btn-quiet px-4 py-2 text-sm">
+            <IconLock className="h-4 w-4" /> Kunci
           </button>
         </div>
       </header>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {error && <p className="notice notice-bad mb-4">{error}</p>}
 
       {tickets === null ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
@@ -226,7 +237,7 @@ function Board({
         </div>
       ) : tickets.length === 0 ? (
         <div className="glass-card px-6 py-16 text-center">
-          <p className="text-xl font-bold">Tidak ada pesanan</p>
+          <p className="text-xl font-semibold tracking-[-0.015em]">Tidak ada pesanan</p>
           <p className="ink-soft mt-1 text-sm">Pesanan yang sudah dibayar muncul di sini otomatis.</p>
         </div>
       ) : (
@@ -238,12 +249,18 @@ function Board({
             return (
               <article
                 key={t.order_id}
-                className={`glass-card flex flex-col px-4 py-3 ${t.state === "ready" ? "ring-2 ring-emerald-500/60" : ""}`}
-                style={late && t.state !== "ready" ? { boxShadow: "0 0 0 2px var(--warn)" } : undefined}
+                className="glass-card flex flex-col px-4 py-3.5"
+                style={
+                  t.state === "ready"
+                    ? { boxShadow: "0 0 0 2px var(--good), var(--shadow-card)" }
+                    : late
+                      ? { boxShadow: "0 0 0 2px var(--warn), var(--shadow-card)" }
+                      : undefined
+                }
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-2xl font-black tracking-tight">{t.code}</p>
+                    <p className="text-2xl font-bold tabular-nums tracking-[-0.02em]">{t.code}</p>
                     <p className="ink-soft text-xs">
                       {t.order_type === "dine_in" ? (
                         t.table_label || "Makan di sini"
@@ -260,13 +277,13 @@ function Board({
                     <p className="text-sm font-bold tabular-nums" style={late ? { color: "var(--warn)" } : undefined}>
                       {waited} mnt
                     </p>
-                    <p className="ink-faint text-[11px] font-medium uppercase tracking-wide">{STATE_LABEL[t.state]}</p>
+                    <p className="ink-faint text-xs font-medium">{STATE_LABEL[t.state]}</p>
                   </div>
                 </div>
                 <ul className="mt-3 flex-1 space-y-1.5">
                   {t.lines.map((l, i) => (
                     <li key={i} className="text-base leading-tight">
-                      <span className="font-black">{formatQty(l.quantity)}×</span> <span className="font-semibold">{l.name}</span>
+                      <span className="font-bold tabular-nums">{formatQty(l.quantity)}×</span> <span className="font-semibold">{l.name}</span>
                       {l.modifiers.length > 0 && <span className="ink-soft block text-sm">{l.modifiers.join(", ")}</span>}
                       {l.notes && (
                         <span className="block text-sm font-semibold" style={{ color: "var(--warn)" }}>
@@ -279,17 +296,17 @@ function Board({
                 {t.note && <p className="mt-2 text-sm font-semibold" style={{ color: "var(--warn)" }}>Catatan: {t.note}</p>}
                 <div className="mt-3 flex gap-2">
                   {t.state === "new" && (
-                    <button onClick={() => move(t, "preparing")} disabled={busyHere} className="btn-quiet flex-1 py-2.5 text-sm font-bold">
+                    <button onClick={() => move(t, "preparing")} disabled={busyHere} className="btn-quiet flex-1 py-2.5 text-sm font-semibold">
                       Mulai
                     </button>
                   )}
                   {t.state === "preparing" && (
-                    <button onClick={() => move(t, "ready")} disabled={busyHere} className="btn-quiet flex-1 py-2.5 text-sm font-bold">
+                    <button onClick={() => move(t, "ready")} disabled={busyHere} className="btn-quiet flex-1 py-2.5 text-sm font-semibold">
                       Siap
                     </button>
                   )}
-                  <button onClick={() => move(t, "done")} disabled={busyHere} className="btn-accent flex-1 py-2.5 text-sm font-bold">
-                    Selesai ✓
+                  <button onClick={() => move(t, "done")} disabled={busyHere} className="btn-accent flex-1 py-2.5 text-sm">
+                    <IconCheck className="h-4 w-4" /> Selesai
                   </button>
                 </div>
               </article>

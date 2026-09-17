@@ -14,13 +14,14 @@
 
 import { useMemo, useState } from "react";
 import { Select } from "@/components/Select";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import { ApiError } from "@/lib/api";
 import type { InventoryItem, OrderRow, StaffMember } from "@/lib/types";
-import { EmptyState, Glass, Plate, Sheet, Skeleton } from "@/components/ui";
+import { EmptyState, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
-import { IconPlus } from "@/components/icons";
+import { IconBox, IconClose, IconPlus } from "@/components/icons";
 
 type Draft = { itemId: string; quantity: string };
 
@@ -47,6 +48,9 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
 
   const [open, setOpen] = useState(false);
   const [when, setWhen] = useState(defaultWhen);
+  // Typed as HH.MM / HH:MM in 24-hour time — the native time input follows the
+  // browser's locale and shows "07:00 PM" on an English Chrome.
+  const [timeText, setTimeText] = useState(() => defaultWhen().slice(11, 16));
   const [staffId, setStaffId] = useState("");
   const [method, setMethod] = useState<(typeof METHODS)[number]["value"]>("cash");
   const [note, setNote] = useState("");
@@ -71,11 +75,13 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
     [lines, catalogue]
   );
 
+  const timeValid = /^([01]\d|2[0-3]):[0-5]\d$/.test(timeText);
   const ready =
-    when !== "" && staffId !== "" && lines.some((l) => l.itemId && Number(l.quantity) > 0);
+    when !== "" && timeValid && staffId !== "" && lines.some((l) => l.itemId && Number(l.quantity) > 0);
 
   function reset() {
     setWhen(defaultWhen());
+    setTimeText(defaultWhen().slice(11, 16));
     setNote("");
     setLines([{ itemId: "", quantity: "1" }]);
     setError(null);
@@ -110,7 +116,7 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
   return (
     <section>
       <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-base font-bold">
+        <h2 className="flex items-center gap-2 section-title">
           Catat penjualan dari nota kertas
           <HelpTip title="Kalau tablet mati">
             Kalau kasir sempat jualan pakai kertas — tablet mati, layar pecah, atau internet putus
@@ -126,44 +132,62 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
             setStaffId(staffId || active[0]?.id || "");
             setOpen(true);
           }}
-          className="btn-quiet shrink-0 px-3 py-1.5 text-sm"
+          className="btn-quiet shrink-0 px-3.5 py-2 text-sm"
         >
           <IconPlus className="h-4 w-4" /> Catat nota
         </button>
       </div>
+      <p className="ink-soft mt-1 max-w-2xl text-sm">
+        Untuk penjualan yang sempat dicatat di kertas. Masuk ke pembukuan dengan tanggal dan jam
+        aslinya, dan ditandai <span className="font-medium text-[color:var(--ink)]">dari nota kertas</span> di daftar
+        transaksi.
+      </p>
 
       {done && (
-        <p
-          className="mt-3 rounded-2xl px-4 py-3 text-sm font-medium"
-          style={{ background: "var(--good-bg)", color: "var(--good)" }}
-        >
-          {done}
-        </p>
+        <p className="notice notice-good mt-3">{done}</p>
       )}
 
       <Sheet open={open} onClose={() => !busy && setOpen(false)} title="Penjualan dari nota kertas">
         {items.loading || staff.loading ? (
           <Skeleton className="h-64" />
         ) : catalogue.length === 0 || active.length === 0 ? (
-          <Glass>
-            <EmptyState emoji="📦" title="Belum bisa mencatat">
-              Perlu minimal satu barang di Stok dan satu staf aktif di Pengaturan.
-            </EmptyState>
-          </Glass>
+          <EmptyState icon={<IconBox className="h-5 w-5" />} title="Belum bisa mencatat">
+            Perlu minimal satu barang di Stok dan satu staf aktif di Pengaturan.
+          </EmptyState>
         ) : (
-          <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-4">
+            <div className="grid grid-cols-[1fr_6rem] gap-3">
+              <div>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Tanggal asli</span>
+                <DateRangePicker
+                  single
+                  variant="field"
+                  since={when.slice(0, 10)}
+                  until={when.slice(0, 10)}
+                  onChange={(day) => day && setWhen(`${day}T${when.slice(11, 16)}`)}
+                  className="w-full"
+                />
+              </div>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Tanggal &amp; jam asli</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Jam</span>
                 <input
-                  className="field"
-                  type="datetime-local"
-                  value={when}
-                  onChange={(e) => setWhen(e.target.value)}
+                  className="field text-center tabular-nums"
+                  inputMode="numeric"
+                  placeholder="19:00"
+                  aria-invalid={timeText.length === 5 && !timeValid}
+                  value={timeText}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                    const text = digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+                    setTimeText(text);
+                    if (/^([01]\d|2[0-3]):[0-5]\d$/.test(text)) setWhen(`${when.slice(0, 10)}T${text}`);
+                  }}
                 />
               </label>
+            </div>
+            <div>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Kasir yang melayani</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Kasir yang melayani</span>
                 <Select
                   variant="field"
                   allowEmpty={false}
@@ -176,7 +200,7 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
             </div>
 
             <div className="space-y-2">
-              <span className="ink-soft block text-xs font-medium">Barang</span>
+              <span className="ink-soft block text-[13px] font-medium">Barang</span>
               {lines.map((line, i) => (
                 <div key={i} className="flex gap-2">
                   <Select
@@ -194,8 +218,9 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
                     }
                   />
                   <input
-                    className="field w-20 tabular-nums"
+                    className="field w-16 shrink-0 text-center tabular-nums"
                     inputMode="decimal"
+                    aria-label="Jumlah"
                     value={line.quantity}
                     onChange={(e) =>
                       setLines(
@@ -207,26 +232,29 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
                   />
                   {lines.length > 1 && (
                     <button
+                      type="button"
                       onClick={() => setLines(lines.filter((_, j) => j !== i))}
-                      className="ink-faint px-2 text-sm hover:text-[color:var(--bad)]"
+                      className="icon-btn h-11 w-9 shrink-0 hover:text-[color:var(--bad)]"
+                      aria-label="Hapus baris"
                       title="Hapus baris"
                     >
-                      ✕
+                      <IconClose className="h-4 w-4" />
                     </button>
                   )}
                 </div>
               ))}
               <button
+                type="button"
                 onClick={() => setLines([...lines, { itemId: "", quantity: "1" }])}
-                className="ink-faint text-xs hover:text-[color:var(--ink)]"
+                className="inline-flex items-center gap-1 rounded-lg py-1 text-[13px] font-semibold text-[color:var(--accent)] hover:underline"
               >
-                + tambah barang
+                <IconPlus className="h-3.5 w-3.5" /> Tambah barang
               </button>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Dibayar dengan</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Dibayar dengan</span>
                 <Select
                   variant="field"
                   allowEmpty={false}
@@ -237,7 +265,7 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
                 />
               </label>
               <label className="block">
-                <span className="ink-soft mb-1.5 block text-xs font-medium">Catatan</span>
+                <span className="ink-soft mb-1.5 block text-[13px] font-medium">Catatan</span>
                 <input
                   className="field"
                   value={note}
@@ -247,19 +275,12 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
               </label>
             </div>
 
-            <p className="ink-soft text-sm">
+            <p className="ink-soft surface-inset rounded-2xl px-4 py-3 text-sm">
               Perkiraan total <span className="font-semibold tabular-nums">{formatRupiah(estimate)}</span> —
               harga dan pajak dihitung ulang oleh sistem saat disimpan, sama seperti di kasir.
             </p>
 
-            {error && (
-              <p
-                className="rounded-2xl px-4 py-3 text-sm font-medium"
-                style={{ background: "var(--bad-bg)", color: "var(--bad)" }}
-              >
-                {error}
-              </p>
-            )}
+            {error && <p className="notice notice-bad">{error}</p>}
 
             <button onClick={save} disabled={busy || !ready} className="btn-accent w-full py-3.5">
               {busy ? "Menyimpan…" : "Catat penjualan ini"}
@@ -268,13 +289,6 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
         )}
       </Sheet>
 
-      <Plate className="mt-3 px-6 py-4">
-        <p className="ink-soft text-sm">
-          Untuk penjualan yang sempat dicatat di kertas. Masuk ke pembukuan dengan tanggal dan jam
-          aslinya, dan ditandai <span className="font-medium">dari nota kertas</span> di daftar
-          transaksi di bawah.
-        </p>
-      </Plate>
     </section>
   );
 }
