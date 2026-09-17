@@ -1665,3 +1665,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Recall/undo of a ticket state was not added (see svc-4: the M11-T2 forward-only test). The impeccable detector found nothing.
 **Deviation:** none.
 **Next:** svc-8 - the QR customer journey.
+
+
+### [svc-8] The QR journey: choose, see the real total, show the code, follow the order
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** frontend/app/menu/[token]/page.tsx (rebuilt), frontend/components/ProductPicker.tsx (functional state updates; "dari" wording)
+**Gates:** pytest 574 passed 0 skipped - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **User-directed.** The customer's side of the same system, at phone width. The menu is one list with search, "dari Rp ..." for sized items, a "Habis" state, and a count per item. The picker is the till's (svc-1). *Pesanan kamu* lets the guest edit every line (quantity, and tap to change choices or notes), choose *Makan di sini* or *Bawa pulang* (table required for dine-in), add a name and a note for the kitchen, and see **the server's quote** (tax, service, rounding) before *Kirim pesanan*. It says plainly that nothing is paid yet, that they pay at the cashier, and that preparation starts after payment.
+- **Retries cannot duplicate.** The submission reference is minted once and stored with the unsent cart, so a retry after a dropped connection, even after a refresh, replays the same order (svc-2). `expected_total` is the quoted total. If a price or availability moved, the guest is told, the menu reloads, unavailable lines are removed by name, and the rest of the cart stays.
+- **After sending:** a 56px order code, a four-step tracker (Bayar di kasir -> Masuk dapur -> Disiapkan -> Siap diambil) driven only by the server's `status` and `kitchen_state`, the items and total, and a notice when the cashier revised the order. The phone stores only `{id, access_key}`. A refresh restores the order with its private details, polling pauses while the page is hidden, and a failed poll says the code is still valid rather than looking lost. *Pesan lagi* appears only once the order is handed over or cancelled, so a guest cannot drop tracking of an order in progress.
+- Verified at 375x812: Americano needed Large + Dingin before it could be added (note "es sedikit"), Croissant was one tap, the server total was Rp 50.000, and sending gave M-2025 with the pay-at-cashier instructions. The order was then paid and started through the API, and after a refresh the page showed "Sedang disiapkan" with steps 1-2 ticked and table and name visible (keyed view).
+- A picker bug found while testing: taps landing before a re-render could overwrite each other (each handler spread a stale `sel`). All picker updates now use functional state updates.
+- The impeccable detector found nothing.
+**Deviation:** none.
+**Next:** svc-9 - end-to-end service run across the three screens, and the closing summary.

@@ -76,7 +76,7 @@ export function ProductPicker({
               {product.name}
             </h2>
             <p className="ink-soft mt-0.5 text-sm tabular-nums">
-              {hasSizeChoice(product) && !variant ? `mulai ${formatRupiah(Math.min(...product.variants.map((v) => Number(v.sell_price))))}` : formatRupiah(base)}
+              {hasSizeChoice(product) && !variant ? `dari ${formatRupiah(Math.min(...product.variants.map((v) => Number(v.sell_price))))}` : formatRupiah(base)}
               {meta ? ` · ${meta}` : ""}
             </p>
           </div>
@@ -94,7 +94,7 @@ export function ProductPicker({
                     key={v.id}
                     role="radio"
                     on={sel.variantId === v.id}
-                    onPress={() => setSel({ ...sel, variantId: v.id })}
+                    onPress={() => setSel((cur) => ({ ...cur, variantId: v.id }))}
                     label={v.name}
                     price={formatRupiah(v.sell_price)}
                   />
@@ -133,7 +133,7 @@ export function ProductPicker({
                         role={g.selection === "single" ? "radio" : "checkbox"}
                         on={on}
                         disabled={!on && full}
-                        onPress={() => setSel(toggleModifier(sel, g, m.id))}
+                        onPress={() => setSel((cur) => toggleModifier(cur, g, m.id))}
                         label={m.name}
                         price={delta !== 0 ? `${delta > 0 ? "+" : "−"}${formatRupiah(Math.abs(delta))}` : null}
                       />
@@ -153,7 +153,7 @@ export function ProductPicker({
               id={noteId}
               value={sel.notes}
               maxLength={200}
-              onChange={(e) => setSel({ ...sel, notes: e.target.value.slice(0, 200) })}
+              onChange={(e) => { const notes = e.target.value.slice(0, 200); setSel((cur) => ({ ...cur, notes })); }}
               className="field mt-2"
               placeholder="mis. es sedikit, tanpa gula"
             />
@@ -164,7 +164,7 @@ export function ProductPicker({
           <div className="flex items-center justify-between gap-4">
             <div className="surface-inset flex items-center gap-1 rounded-2xl p-1" role="group" aria-label="Jumlah">
               <button
-                onClick={() => setSel({ ...sel, qty: Math.max(1, cappedQty - 1) })}
+                onClick={() => setSel((cur) => ({ ...cur, qty: Math.max(1, Math.min(cur.qty, maxQty) - 1) }))}
                 disabled={cappedQty <= 1}
                 aria-label="Kurangi jumlah"
                 className="h-11 w-11 rounded-xl text-2xl font-medium transition-colors hover:bg-[color:var(--surface)] disabled:opacity-30"
@@ -175,7 +175,7 @@ export function ProductPicker({
                 {cappedQty}
               </span>
               <button
-                onClick={() => setSel({ ...sel, qty: Math.min(maxQty, cappedQty + 1) })}
+                onClick={() => setSel((cur) => ({ ...cur, qty: Math.min(maxQty, Math.min(cur.qty, maxQty) + 1) }))}
                 disabled={cappedQty >= maxQty}
                 aria-label="Tambah jumlah"
                 className="h-11 w-11 rounded-xl text-2xl font-medium transition-colors hover:bg-[color:var(--surface)] disabled:opacity-30"

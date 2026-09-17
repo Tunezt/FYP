@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { formatRupiah } from "@/lib/format";
 import { ProductPicker } from "@/components/ProductPicker";
+import { IconCheck, IconClose, IconNote, IconSearch } from "@/components/icons";
 import {
   displayName,
   freshSelection,
@@ -17,11 +18,14 @@ import {
   type Selection,
   type Variant,
 } from "@/lib/choices";
+import { newRef } from "@/lib/pos";
 
-// The QR e-menu (M11-T1). A guest scans the code on the table, orders, and
-// gets a short ticket code to quote at the counter. The order lands in the
-// till's own queue as an open ticket; nothing is charged here — the cashier
-// takes payment, and this page watches the ticket until it is paid.
+// The QR menu (M11-T1, svc-8): the customer's side of the same system. A guest
+// scans the code on the table, chooses, sees the real total, and sends. Nothing
+// is charged here — they show the order code at the counter and pay there; the
+// kitchen starts after payment, and this page follows the order until it is
+// handed over. The order is kept by the server; the phone keeps only its id and
+// the private key that lets it see its own details.
 
 type MenuItem = {
   id: string;
@@ -35,6 +39,8 @@ type MenuItem = {
 };
 type Menu = { business_name: string; items: MenuItem[] };
 type CartLine = { uid: string; item: MenuItem; variant: Variant | null; modifiers: Modifier[]; qty: number; notes: string };
+type SavedLine = { item_id: string; variant_id: string | null; modifier_ids: string[]; qty: number; notes: string };
+type Quote = { subtotal: string; service_charge: string; tax_total: string; tax_inclusive: boolean; rounding: string; total: string };
 type Ticket = {
   id: string;
   code: string;
@@ -42,6 +48,7 @@ type Ticket = {
   order_type: string;
   table_label: string | null;
   guest_name: string | null;
+  note: string | null;
   placed_at: string;
   lines: { name: string; modifiers: string[]; quantity: string; unit_price: string; line_total: string; notes: string | null }[];
   subtotal: string;
@@ -51,16 +58,13 @@ type Ticket = {
   total: string;
   is_estimate: boolean;
   kitchen_state: "new" | "preparing" | "ready" | "done" | null;
+  access_key: string | null;
+  revised: boolean;
 };
 type OrderType = "dine_in" | "takeaway";
 
 const lineKey = (l: CartLine) => identityKey(l.item.id, l.variant?.id ?? null, l.modifiers.map((m) => m.id), l.notes);
-const linePrice = (l: { item: MenuItem; variant: Variant | null; modifiers: Modifier[] }) =>
-  Number(l.variant?.sell_price ?? l.item.sell_price) + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0);
-const lineName = (l: { item: MenuItem; variant: Variant | null; modifiers: Modifier[] }) => {
-  const base = displayName(l.item, l.variant);
-  return l.modifiers.length ? `${base} (${l.modifiers.map((m) => m.name).join(", ")})` : base;
-};
+const linePrice = (l: CartLine) => Number(l.variant?.sell_price ?? l.item.sell_price) + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0);
 const lineSelection = (l: CartLine): Selection => {
   const chosen: Record<string, string[]> = {};
   for (const g of l.item.modifier_groups) {
@@ -71,71 +75,107 @@ const lineSelection = (l: CartLine): Selection => {
 };
 let lineSeq = 0;
 
+function store<T>(key: string, value: T | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* private browsing: the page still works, it just forgets on refresh */
+  }
+}
+function recall<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function MenuPage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
-  const storageKey = `wp_menu_ticket:${token.slice(-16)}`;
+  const suffix = token.slice(-16);
+  const ORDER_KEY = `wp_menu_order:${suffix}`;
+  const CART_KEY = `wp_menu_cart:${suffix}`;
 
   const [menu, setMenu] = useState<Menu | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [search, setSearch] = useState("");
   const [picker, setPicker] = useState<{ item: MenuItem; editUid: string | null; initial: Selection } | null>(null);
   const [checkout, setCheckout] = useState(false);
   const [orderType, setOrderType] = useState<OrderType>("dine_in");
   const [table, setTable] = useState("");
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [placed, setPlaced] = useState<{ id: string; key: string | null } | null>(null);
+  const submitRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    api<Menu>(`/menu/${token}`)
-      .then(setMenu)
-      .catch((e: unknown) => setLoadError(e instanceof ApiError ? e.detail : "Menu tidak bisa dimuat — coba pindai ulang kode QR."));
-  }, [token]);
-
-  // A refresh must not lose the guest's ticket: remember it per table code.
-  useEffect(() => {
-    let saved: string | null = null;
+  const loadMenu = useCallback(async () => {
     try {
-      saved = localStorage.getItem(storageKey);
-    } catch {
-      /* private mode */
+      const m = await api<Menu>(`/menu/${token}`);
+      setMenu(m);
+      setLoadError(null);
+      return m;
+    } catch (e: unknown) {
+      setLoadError(e instanceof ApiError ? e.detail : "Menu belum bisa dimuat — periksa sinyal, lalu coba lagi.");
+      return null;
     }
-    if (!saved) return;
-    api<Ticket>(`/menu/${token}/orders/${saved}`)
-      .then((t) => {
-        if (t.status === "open") setTicket(t);
-        else localStorage.removeItem(storageKey);
-      })
-      .catch(() => {
-        try {
-          localStorage.removeItem(storageKey);
-        } catch {
-          /* ignore */
-        }
-      });
-  }, [token, storageKey]);
-
-  // Watch the ticket until the cashier has dealt with it, then until the
-  // kitchen has: "siap" is worth a refresh.
+  }, [token]);
   useEffect(() => {
-    if (!ticket) return;
-    const watching = ticket.status === "open" || (ticket.status === "completed" && ticket.kitchen_state !== "done");
-    if (!watching) return;
-    const id = setInterval(() => {
-      api<Ticket>(`/menu/${token}/orders/${ticket.id}`).then(setTicket).catch(() => undefined);
-    }, 8000);
-    return () => clearInterval(id);
-  }, [ticket, token]);
+    void loadMenu();
+    setPlaced(recall<{ id: string; key: string | null }>(ORDER_KEY));
+  }, [loadMenu, ORDER_KEY]);
 
-  const cartTotal = useMemo(() => cart.reduce((s, l) => s + linePrice(l) * l.qty, 0), [cart]);
-  const cartCount = cart.reduce((s, l) => s + l.qty, 0);
+  /** Rebuild a cart from ids against the menu as it is now: anything gone or
+   *  sold out is dropped, and the guest is told which. */
+  const rebuild = useCallback((saved: SavedLine[], m: Menu) => {
+    const byId = new Map(m.items.map((i) => [i.id, i]));
+    const kept: CartLine[] = [];
+    const dropped: string[] = [];
+    for (const s of saved) {
+      const item = byId.get(s.item_id);
+      const variant = item && s.variant_id ? item.variants.find((v) => v.id === s.variant_id) ?? null : item ? selectedVariant(item, freshSelection(item)) : null;
+      const mods = item ? item.modifier_groups.flatMap((g) => g.modifiers).filter((x) => s.modifier_ids.includes(x.id)) : [];
+      if (!item || !item.available || (s.variant_id && !variant) || mods.length !== s.modifier_ids.length) {
+        dropped.push(item?.name ?? "Satu menu");
+        continue;
+      }
+      kept.push({ uid: `m${++lineSeq}`, item, variant, modifiers: mods, qty: s.qty, notes: s.notes });
+    }
+    return { kept, dropped };
+  }, []);
 
-  /** Add a picked product, or put an edited line back. Lines merge only when
-   *  size, every extra and the note all match (svc-1). */
-  const putLine = useCallback((item: MenuItem, sel: Selection, replaceUid: string | null) => {
+  // A refresh before sending keeps the guest's choices.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (!menu || restored.current) return;
+    restored.current = true;
+    const saved = recall<{ lines: SavedLine[]; ref: string | null }>(CART_KEY);
+    if (!saved) return;
+    const { kept, dropped } = rebuild(saved.lines, menu);
+    setCart(kept);
+    submitRef.current = saved.ref;
+    if (dropped.length) setNotice(`${dropped.join(", ")} sedang tidak tersedia dan dihapus dari pesananmu.`);
+  }, [menu, CART_KEY, rebuild]);
+  useEffect(() => {
+    if (!restored.current) return;
+    store(
+      CART_KEY,
+      cart.length
+        ? { lines: cart.map((l) => ({ item_id: l.item.id, variant_id: l.variant?.id ?? null, modifier_ids: l.modifiers.map((m) => m.id), qty: l.qty, notes: l.notes })), ref: submitRef.current }
+        : null
+    );
+  }, [cart, CART_KEY]);
+
+  function putLine(item: MenuItem, sel: Selection, replaceUid: string | null) {
+    submitRef.current = null; // a changed cart is a new submission
     setCart((prev) => {
       const base = replaceUid ? prev.filter((l) => l.uid !== replaceUid) : prev;
       const draft: CartLine = {
@@ -151,129 +191,201 @@ export default function MenuPage() {
       const at = replaceUid ? prev.findIndex((l) => l.uid === replaceUid) : -1;
       return at >= 0 ? [...base.slice(0, at), draft, ...base.slice(at)] : [...base, draft];
     });
-  }, []);
-
-  function openPicker(item: MenuItem) {
-    if (!item.available) return;
-    if (isQuickAdd(item)) {
-      putLine(item, freshSelection(item), null);
-      return;
-    }
-    setPicker({ item, editUid: null, initial: freshSelection(item) });
   }
 
-  function changeLine(uid: string, delta: number) {
+  function changeQty(uid: string, delta: number) {
+    submitRef.current = null;
     setCart((prev) => prev.map((l) => (l.uid === uid ? { ...l, qty: Math.min(99, l.qty + delta) } : l)).filter((l) => l.qty > 0));
   }
 
-  async function placeOrder() {
-    if (cart.length === 0 || busy) return;
+  const body = useMemo(
+    () => cart.map((l) => ({ item_id: l.item.id, variant_id: l.variant?.id ?? null, modifier_ids: l.modifiers.map((m) => m.id), quantity: l.qty, notes: l.notes || null })),
+    [cart]
+  );
+
+  // The real total, from the server, before sending.
+  useEffect(() => {
+    if (!checkout || cart.length === 0) {
+      setQuote(null);
+      return;
+    }
+    let cancelled = false;
+    setQuoteError(null);
+    const handle = setTimeout(() => {
+      api<Quote>(`/menu/${token}/quote`, { body: { lines: body, order_type: orderType } })
+        .then((q) => !cancelled && setQuote(q))
+        .catch(async (e: unknown) => {
+          if (cancelled) return;
+          setQuote(null);
+          setQuoteError(e instanceof ApiError ? e.detail : "Total belum bisa dihitung — periksa sinyal.");
+          if (e instanceof ApiError && (e.status === 409 || e.status === 404)) {
+            const m = await loadMenu();
+            if (m) {
+              const { kept, dropped } = rebuild(
+                cart.map((l) => ({ item_id: l.item.id, variant_id: l.variant?.id ?? null, modifier_ids: l.modifiers.map((x) => x.id), qty: l.qty, notes: l.notes })),
+                m
+              );
+              if (dropped.length) {
+                setCart(kept);
+                setNotice(`${dropped.join(", ")} baru saja habis dan dihapus dari pesananmu.`);
+              }
+            }
+          }
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [checkout, body, orderType, token, loadMenu, rebuild, cart]);
+
+  async function send() {
+    if (cart.length === 0 || busy || !quote) return;
     if (orderType === "dine_in" && !table.trim()) {
-      setSubmitError("Isi nomor meja dulu ya, supaya pesanan bisa diantar.");
+      setSubmitError("Isi nomor meja dulu ya.");
       return;
     }
     setBusy(true);
     setSubmitError(null);
+    // One reference per submission, kept across retries and refreshes: if the
+    // first try reached the café before the signal dropped, the retry returns
+    // that same order instead of a second one.
+    if (!submitRef.current) submitRef.current = newRef();
+    store(CART_KEY, { lines: cart.map((l) => ({ item_id: l.item.id, variant_id: l.variant?.id ?? null, modifier_ids: l.modifiers.map((m) => m.id), qty: l.qty, notes: l.notes })), ref: submitRef.current });
     try {
       const t = await api<Ticket>(`/menu/${token}/orders`, {
         body: {
-          lines: cart.map((l) => ({
-            item_id: l.item.id,
-            variant_id: l.variant?.id ?? null,
-            modifier_ids: l.modifiers.map((m) => m.id),
-            quantity: l.qty,
-            notes: l.notes || null,
-          })),
+          lines: body,
           order_type: orderType,
           table_label: orderType === "dine_in" ? table.trim() : null,
           guest_name: name.trim() || null,
           note: note.trim() || null,
+          client_ref: submitRef.current,
+          expected_total: quote.total,
         },
       });
-      setTicket(t);
+      const saved = { id: t.id, key: t.access_key };
+      store(ORDER_KEY, saved);
+      store(CART_KEY, null);
+      submitRef.current = null;
       setCart([]);
       setCheckout(false);
-      try {
-        localStorage.setItem(storageKey, t.id);
-      } catch {
-        /* ignore */
-      }
+      setPlaced(saved);
     } catch (e: unknown) {
-      setSubmitError(e instanceof ApiError ? e.detail : "Pesanan belum terkirim — coba lagi.");
+      if (e instanceof ApiError) {
+        setSubmitError(e.detail);
+        if (e.status === 409) {
+          // A price or availability moved: re-quote with the cart intact.
+          submitRef.current = null;
+          setQuote(null);
+          const m = await loadMenu();
+          if (m) {
+            const { kept, dropped } = rebuild(
+              cart.map((l) => ({ item_id: l.item.id, variant_id: l.variant?.id ?? null, modifier_ids: l.modifiers.map((x) => x.id), qty: l.qty, notes: l.notes })),
+              m
+            );
+            setCart(kept);
+            if (dropped.length) setNotice(`${dropped.join(", ")} sedang tidak tersedia dan dihapus dari pesananmu.`);
+          }
+        }
+      } else {
+        setSubmitError("Sinyal terputus. Tekan Kirim lagi — pesananmu tidak akan terkirim dua kali.");
+      }
     } finally {
       setBusy(false);
     }
   }
 
   function orderAgain() {
-    try {
-      localStorage.removeItem(storageKey);
-    } catch {
-      /* ignore */
-    }
-    setTicket(null);
+    store(ORDER_KEY, null);
+    setPlaced(null);
   }
 
-  if (loadError) {
+  if (placed) {
+    return <OrderStatus token={token} placed={placed} businessName={menu?.business_name ?? ""} onAgain={orderAgain} />;
+  }
+
+  if (loadError && !menu) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md items-center justify-center px-6 text-center">
-        <div className="glass-card px-6 py-8">
-          <p className="text-lg font-bold">Menu tidak bisa dibuka</p>
-          <p className="ink-soft mt-2 text-sm">{loadError}</p>
+      <main className="mx-auto flex min-h-[100dvh] max-w-md items-center justify-center px-6 text-center">
+        <div>
+          <p className="text-lg font-semibold">Menu belum bisa dibuka</p>
+          <p className="ink-soft mt-1 text-sm">{loadError}</p>
+          <button onClick={() => void loadMenu()} className="btn-accent mt-5 px-6 py-3">
+            Coba lagi
+          </button>
         </div>
       </main>
     );
   }
 
-  if (ticket) {
-    return <TicketView ticket={ticket} businessName={menu?.business_name ?? ""} onAgain={orderAgain} />;
-  }
+  const count = cart.reduce((n, l) => n + l.qty, 0);
+  const estimate = cart.reduce((s, l) => s + linePrice(l) * l.qty, 0);
+  const q = search.trim().toLocaleLowerCase("id-ID");
+  const items = (menu?.items ?? []).filter((i) => !q || i.name.toLocaleLowerCase("id-ID").includes(q));
 
   return (
-    <main className="mx-auto min-h-screen max-w-md px-4 pb-32">
-      <header className="hairline-b sticky top-0 z-10 -mx-4 mb-4 sticky-bar px-4 py-4">
-        <p className="ink-faint text-[13px] font-medium">Menu</p>
-        <p className="text-xl font-bold leading-tight">{menu?.business_name ?? "…"}</p>
-        <p className="ink-soft mt-1 text-xs">Pilih pesanan, lalu bayar di kasir. Tidak perlu daftar.</p>
+    <main className="mx-auto min-h-[100dvh] max-w-lg px-4 pb-32">
+      <header className="pb-3 pt-6">
+        <p className="ink-soft text-[13px] font-medium">Pesan dari meja · bayar di kasir</p>
+        <h1 className="mt-0.5 text-[26px] font-semibold tracking-[-0.025em]">{menu?.business_name ?? " "}</h1>
       </header>
+      <div className="sticky-bar sticky top-0 z-10 -mx-4 px-4 py-2">
+        <label className="relative block">
+          <span className="sr-only">Cari menu</span>
+          <IconSearch className="ink-faint pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2" />
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} className="field py-2.5 pl-10" placeholder="Cari menu" />
+        </label>
+      </div>
+
+      {notice && (
+        <p role="status" className="notice notice-warn mt-2 flex items-start justify-between gap-3">
+          {notice}
+          <button onClick={() => setNotice(null)} aria-label="Tutup pemberitahuan" className="shrink-0">
+            <IconClose className="h-4 w-4" />
+          </button>
+        </p>
+      )}
 
       {menu === null ? (
-        <div className="space-y-3">
+        <ul className="mt-3 space-y-2" aria-busy>
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="glass-card h-20 animate-pulse" />
+            <li key={i} className="glass-card h-[4.5rem] animate-pulse" />
           ))}
-        </div>
-      ) : menu.items.length === 0 ? (
-        <p className="glass-card px-4 py-6 text-center text-sm">Menu belum diisi. Tanya kasir ya.</p>
+        </ul>
+      ) : items.length === 0 ? (
+        <p className="ink-soft mt-10 text-center text-sm">{q ? `Tidak ada menu "${search}".` : "Menu belum diisi. Tanya kasir ya."}</p>
       ) : (
-        <ul className="space-y-3">
-          {menu.items.map((item) => {
-            const inCart = cart.filter((l) => l.item.id === item.id).reduce((s, l) => s + l.qty, 0);
+        <ul className="glass-card mt-3 overflow-hidden p-0">
+          {items.map((item, i) => {
+            const inCart = cart.filter((l) => l.item.id === item.id).reduce((n, l) => n + l.qty, 0);
+            const sized = item.variants.length > 1;
+            const from = sized ? Math.min(...item.variants.map((v) => Number(v.sell_price))) : Number(item.sell_price);
             return (
-              <li key={item.id}>
+              <li key={item.id} className={i > 0 ? "hairline-t" : ""}>
                 <button
                   disabled={!item.available}
-                  onClick={() => openPicker(item)}
-                  className={`glass-card flex w-full items-center justify-between gap-3 px-4 py-4 text-left transition-transform ${
-                    item.available ? "active:scale-[0.98]" : "opacity-45"
-                  }`}
+                  onClick={() => (isQuickAdd(item) ? putLine(item, freshSelection(item), null) : setPicker({ item, editUid: null, initial: freshSelection(item) }))}
+                  className="flex min-h-[4.25rem] w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[color:var(--row-hover)] active:bg-[color:var(--row-press)] disabled:cursor-not-allowed"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-base font-bold">{item.name}</p>
-                    <p className="text-sm font-semibold text-[color:var(--accent)]">
-                      {formatRupiah(item.sell_price)}
-                      {item.variants.length > 1 && <span className="ink-faint ml-1 text-xs font-medium">· {item.variants.length} ukuran</span>}
+                  <div className={`min-w-0 flex-1 ${item.available ? "" : "opacity-50"}`}>
+                    <p className="text-[16px] font-semibold leading-snug">{item.name}</p>
+                    <p className="text-sm tabular-nums">
+                      {sized && <span className="ink-soft">dari </span>}
+                      {formatRupiah(from)}
+                      {!isQuickAdd(item) && item.available && <span className="ink-faint"> · pilih {sized ? "ukuran" : "varian"}</span>}
                     </p>
-                    {!item.available && <p className="ink-faint text-xs">habis</p>}
                   </div>
-                  <span
-                    aria-pressed={inCart > 0}
-                  className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full px-3 text-sm font-bold ${
-                      inCart > 0 ? "toggle-on" : "toggle-off"
-                    }`}
-                  >
-                    {inCart > 0 ? inCart : "+"}
-                  </span>
+                  {!item.available ? (
+                    <span className="pill-quiet">Habis</span>
+                  ) : (
+                    <span
+                      aria-hidden
+                      className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full px-2.5 text-sm font-semibold tabular-nums ${inCart > 0 ? "toggle-on" : "toggle-off"}`}
+                    >
+                      {inCart > 0 ? inCart : "+"}
+                    </span>
+                  )}
                 </button>
               </li>
             );
@@ -281,25 +393,23 @@ export default function MenuPage() {
         </ul>
       )}
 
-      {/* Cart bar */}
-      {cart.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-5">
+      {cart.length > 0 && !checkout && (
+        <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             onClick={() => {
               setSubmitError(null);
               setCheckout(true);
             }}
-            className="btn-accent mx-auto flex w-full max-w-md items-center justify-between px-5 py-4 text-base shadow-pop"
+            className="btn-accent mx-auto flex w-full max-w-lg items-center justify-between px-5 py-4 text-base"
           >
-            <span>
-              {cartCount} item · {formatRupiah(cartTotal)}
+            <span className="tabular-nums">
+              {count} item · {formatRupiah(estimate)}
             </span>
-            <span>Pesan →</span>
+            <span>Lihat pesanan</span>
           </button>
         </div>
       )}
 
-      {/* Product choices (svc-1) */}
       {picker && (
         <ProductPicker
           key={`${picker.item.id}:${picker.editUid ?? "new"}`}
@@ -311,96 +421,126 @@ export default function MenuPage() {
             setPicker(null);
           }}
           onRemove={() => {
-            if (picker.editUid) setCart((c) => c.filter((l) => l.uid !== picker.editUid));
+            if (picker.editUid) changeQty(picker.editUid, -999);
             setPicker(null);
           }}
           onClose={() => setPicker(null)}
         />
       )}
 
-      {/* Checkout */}
       {checkout && (
-        <div className="sheet-scrim sm:items-end" onClick={() => !busy && setCheckout(false)}>
-          <div
-            className="sheet-panel block overflow-y-auto sm:max-w-md px-6 pb-8 pt-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-xl font-bold">Pesanan kamu</p>
-            <ul className="mt-3 space-y-2">
-              {cart.map((l) => {
-                const key = l.uid;
-                return (
-                  <li key={key} className="flex items-center justify-between gap-3">
-                    <button
-                      onClick={() => setPicker({ item: l.item, editUid: l.uid, initial: lineSelection(l) })}
-                      className="min-w-0 text-left"
-                    >
-                      <p className="truncate text-sm font-semibold">{lineName(l)}</p>
-                      {l.notes && <p className="ink-faint truncate text-xs">{l.notes}</p>}
-                      <p className="ink-soft text-xs">{formatRupiah(linePrice(l))} · ubah</p>
-                    </button>
-                    <div className="surface-inset flex shrink-0 items-center gap-1 rounded-2xl p-0.5">
-                      <button onClick={() => changeLine(key, -1)} className="h-8 w-8 rounded-xl font-bold">
-                        −
-                      </button>
-                      <span className="w-6 text-center text-sm font-bold tabular-nums">{l.qty}</span>
-                      <button onClick={() => changeLine(key, 1)} className="h-8 w-8 rounded-xl font-bold">
-                        +
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              {(
-                [
-                  ["dine_in", "Makan di sini"],
-                  ["takeaway", "Bawa pulang"],
-                ] as [OrderType, string][]
-              ).map(([kind, label]) => (
-                <button
-                  key={kind}
-                  onClick={() => setOrderType(kind)}
-                  aria-pressed={orderType === kind}
-                  className={`rounded-2xl px-3 py-2.5 text-sm font-semibold ${orderType === kind ? "toggle-on" : "toggle-off"}`}
-                >
-                  {label}
-                </button>
-              ))}
+        <div className="sheet-scrim z-50" onClick={() => !busy && setCheckout(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Pesanan kamu" className="sheet-panel sm:max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 pb-2 pt-4">
+              <h2 className="text-[21px] font-semibold tracking-[-0.02em]">Pesanan kamu</h2>
+              <button onClick={() => setCheckout(false)} aria-label="Kembali ke menu" className="icon-btn ink-soft -mr-2 h-10 w-10 rounded-full">
+                <IconClose className="h-5 w-5" />
+              </button>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {orderType === "dine_in" && (
-                <input
-                  value={table}
-                  onChange={(e) => setTable(e.target.value.slice(0, 20))}
-                  className="field w-full text-sm"
-                  placeholder="Nomor meja"
-                  autoFocus
-                />
+            <div className="min-h-0 flex-1 overflow-y-auto px-5">
+              {cart.length === 0 ? (
+                <p className="ink-soft py-8 text-center text-sm">Pesananmu kosong. Kembali ke menu untuk memilih.</p>
+              ) : (
+                <ul className="hairline-t">
+                  {cart.map((l) => (
+                    <li key={l.uid} className="hairline-b flex items-start gap-3 py-3">
+                      <button onClick={() => setPicker({ item: l.item, editUid: l.uid, initial: lineSelection(l) })} className="min-w-0 flex-1 text-left">
+                        <p className="text-[15px] font-semibold leading-snug">{displayName(l.item, l.variant)}</p>
+                        {l.modifiers.length > 0 && <p className="ink-soft text-[13px]">{l.modifiers.map((m) => m.name).join(", ")}</p>}
+                        {l.notes && (
+                          <p className="flex items-center gap-1 text-[13px]" style={{ color: "var(--warn)" }}>
+                            <IconNote className="h-3.5 w-3.5 shrink-0" /> {l.notes}
+                          </p>
+                        )}
+                        <p className="ink-faint text-xs tabular-nums">{formatRupiah(linePrice(l))} · ubah</p>
+                      </button>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <p className="text-[15px] font-semibold tabular-nums">{formatRupiah(linePrice(l) * l.qty)}</p>
+                        <div className="surface-inset flex items-center rounded-xl p-0.5">
+                          <button onClick={() => changeQty(l.uid, -1)} aria-label={`Kurangi ${l.item.name}`} className="h-9 w-9 rounded-[10px] text-lg">
+                            −
+                          </button>
+                          <span className="w-7 text-center text-sm font-semibold tabular-nums">{l.qty}</span>
+                          <button onClick={() => changeQty(l.uid, 1)} aria-label={`Tambah ${l.item.name}`} className="h-9 w-9 rounded-[10px] text-lg">
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value.slice(0, 60))}
-                className={`field text-sm ${orderType === "dine_in" ? "" : "col-span-2"}`}
-                placeholder="Nama (opsional)"
-              />
+
+              <div className="segmented mt-4 grid w-full grid-cols-2 gap-[3px]" role="group" aria-label="Makan di mana">
+                {(
+                  [
+                    ["dine_in", "Makan di sini"],
+                    ["takeaway", "Bawa pulang"],
+                  ] as [OrderType, string][]
+                ).map(([kind, label]) => (
+                  <button key={kind} onClick={() => setOrderType(kind)} aria-pressed={orderType === kind} className="segmented-item min-h-[2.75rem]">
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {orderType === "dine_in" && (
+                  <input value={table} onChange={(e) => setTable(e.target.value.slice(0, 20))} className="field" placeholder="Nomor meja" aria-label="Nomor meja" />
+                )}
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value.slice(0, 60))}
+                  className={`field ${orderType === "dine_in" ? "" : "col-span-2"}`}
+                  placeholder="Nama (opsional)"
+                  aria-label="Nama"
+                />
+              </div>
+              <input value={note} onChange={(e) => setNote(e.target.value.slice(0, 200))} className="field mt-2" placeholder="Pesan untuk dapur (opsional)" aria-label="Pesan untuk dapur" />
             </div>
-            <input
-              value={note}
-              onChange={(e) => setNote(e.target.value.slice(0, 200))}
-              className="field mt-2 w-full text-sm"
-              placeholder="Pesan untuk dapur (opsional)"
-            />
-            <div className="mt-4 flex items-center justify-between">
-              <span className="ink-soft text-sm">Perkiraan total</span>
-              <span className="text-2xl font-bold tabular-nums">{formatRupiah(cartTotal)}</span>
+
+            <div className="hairline-t px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">
+              {quote && (
+                <dl className="mb-1 space-y-0.5 text-[13px]">
+                  {(Number(quote.service_charge) > 0 || Number(quote.tax_total) > 0 || Number(quote.rounding) !== 0) && (
+                    <div className="flex justify-between">
+                      <dt className="ink-soft">Subtotal</dt>
+                      <dd className="tabular-nums">{formatRupiah(quote.subtotal)}</dd>
+                    </div>
+                  )}
+                  {Number(quote.service_charge) > 0 && (
+                    <div className="flex justify-between">
+                      <dt className="ink-soft">Service</dt>
+                      <dd className="tabular-nums">{formatRupiah(quote.service_charge)}</dd>
+                    </div>
+                  )}
+                  {Number(quote.tax_total) > 0 && (
+                    <div className="flex justify-between">
+                      <dt className="ink-soft">{quote.tax_inclusive ? "Pajak (termasuk)" : "Pajak"}</dt>
+                      <dd className="tabular-nums">{formatRupiah(quote.tax_total)}</dd>
+                    </div>
+                  )}
+                  {Number(quote.rounding) !== 0 && (
+                    <div className="flex justify-between">
+                      <dt className="ink-soft">Pembulatan</dt>
+                      <dd className="tabular-nums">{formatRupiah(quote.rounding)}</dd>
+                    </div>
+                  )}
+                </dl>
+              )}
+              <div className="flex items-baseline justify-between">
+                <span className="ink-soft text-sm">Total</span>
+                <span className={`text-[26px] font-semibold tabular-nums tracking-[-0.02em] ${quote ? "" : "opacity-50"}`}>{formatRupiah(quote?.total ?? estimate)}</span>
+              </div>
+              <p className="ink-soft mt-1 text-[13px] leading-snug">Belum dibayar. Setelah kirim, tunjukkan kode pesanan ke kasir dan bayar di sana. Pesanan mulai dibuat setelah dibayar.</p>
+              {(quoteError || submitError) && (
+                <p role="alert" className="notice notice-bad mt-2">
+                  {submitError ?? quoteError}
+                </p>
+              )}
+              <button onClick={send} disabled={busy || cart.length === 0 || !quote} className="btn-accent mt-3 w-full py-3.5 text-base">
+                {busy ? "Mengirim…" : !quote && !quoteError ? "Menghitung total…" : "Kirim pesanan"}
+              </button>
             </div>
-            <p className="ink-faint mt-1 text-xs">Pajak/servis (jika ada) dihitung di kasir. Bayar setelah pesanan diterima.</p>
-            {submitError && <p className="mt-3 text-sm text-[color:var(--bad)]">{submitError}</p>}
-            <button onClick={placeOrder} disabled={busy || cart.length === 0} className="btn-accent mt-4 w-full py-3.5 text-lg disabled:opacity-50">
-              {busy ? "Mengirim…" : "Kirim pesanan"}
-            </button>
           </div>
         </div>
       )}
@@ -408,55 +548,162 @@ export default function MenuPage() {
   );
 }
 
-function TicketView({ ticket, businessName, onAgain }: { ticket: Ticket; businessName: string; onAgain: () => void }) {
-  const waiting = ticket.status === "open";
-  const paid = ticket.status === "completed" || ticket.status === "refunded";
+const STEPS = [
+  { id: "pay", label: "Bayar di kasir" },
+  { id: "new", label: "Masuk dapur" },
+  { id: "preparing", label: "Disiapkan" },
+  { id: "ready", label: "Siap diambil" },
+] as const;
+
+function OrderStatus({
+  token,
+  placed,
+  businessName,
+  onAgain,
+}: {
+  token: string;
+  placed: { id: string; key: string | null };
+  businessName: string;
+  onAgain: () => void;
+}) {
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [gone, setGone] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const t = await api<Ticket>(`/menu/${token}/orders/${placed.id}${placed.key ? `?key=${encodeURIComponent(placed.key)}` : ""}`);
+      setTicket(t);
+      setError(null);
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 404) setGone(true);
+      else setError("Status belum bisa diperbarui — periksa sinyal. Kode pesananmu tetap berlaku.");
+    }
+  }, [token, placed]);
+
+  const finished = ticket !== null && (ticket.status === "voided" || ticket.status === "refunded" || ticket.kitchen_state === "done");
+  useEffect(() => {
+    void load();
+    if (finished) return;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 6000);
+    return () => clearInterval(id);
+  }, [load, finished]);
+
+  if (gone) {
+    return (
+      <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col items-center justify-center px-6 text-center">
+        <p className="text-lg font-semibold">Pesanan tidak ditemukan</p>
+        <p className="ink-soft mt-1 text-sm">Tanyakan ke kasir, atau buat pesanan baru.</p>
+        <button onClick={onAgain} className="btn-accent mt-5 px-6 py-3">
+          Kembali ke menu
+        </button>
+      </main>
+    );
+  }
+
+  const waiting = ticket?.status === "open";
+  const cancelled = ticket?.status === "voided" || ticket?.status === "refunded";
+  const stepIndex = !ticket ? -1 : waiting ? 0 : ticket.kitchen_state === "new" ? 1 : ticket.kitchen_state === "preparing" ? 2 : 3;
+  const handedOver = ticket?.kitchen_state === "done";
+
+  const headline = !ticket
+    ? "Memuat pesanan…"
+    : cancelled
+      ? ticket.status === "refunded"
+        ? "Pesanan dikembalikan"
+        : "Pesanan dibatalkan"
+      : waiting
+        ? "Tunjukkan kode ini ke kasir"
+        : handedOver
+          ? "Pesanan sudah diserahkan"
+          : ticket.kitchen_state === "ready"
+            ? ticket.order_type === "takeaway"
+              ? "Siap diambil di kasir"
+              : "Pesananmu siap"
+            : ticket.kitchen_state === "preparing"
+              ? "Sedang disiapkan"
+              : "Sudah dibayar · masuk dapur";
+
+  const sub = !ticket
+    ? ""
+    : cancelled
+      ? "Kasir tidak memproses pesanan ini. Silakan tanya di kasir."
+      : waiting
+        ? "Bayar di kasir dulu ya. Pesanan mulai dibuat setelah dibayar."
+        : handedOver
+          ? "Terima kasih, selamat menikmati!"
+          : ticket.kitchen_state === "ready"
+            ? ticket.order_type === "takeaway"
+              ? "Sebutkan kode pesananmu saat mengambil."
+              : "Pesananmu segera diantar ke meja, atau ambil di kasir dengan kode ini."
+            : "Halaman ini diperbarui otomatis.";
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col px-4 py-6">
-      <p className="ink-faint text-[13px] font-medium">{businessName}</p>
-      <div className="glass-card mt-3 px-6 py-8 text-center">
-        <p className="ink-soft text-sm">{waiting ? "Kode pesanan kamu" : paid ? "Sudah dibayar" : "Pesanan dibatalkan"}</p>
-        <p className="mt-1 text-5xl font-bold tracking-[-0.02em]">{ticket.code}</p>
-        <p className="mt-3 text-sm font-medium">
-          {waiting
-            ? "Tunjukkan kode ini ke kasir untuk membayar. Pesanan mulai disiapkan setelah dibayar."
-            : paid
-              ? ticket.kitchen_state === "ready"
-                ? "Pesanan siap — silakan ambil di kasir ya."
-                : ticket.kitchen_state === "done"
-                  ? "Selesai. Terima kasih, sampai jumpa lagi!"
-                  : ticket.kitchen_state === "preparing"
-                    ? "Terima kasih! Dapur sedang menyiapkan pesananmu."
-                    : "Terima kasih! Pesanan sudah masuk ke dapur."
-              : "Kasir tidak bisa memproses pesanan ini — silakan tanya di kasir."}
-        </p>
-        {ticket.table_label && <p className="ink-faint mt-2 text-xs">{ticket.table_label}{ticket.guest_name ? ` · ${ticket.guest_name}` : ""}</p>}
-        {waiting && (
-          <p className="ink-faint mt-3 flex items-center justify-center gap-2 text-xs">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[color:var(--accent-fill)]" /> menunggu kasir…
-          </p>
+    <main className="mx-auto min-h-[100dvh] max-w-md px-4 pb-10 pt-6">
+      <p className="ink-soft text-[13px] font-medium">{businessName}</p>
+      <section className="glass-card mt-3 px-6 pb-6 pt-7 text-center" aria-live="polite">
+        <p className="ink-soft text-sm">Kode pesanan</p>
+        <p className="mt-1 text-[56px] font-semibold leading-none tabular-nums tracking-[-0.03em]">{ticket?.code ?? "…"}</p>
+        <h1 className="mt-4 text-[20px] font-semibold tracking-[-0.015em]">{headline}</h1>
+        <p className="ink-soft mx-auto mt-1 max-w-[18rem] text-[15px]">{sub}</p>
+        {ticket?.revised && !cancelled && <p className="notice notice-warn mt-3 text-sm">Kasir memperbarui pesananmu. Periksa isi dan totalnya di bawah.</p>}
+        {error && <p className="notice notice-warn mt-3 text-sm">{error}</p>}
+
+        {ticket && !cancelled && (
+          <ol className="mt-6 grid grid-cols-4 gap-1.5 text-left" aria-label="Langkah pesanan">
+            {STEPS.map((s, i) => {
+              const done = handedOver || i < stepIndex;
+              const current = !handedOver && i === stepIndex;
+              return (
+                <li key={s.id} aria-current={current ? "step" : undefined}>
+                  <span
+                    className="block h-1.5 rounded-full"
+                    style={{ background: done ? "var(--good)" : current ? "var(--ink)" : "var(--fill)" }}
+                  />
+                  <span className={`mt-1.5 flex items-center gap-1 text-[12px] leading-tight ${current ? "font-semibold" : done ? "ink-soft" : "ink-faint"}`}>
+                    {done && <IconCheck className="h-3 w-3 shrink-0" />}
+                    {s.label}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
         )}
-      </div>
-      <ul className="glass-card mt-4 divide-y divide-[color:var(--hairline)] px-5">
-        {ticket.lines.map((l, i) => (
-          <li key={i} className="flex items-start justify-between gap-3 py-3 text-sm">
-            <div className="min-w-0">
-              <p className="font-semibold">
-                {l.quantity}× {l.name}
-              </p>
-              {l.modifiers.length > 0 && <p className="ink-faint text-xs">{l.modifiers.join(", ")}</p>}
-              {l.notes && <p className="ink-faint text-xs">{l.notes}</p>}
-            </div>
-            <span className="shrink-0 tabular-nums">{formatRupiah(l.line_total)}</span>
-          </li>
-        ))}
-        <li className="flex items-center justify-between py-3">
-          <span className="ink-soft text-sm">{ticket.is_estimate ? "Perkiraan total" : "Total dibayar"}</span>
-          <span className="text-xl font-bold tabular-nums">{formatRupiah(ticket.total)}</span>
-        </li>
-      </ul>
-      {!waiting && (
-        <button onClick={onAgain} className="btn-accent mt-6 w-full py-3.5 text-base">
+      </section>
+
+      {ticket && (
+        <section className="glass-card mt-3 overflow-hidden p-0" aria-label="Isi pesanan">
+          <ul>
+            {ticket.lines.map((l, i) => (
+              <li key={i} className={`flex items-start justify-between gap-3 px-5 py-3 ${i > 0 ? "hairline-t" : ""}`}>
+                <div className="min-w-0">
+                  <p className="text-[15px] font-semibold">
+                    {Number(l.quantity)}× {l.name}
+                  </p>
+                  {l.modifiers.length > 0 && <p className="ink-soft text-[13px]">{l.modifiers.join(", ")}</p>}
+                  {l.notes && <p className="ink-soft text-[13px]">Catatan: {l.notes}</p>}
+                </div>
+                <span className="shrink-0 text-sm tabular-nums">{formatRupiah(l.line_total)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="hairline-t flex items-baseline justify-between px-5 py-3">
+            <span className="ink-soft text-sm">{ticket.is_estimate ? "Total dibayar di kasir" : "Total dibayar"}</span>
+            <span className="text-[21px] font-semibold tabular-nums">{formatRupiah(ticket.total)}</span>
+          </div>
+          {(ticket.table_label || ticket.guest_name) && (
+            <p className="ink-soft hairline-t px-5 py-2.5 text-[13px]">
+              {ticket.order_type === "takeaway" ? "Bawa pulang" : ticket.table_label}
+              {ticket.guest_name ? ` · ${ticket.guest_name}` : ""}
+            </p>
+          )}
+        </section>
+      )}
+
+      {finished && (
+        <button onClick={onAgain} className="btn-accent mt-5 w-full py-3.5 text-base">
           Pesan lagi
         </button>
       )}
