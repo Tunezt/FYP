@@ -384,6 +384,9 @@ class Order(Base):
     # The device's own name for the submission that created or paid this order
     # (svc-2, migration 0035): a replay of the same reference is the same order.
     client_ref: Mapped[str | None] = mapped_column(Text)
+    # An addition bought after this family's first order was paid (svc-3,
+    # migration 0036): always the original order, never another addition.
+    parent_order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"))
 
 
 class OrderLine(Base):

@@ -333,3 +333,57 @@ async def test_9_retries_double_taps_and_two_devices_do_not_duplicate(client, se
         assert await _footprint(s, uuid.UUID(x.json()["id"])) == {"lines": 1, "payments": 1, "journal": 1, "movements": 1, "kitchen_events": 0}
         assert await _count(s, Payment, Payment.order_id == uuid.UUID(tid)) == 1
         assert (await s.get(Item, c["roti"])).current_stock == D(28)
+
+
+# ── 7. After payment, "Tambah pesanan" is its own purchase ───────────────────
+
+
+async def test_7_a_paid_order_addition_charges_only_the_new_items_and_cooks_only_them(client, session_factory, cafe):
+    c = cafe
+    first = await client.post("/pos/orders", headers=_auth(c["pos"]), json={
+        "lines": [_line(c, variant="large", mods=["dingin"], qty=2)], "payments": _cash(44000), "order_type": "dine_in", "table_label": "Meja 2"})
+    assert first.status_code == 201, first.text
+    fid = first.json()["id"]
+    # The kitchen has already started on it.
+    assert (await client.post(f"/pos/kitchen/{fid}/state", headers=_auth(c["pos"]), json={"state": "preparing"})).status_code == 200
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        before = await _footprint(s, uuid.UUID(fid))
+        original = await s.get(Order, uuid.UUID(fid))
+        original_total = D(original.total)
+
+    # The customer comes back for a roti.
+    extra = await client.post("/pos/orders", headers=_auth(c["pos"]), json={
+        "lines": [_line(c, item="roti")], "payments": _cash(15000), "parent_order_id": fid, "client_ref": _ref()})
+    assert extra.status_code == 201, extra.text
+    eid = extra.json()["id"]
+    assert D(extra.json()["total"]) == D(15000) and extra.json()["parent_order_id"] == fid
+    assert extra.json()["parent_number"] == fid[-8:].upper()
+
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        # The original receipt is exactly as it was: same total, lines, payment, posting, progress.
+        assert await _footprint(s, uuid.UUID(fid)) == before
+        assert D((await s.get(Order, uuid.UUID(fid))).total) == original_total
+        assert await _footprint(s, uuid.UUID(eid)) == {"lines": 1, "payments": 1, "journal": 1, "movements": 1, "kitchen_events": 0}
+
+    kitchen = {k["order_id"]: k for k in (await client.get("/pos/kitchen", headers=_auth(c["pos"]))).json()}
+    assert set(kitchen) == {fid, eid}
+    assert kitchen[fid]["state"] == "preparing" and [l["quantity"] for l in kitchen[fid]["lines"]] == ["2.000"]
+    assert kitchen[eid]["state"] == "new" and [l["name"] for l in kitchen[eid]["lines"]] == ["Roti"]
+    assert kitchen[eid]["parent_code"] == kitchen[fid]["code"]
+    receipt = (await client.get(f"/pos/orders/{eid}/receipt", headers=_auth(c["pos"]))).json()
+    assert receipt["parent_number"] == fid[-8:].upper() and D(receipt["total"]) == D(15000)
+    active = {a["id"]: a for a in (await client.get("/pos/active-orders", headers=_auth(c["pos"]))).json()}
+    assert active[eid]["parent_code"] == active[fid]["code"] and active[fid]["parent_code"] is None
+
+    # An addition to the addition still belongs to the original.
+    third = await client.post("/pos/orders", headers=_auth(c["pos"]), json={
+        "lines": [_line(c, item="roti")], "payments": _cash(15000), "parent_order_id": eid})
+    assert third.status_code == 201 and third.json()["parent_order_id"] == fid
+
+    # Before payment there is nothing to add *to*: extend the unpaid order instead.
+    draft = (await client.post("/pos/drafts", headers=_auth(c["pos"]), json={"lines": [_line(c, item="roti")]})).json()
+    refused = await client.post("/pos/orders", headers=_auth(c["pos"]), json={
+        "lines": [_line(c, item="roti")], "payments": _cash(15000), "parent_order_id": draft["id"]})
+    assert refused.status_code == 409 and "belum dibayar" in refused.json()["detail"]

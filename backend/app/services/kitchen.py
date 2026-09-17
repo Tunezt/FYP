@@ -66,6 +66,7 @@ class KitchenTicket:
     state: str
     state_since: datetime | None
     lines: list[KitchenLine] = field(default_factory=list)
+    parent_code: str | None = None   # svc-3: "Tambahan untuk #1234"
 
 
 def order_code(order: Order) -> str:
@@ -123,7 +124,9 @@ async def _lines_of(session: AsyncSession, order: Order) -> list[KitchenLine]:
 
 async def ticket_view(session: AsyncSession, order: Order, event: KitchenEvent | None) -> KitchenTicket:
     cart = order.cart or {}
+    parent = await session.get(Order, order.parent_order_id) if order.parent_order_id else None
     return KitchenTicket(
+        parent_code=order_code(parent) if parent is not None else None,
         order_id=order.id, code=order_code(order), source=order.source, order_type=order.order_type,
         table_label=order.table_label, guest_name=order.guest_name, note=cart.get("note"),
         delivery_address=order.delivery_address,

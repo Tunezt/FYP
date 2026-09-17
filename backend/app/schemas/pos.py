@@ -135,6 +135,7 @@ class OrderIn(BaseModel):
     guest_phone: str | None = Field(default=None, max_length=32)
     # svc-2: a double tap on "Bayar" or a retried request is the same sale.
     client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    parent_order_id: uuid.UUID | None = None   # svc-3: an addition to this paid order
 
 
 # ── Customers at the till (M8-T1) ───────────────────────────────────────────
@@ -250,6 +251,8 @@ class OrderOut(BaseModel):
     sold_at: datetime
     lines: list[OrderLineOut]
     payments: list[PaymentOut]
+    parent_order_id: uuid.UUID | None = None   # svc-3
+    parent_number: str | None = None
 
 
 class ReceiptLineOut(BaseModel):
@@ -289,6 +292,7 @@ class ReceiptOut(BaseModel):
     rounding: Decimal = Decimal(0)
     total: Decimal
     payments: list[PaymentOut]
+    parent_number: str | None = None   # svc-3: printed as "Tambahan untuk #..."
 
 
 # ── Void / refund (M3-T4): reversals authorised by the manager (owner) PIN ────
@@ -433,6 +437,7 @@ class KitchenTicketOut(BaseModel):
     state: KitchenState
     state_since: datetime | None
     lines: list[KitchenLineOut]
+    parent_code: str | None = None   # svc-3
 
 
 class KitchenStateIn(BaseModel):

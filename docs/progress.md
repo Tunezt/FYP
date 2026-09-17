@@ -1585,3 +1585,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - This overlaps M14-T2 (client idempotency keys) only in part: no client-generated order ids, no replay ordering. M14-T2 remains to be built on top when M14 starts.
 **Deviation:** none.
 **Next:** svc-3 - additions to a paid order as their own linked purchase.
+
+
+### [svc-3] "Tambahan untuk #1234": an addition after payment is its own purchase
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** backend/alembic/versions/0036_order_parent.py (new), backend/app/models/models.py (`Order.parent_order_id`), backend/app/services/orders.py (`ParentOrderInvalid`, `resolve_parent`, `create_order(parent_order_id=)`), backend/app/services/tickets.py (held additions; the parent is re-checked at settlement), backend/app/services/kitchen.py (`KitchenTicket.parent_code`), backend/app/schemas/pos.py, backend/app/schemas/menu.py, backend/app/api/pos.py (sale response and receipt carry `parent_number`), backend/tests/test_service_journey.py (test 7)
+**Gates:** pytest 569 passed 0 skipped (was 568) - migrations round-trip ok (0036 -> 0035 -> 0036) - frontend build ok - seed ok
+**Notes:**
+- **User-directed, inside the counter-service model** (M13 stays cut: no table sessions, no bill merging). Before payment an order is extended by editing it (svc-2). After payment "Tambah pesanan" is a new sale with its own payment, receipt, posting and kitchen ticket, pointing at the paid order it belongs to.
+- **The original is only read.** Test 7 snapshots the first order's lines, payments, journal entry, stock movements and kitchen events, with the kitchen already on "preparing". After the addition all of them are identical. The kitchen holds two tickets: the original still "preparing" with its own two coffees, and the addition "new" with only the roti and `parent_code` naming the original.
+- **A family has one head.** An addition to an addition resolves to the original, so three purchases read as one "Tambahan untuk #1234" group rather than a chain.
+- **Refused with a reason:** adding to an unpaid order ("tambahkan langsung ke pesanan itu") or to a voided or refunded one. A held addition is re-checked when paid, in case the original was reversed in between.
+- **Business decision left as it was, stated plainly:** voiding or refunding the original does not touch its additions. Each is its own receipt with its own payment, and the existing manager-PIN reversal applies to each separately. Reversing a whole family at once would be a new rule.
+**Deviation:** none.
+**Next:** svc-4 - kitchen backend: per-line progress, expected-state conflicts, cancellation notices, history.

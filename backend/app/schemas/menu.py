@@ -125,6 +125,7 @@ class DraftIn(BaseModel):
     guest_name: str | None = Field(default=None, max_length=60)
     note: str | None = Field(default=None, max_length=200)
     client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    parent_order_id: uuid.UUID | None = None   # svc-3: held addition to a paid order
 
 
 class OpenOrderUpdateIn(BaseModel):

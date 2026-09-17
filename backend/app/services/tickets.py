@@ -239,6 +239,7 @@ async def hold_draft(
     note: str | None = None,
     client_ref: str | None = None,
     now: datetime | None = None,
+    parent_order_id: uuid.UUID | None = None,
 ) -> Order:
     """A cashier parks an unpaid order (svc-2). Same shape as a ticket, on the
     backend so a refresh, a second tablet or a crashed browser loses nothing."""
@@ -253,8 +254,12 @@ async def hold_draft(
     if held >= MAX_OPEN_DRAFTS:
         raise QueueFull()
     moment = now or datetime.now(timezone.utc)
+    from app.services.orders import resolve_parent
+
+    parent = await resolve_parent(session, business_id, parent_order_id)
     cart_lines, bill = await price_cart(session, business_id=business_id, lines=lines, order_type=order_type)
     draft = Order(
+        parent_order_id=parent.id if parent is not None else None,
         business_id=business_id,
         staff_id=staff_id,
         source="pos",
@@ -425,6 +430,10 @@ async def settle_ticket(
         raise TicketNotOpen(ticket.status)
     if expected_rev is not None and cart_rev(ticket) != int(expected_rev):
         raise OrderChanged(ticket.status, cart_rev(ticket))
+    if ticket.parent_order_id is not None:
+        from app.services.orders import resolve_parent
+
+        await resolve_parent(session, business_id, ticket.parent_order_id)
     if client_ref:
         # `client_ref` on the row already names the submission that *created*
         # it (the guest's phone); the payment's own reference lives in the cart.

@@ -137,6 +137,36 @@ async def require_explicit_choices(session: AsyncSession, lines: list["OrderLine
             raise ChoiceMissing(item.name if item is not None else "")
 
 
+class ParentOrderInvalid(Exception):
+    """An addition must belong to a paid order of this business (svc-3).
+    `code`: not_found · unpaid (add to that order instead, it is still open) ·
+    reversed (voided or refunded: there is nothing to add to)."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
+async def resolve_parent(session: AsyncSession, business_id: uuid.UUID, parent_order_id: uuid.UUID | None) -> Order | None:
+    """The paid order an addition belongs to — the family's original, even
+    when the cashier opened an earlier addition to add to it."""
+    if parent_order_id is None:
+        return None
+    parent = await session.get(Order, parent_order_id)
+    if parent is None or parent.business_id != business_id:
+        raise ParentOrderInvalid("not_found")
+    while parent.parent_order_id is not None:
+        up = await session.get(Order, parent.parent_order_id)
+        if up is None:
+            break
+        parent = up
+    if parent.status == "open":
+        raise ParentOrderInvalid("unpaid")
+    if parent.status != "completed":
+        raise ParentOrderInvalid("reversed")
+    return parent
+
+
 class PaymentMismatch(Exception):
     def __init__(self, total: Decimal, paid: Decimal):
         self.total = total
@@ -220,6 +250,7 @@ async def create_order(
     guest_name: str | None = None,
     guest_phone: str | None = None,
     entry_source: str = "live",
+    parent_order_id: uuid.UUID | None = None,
 ) -> CreatedOrder:
     """`ticket` (M11-T1): an open e-menu row to fulfil. The sale is written on
     that row — its status flips open → completed under an atomic claim, so two
@@ -244,6 +275,10 @@ async def create_order(
     # two days ago and is not in the drawer, so the cashier's count comes up
     # short by exactly the amount somebody typed in to be helpful.
     shift_id = await open_shift_id(session, staff_id) if entry_source == "live" else None
+    # An addition to a paid order (svc-3): checked before any stock moves. The
+    # parent is only read — its lines, payments and kitchen progress stay as
+    # they are; this sale is its own receipt.
+    parent = await resolve_parent(session, business_id, parent_order_id)
     customer = await require_customer(session, customer_id)  # must be this business's, and active (M8-T1)
 
     # Routing by order type (M11-T3): what the type demands is checked before
@@ -422,6 +457,7 @@ async def create_order(
             guest_name=guest_name,
             guest_phone=guest_phone,
             entry_source=entry_source,
+            parent_order_id=parent.id if parent is not None else None,
         )
         session.add(order)
     await session.flush()

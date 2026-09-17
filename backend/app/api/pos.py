@@ -57,6 +57,7 @@ from app.schemas.pos import (
 )
 from app.services.orders import (
     ChoiceMissing,
+    ParentOrderInvalid,
     DiscountNeedsManager,
     require_explicit_choices,
     ManagerPinThrottled,
@@ -273,6 +274,13 @@ def _rp(amount) -> str:
     return f"Rp {amount:,.0f}".replace(",", ".")
 
 
+_PARENT_ERRORS = {   # svc-3
+    "not_found": "Pesanan utama tidak ditemukan",
+    "unpaid": "Pesanan utama belum dibayar — tambahkan itemnya langsung ke pesanan itu",
+    "reversed": "Pesanan utama sudah dibatalkan atau dikembalikan — buat pesanan baru",
+}
+
+
 def choice_missing_message(exc: ChoiceMissing) -> str:
     """svc-1: the one wording for a size nobody chose, at the till and on the menu."""
     return f"Ukuran {exc.item_name} belum dipilih — pilih ukurannya dulu"
@@ -418,7 +426,10 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             delivery_address=payload.delivery_address,
             guest_name=payload.guest_name,
             guest_phone=payload.guest_phone,
+            parent_order_id=payload.parent_order_id,
         )
+    except ParentOrderInvalid as exc:
+        raise HTTPException(status_code=409, detail=_PARENT_ERRORS[exc.code])
     except ChoiceMissing as exc:
         raise HTTPException(status_code=422, detail=choice_missing_message(exc))
     except OrderTypeInvalid as exc:
@@ -508,6 +519,8 @@ async def _order_out(session, created) -> OrderOut:
         rounding=order.rounding,
         total=order.total,
         sold_at=order.sold_at,
+        parent_order_id=order.parent_order_id,
+        parent_number=order_number(order.parent_order_id) if order.parent_order_id else None,
         lines=[
             OrderLineOut(
                 id=cl.line.id, item_id=cl.line.item_id, variant_id=cl.line.variant_id, item_name=cl.item_name,
@@ -563,6 +576,8 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
     except OrderChanged as exc:
         raise HTTPException(status_code=409, detail=order_changed_message(exc))
+    except ParentOrderInvalid as exc:
+        raise HTTPException(status_code=409, detail=_PARENT_ERRORS[exc.code])
     except OrderTypeInvalid as exc:
         raise HTTPException(status_code=422, detail=_ORDER_TYPE_ERRORS[exc.code])
     except VoucherInvalid as exc:
@@ -756,11 +771,14 @@ async def pos_hold_draft(payload: DraftIn, ctx: PosCtx):
     returns the draft already held."""
     from app.services.tickets import hold_draft
 
-    order = await _price_errors(lambda: hold_draft(
-        ctx.session, business_id=ctx.business_id, staff_id=ctx.staff_id, lines=_cart_specs(payload.lines),
-        order_type=payload.order_type, table_label=payload.table_label, guest_name=payload.guest_name,
-        note=payload.note, client_ref=payload.client_ref,
-    ))
+    try:
+        order = await _price_errors(lambda: hold_draft(
+            ctx.session, business_id=ctx.business_id, staff_id=ctx.staff_id, lines=_cart_specs(payload.lines),
+            order_type=payload.order_type, table_label=payload.table_label, guest_name=payload.guest_name,
+            note=payload.note, client_ref=payload.client_ref, parent_order_id=payload.parent_order_id,
+        ))
+    except ParentOrderInvalid as exc:
+        raise HTTPException(status_code=409, detail=_PARENT_ERRORS[exc.code])
     return (await _active_views(ctx.session, [order]))[0]
 
 
@@ -858,6 +876,7 @@ async def receipt_view(session, business_id: uuid.UUID, order_id: uuid.UUID) -> 
         rounding=order.rounding,
         total=order.total,
         payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in data["payments"]],
+        parent_number=order_number(order.parent_order_id) if order.parent_order_id else None,
     )
 
 
@@ -1136,7 +1155,7 @@ def _kitchen_out(t) -> KitchenTicketOut:
     return KitchenTicketOut(
         order_id=t.order_id, code=t.code, source=t.source, order_type=t.order_type, table_label=t.table_label,
         guest_name=t.guest_name, note=t.note, delivery_address=t.delivery_address,
-        sold_at=t.sold_at, state=t.state, state_since=t.state_since,
+        sold_at=t.sold_at, state=t.state, state_since=t.state_since, parent_code=t.parent_code,
         lines=[KitchenLineOut(name=l.name, quantity=l.quantity, modifiers=l.modifiers, notes=l.notes) for l in t.lines],
     )
 
