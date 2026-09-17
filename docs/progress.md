@@ -1632,3 +1632,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - A first attempt normalised cart quantities to `1.000`. `test_placing_a_ticket_writes_one_open_row_and_takes_nothing` pins the stored `"2"`, so that change was reverted, and the new test compares numerically instead.
 **Deviation:** none.
 **Next:** svc-6 - the cashier workspace: products beside a persistent order, Pesanan baru / aktif / Riwayat transaksi.
+
+
+### [svc-6] The cashier workspace: Pesanan baru, Pesanan aktif, Riwayat transaksi
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** frontend/app/pos/[businessToken]/page.tsx (sign-in only now), frontend/components/pos/SellScreen.tsx (new), frontend/components/pos/OrderPanel.tsx (new), frontend/components/pos/ActiveOrders.tsx (new), frontend/components/pos/Receipts.tsx (new: the receipt sheet and the former ReversalSheet as an inline history view), frontend/lib/pos.ts (new: shared shapes, `newRef`, wait/clock labels)
+**Gates:** pytest 574 passed 0 skipped - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **User-directed.** Three views in one segmented control: *Pesanan baru* (the order being built), *Pesanan aktif* (everything the counter still owes someone), *Riwayat transaksi* (today's paid receipts; void and refund are unchanged, M15-T11). Shift, cash, kitchen and lock stay in the header but quieter: the shift shows the expected cash as text, the others are icon buttons that gain labels on wide screens.
+- **Products beside a persistent order on a wide till (>= 1024px).** Compact tiles in an auto-fill grid with a search field, and a sticky 390px panel with order type, customer name, table, editable lines (quantity steppers, tap a line to change its choices, line discount), the server-priced total, *Bayar*, and *Simpan, bayar nanti*. Below 1024px the panel becomes a drawer behind a persistent dock showing the count and total.
+- **Switching customers loses nothing.** *Simpan* holds the cart on the server (`POST /pos/drafts` with a reference minted once per cart; `PUT` with the revision when editing a held or QR order). Resuming another order first holds whatever unsaved work is on the panel; a failed hold stops the switch and says why.
+- **Pesanan aktif** has filters with live counts (Semua, Belum dibayar, Disiapkan, Siap diambil) and rows with code, source, name, service type, time and elapsed, item summary, total, and payment and preparation as separate badges. Opening a row shows a detail panel (a sheet on tablets) whose actions depend on its state: unpaid gets *Bayar*, *Ubah pesanan* or *Batalkan* with a reason; changed prices get *Perbarui ke harga sekarang*; paid gets *Tambah pesanan* and *Struk*; ready gets *Tandai sudah diserahkan*. Polled every 6s while visible; a failed poll keeps the last list and shows "Koneksi terputus · data mungkin tidak terbaru".
+- **Paying replays rather than duplicates.** The payment reference survives a failed attempt, so pressing *Bayar* again after a dropped connection returns the first payment (svc-2). An edited open order is saved under its revision and then settled with that revision.
+- Verified in the browser against orders created through the API (in preparation with one line ticked, ready, unpaid QR, held draft, add-on) at 1280x800 and 800x1280: held an order and saw it listed; opened the QR order, added a croissant and paid (Rp 87.000 -> Rp 115.000); confirmed a handover and watched the counts update. Fixed during verification: tile prices and order-type labels wrapping, the nav dot overlapping its count, "Buka shift" wrapping in portrait. The impeccable detector found nothing.
+**Deviation:** none.
+**Next:** svc-7 - the kitchen screen.
