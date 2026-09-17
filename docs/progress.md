@@ -1648,3 +1648,20 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Verified in the browser against orders created through the API (in preparation with one line ticked, ready, unpaid QR, held draft, add-on) at 1280x800 and 800x1280: held an order and saw it listed; opened the QR order, added a croissant and paid (Rp 87.000 -> Rp 115.000); confirmed a handover and watched the counts update. Fixed during verification: tile prices and order-type labels wrapping, the nav dot overlapping its count, "Buka shift" wrapping in portrait. The impeccable detector found nothing.
 **Deviation:** none.
 **Next:** svc-7 - the kitchen screen.
+
+
+### [svc-7] The kitchen screen: Baru, Disiapkan, Siap diambil, and why a ticket left
+**Date:** 2026-09-17
+**Status:** done
+**Changed:** frontend/app/kitchen/[businessToken]/page.tsx (the board rebuilt on `GET /pos/kitchen/board`; sign-in unchanged)
+**Gates:** pytest 574 passed 0 skipped - migrations round-trip ok - frontend build ok - seed ok
+**Notes:**
+- **User-directed.** Three columns in the order the work happens, Baru -> Disiapkan -> Siap diambil (two columns on a portrait tablet, three from 1280px). Each column lists its oldest ticket first. *Diserahkan* is the handover action and the history tab.
+- **One obvious action per state, and no dismiss shortcut.** Baru: *Mulai siapkan*. Disiapkan: *Siap diambil*, disabled on a multi-item ticket until every item is ticked ("1 item belum selesai"). Siap diambil: *Sudah diserahkan*. Every move sends the state the screen was showing (svc-4), so there is no path from Baru to handed over, and the old always-visible "Selesai" button is gone.
+- **Readable at a distance.** Code at 30px; quantity and item at 19-22px; the size written out ("Americano · Standar"); modifiers on their own line; preparation notes in a tinted band. Takeaway is an ink-filled chip and dine-in a quiet table chip; additions carry "Tambahan untuk #9B08". Elapsed time is measured on the server's clock (the board returns `server_time`). It turns amber from 10 minutes and adds an amber outline from 20. No promised preparation time is shown.
+- **A failed refresh never looks like an empty kitchen.** The last board stays; the header switches to "Koneksi terputus · data dari 22.49" with *Coba lagi*; the first load failing shows its own error instead of "Antrean kosong". Polls do not overlap, and tickets are keyed by order id so a refresh does not reset scroll. Verified by stopping the API with the board open.
+- **Conflicts explain themselves.** Verified by moving a ticket from a second client while the screen was stale. The tap was refused and "#450E: Pesanan ini sudah siap diambil dari perangkat lain" appeared both on the card and above the columns, because a refused move can take its card off the board. The first verification showed only the card message, which vanished with the card, so the board-level notice was added.
+- **Cancellations are shown until someone acknowledges them.** A refunded in-preparation order appears as "#BEE6 dikembalikan — hentikan pembuatan", with its items, approver and reason, and *Oke, mengerti*. The *Sudah diserahkan* tab lists the window's handovers with time and staff, and refunded ones are marked.
+- Recall/undo of a ticket state was not added (see svc-4: the M11-T2 forward-only test). The impeccable detector found nothing.
+**Deviation:** none.
+**Next:** svc-8 - the QR customer journey.
