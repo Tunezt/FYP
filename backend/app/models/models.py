@@ -1029,6 +1029,36 @@ class KitchenEvent(Base):
     created_at: Mapped[datetime] = _now()
 
 
+class PrintJob(Base):
+    """One piece of paper the system owes a printer (prt-3, migration 0040).
+    Written with the payment; `document` is frozen printer-neutral content."""
+
+    __tablename__ = "print_jobs"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
+    printer: Mapped[str] = mapped_column(Text, nullable=False)          # front | kitchen
+    kind: Mapped[str] = mapped_column(Text, nullable=False)             # receipt | bar_ticket | kitchen_ticket | *_cancel
+    copy: Mapped[str] = mapped_column(Text, nullable=False, server_default="original")
+    reprint_of: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("print_jobs.id"))
+    dedupe_key: Mapped[str] = mapped_column(Text, nullable=False)
+    document: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claimed_by: Mapped[str | None] = mapped_column(Text)
+    printed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    created_at: Mapped[datetime] = _now()
+    updated_at: Mapped[datetime] = _now()
+
+
 class ServiceNumberCounter(Base):
     """The last daily service number handed out, per business per business day
     (prt-1, migration 0038). Incremented atomically; never decremented."""

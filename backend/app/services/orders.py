@@ -599,6 +599,12 @@ async def create_order(
             session, business_id, customer, order.id, eligible_amount=total - paid_in_points,
             staff_id=staff_id, created_at=sold_at, config=loyalty,
         )
+    # Paper (prt-3): the receipt and the preparation slips are owed from the
+    # moment the money is in, so they are written in this same transaction. A
+    # printer that is off, jammed or unreachable cannot roll the sale back.
+    from app.services.printing import enqueue_for_paid_order
+
+    await enqueue_for_paid_order(session, order, staff_id=staff_id)
     return created
 
 
@@ -825,6 +831,11 @@ async def _reverse(
 
     order.status = "voided" if kind == "void" else "refunded"
     await session.flush()
+    # A slip may already be in the chef's hand (prt-3): withdraw what nothing
+    # has printed yet, and send a BATAL notice for what may be on paper.
+    from app.services.printing import on_order_reversed
+
+    await on_order_reversed(session, order, staff_id=staff_id)
     # Who authorised this, structurally and not only in the memo prose (M15-T7).
     await record_approval(
         session, business_id, action=kind, approver=manager, requested_by=staff_id,

@@ -1741,3 +1741,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - An item with no station set is routed to the front slip with a flag (prt-3). The person reading it stands beside the cashier and can walk it back.
 **Deviation:** none. Additive: two nullable columns with check constraints.
 **Next:** prt-3.
+
+
+### [prt-3] Paper the cafe needs: receipts, Bar and Dapur slips, persisted with the payment
+**Date:** 2026-09-18
+**Status:** done
+**Changed:** backend/alembic/versions/0040_print_jobs.py (new, RLS), backend/app/models/models.py + __init__.py (`PrintJob`), backend/app/services/printing.py (new), backend/app/services/orders.py (enqueue in the payment transaction; BATAL on reversal), backend/tests/test_prep_routing.py (+9 tests)
+**Gates:** pytest 593 passed 0 skipped - migrations round-trip ok (0040 -> 0039 -> 0040) - frontend build ok - seed ok
+**Notes:**
+- **Two printers, fixed by the room.** Front: the customer receipt and a *separate* Bar slip. Kitchen: the Dapur slip. A station with nothing to make gets no slip; a drink-only order sends nothing to the kitchen.
+- **Written with the payment.** Jobs are inserted in `create_order`'s transaction, so a refresh or dropped connection cannot lose them and a dead printer cannot roll back the sale. `dedupe_key` is unique per business and keyed on the financial order: concurrent replays and triple-tapped settlements produce exactly one receipt and one slip per station (tested). Unpaid orders and backdated paper sales print nothing.
+- **Documents are frozen, printer-neutral blocks** (title, label, banner, kv, item ...). Slips carry the table or number, service type, time, a slip reference (`001-D1`), and each item with quantity, explicit size, every modifier and the note. No prices, payment, or customer name. The receipt carries everything with prices and payment.
+- **Additions** print their own receipt and slips with only their items, labelled TAMBAHAN and "Tambahan 1". The original's jobs are never produced again (tested: its job count is unchanged).
+- **Cancellation cannot un-print.** On void or refund, a slip still `pending` is withdrawn (`cancelled`). One that may be on paper (claimed, printed or failed) gets a BATAL notice to the same printer, listing only that station's items. The receipt job stays as the sale's record; stock and books reverse exactly as before (tested).
+- **Queue semantics:** `claim_next` uses `FOR UPDATE SKIP LOCKED`, so two devices never take one job. Failed jobs can be retried. A claimed job with no answer after 90 s *displays* as uncertain and cannot be retried silently, only reprinted (marked CETAK ULANG with a count and the staff name) or confirmed by a person. A late device answer cannot overwrite a person's confirmation.
+**Deviation:** none. One new table, RLS in the same migration, isolation tested.
+**Next:** prt-4.
