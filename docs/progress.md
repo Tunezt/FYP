@@ -1757,3 +1757,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Queue semantics:** `claim_next` uses `FOR UPDATE SKIP LOCKED`, so two devices never take one job. Failed jobs can be retried. A claimed job with no answer after 90 s *displays* as uncertain and cannot be retried silently, only reprinted (marked CETAK ULANG with a count and the staff name) or confirmed by a person. A late device answer cannot overwrite a person's confirmation.
 **Deviation:** none. One new table, RLS in the same migration, isolation tested.
 **Next:** prt-4.
+
+
+### [prt-4] Printers pull their slips; the till sees and recovers the queue honestly
+**Date:** 2026-09-18
+**Status:** done
+**Changed:** backend/app/api/printing.py (new: `/print/agent/*`, `/pos/print-jobs/*`, `/api/printers/{printer}/token`), backend/app/main.py, backend/app/core/security.py (`create_token(extra=)`), backend/app/api/pos.py + schemas/menu.py (print summary on active orders), backend/tests/test_error_localization.py (scans the new module too), backend/tests/test_prep_routing.py (+4 tests), frontend/components/pos/PrintDocument.tsx (new), frontend/components/pos/PrintQueue.tsx (new), frontend/components/PrinterTokens.tsx (new), frontend/components/pos/SellScreen.tsx, ActiveOrders.tsx, frontend/app/(dashboard)/settings/page.tsx, frontend/lib/pos.ts
+**Gates:** pytest 597 passed 0 skipped - migrations round-trip ok (0040 -> 0039 -> 0040) - frontend build ok - seed ok
+**Notes:**
+- **Inspected the constraints first.** The API is on Railway and the pages on Vercel, so the cloud cannot reach a printer on the café's wifi. The till is one Android tablet in Chrome, which cannot open raw TCP to a network printer, and Bluetooth will not reliably reach a kitchen 15-20 m back. So unattended printing must **pull**: a device token (scope `printer`, one printer each, owner-issued, dies with a re-pairing) claims jobs and reports results over HTTPS.
+- **The till says only what is known:** Menunggu printer / Sedang dikirim / Belum pasti tercetak / Tercetak (and whether a person confirmed it) / Gagal cetak / Ditarik. The header icon counts what needs checking; *Antrean cetak* and every order's detail offer *Coba lagi* (failed only), *Cetak ulang* (marked), *Kertas sudah ada* (uncertain), and *Cetak manual* (front printer only).
+- **The browser fallback never assumes paper.** Preview first; the job is taken only when the dialog opens; afterwards the till asks "Apakah kertasnya keluar?", and only "Ya" marks it printed, recorded as that person's confirmation. Tested through the API; the rendering was checked in the browser (Bar slip for MEJA 7 showed only Bar items with size, modifier and note).
+- Tests: a device pulls only its printer's jobs in order (receipt then Bar slip as separate jobs), cannot answer another printer's job, and a repeated answer is idempotent; scope separation in all directions and revocation by re-pairing; failed → retry → uncertain → refused retry → marked reprint → person's confirmation; browser take/decline/retake/confirm.
+- **Not done, deliberately:** no printer SDK, bridge or cloud-print adapter. That depends on hardware nobody has chosen, and could not be tested (documented with the bill sequence; NEEDS HUMAN note to follow).
+**Deviation:** none. No schema change.
+**Next:** bill-1. The owner changed direction (see the decision record at bill-1): dine-in becomes an open bill per table paid at the end, and per-item serving states (drafted as prt-5) are dropped, not landed.

@@ -219,6 +219,18 @@ class ActiveOrderOut(BaseModel):
     # svc-5: unpaid lines whose catalogue price or availability moved since
     # they were priced. Payment is refused until the order is re-priced.
     price_changes: list["PriceChangeOut"] = []
+    print_jobs: list["PrintSummaryOut"] = []   # prt-4
+
+
+class PrintSummaryOut(BaseModel):
+    """The latest job of one kind for an order (prt-4): what the counter may say
+    about that piece of paper, and nothing more."""
+
+    job_id: uuid.UUID
+    kind: str            # receipt · bar_ticket · kitchen_ticket · bar_cancel · kitchen_cancel
+    printer: str         # front · kitchen
+    status: str          # pending · sending · uncertain · printed · failed · cancelled
+    reprints: int = 0
 
 
 class PriceChangeOut(BaseModel):

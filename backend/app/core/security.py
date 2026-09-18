@@ -46,6 +46,7 @@ def create_token(
     staff_id: str | None = None,
     ttl_minutes: int | None = None,
     generation: int = 1,
+    extra: dict | None = None,
 ) -> str:
     """`generation` (M15-T8) is the business's `pairing_generation` at the moment
     of issue. Checked on every `pos` request, so re-pairing a lost tablet ends
@@ -67,6 +68,9 @@ def create_token(
     }
     if staff_id:
         payload["staff_id"] = staff_id
+    for key, value in (extra or {}).items():   # prt-4: e.g. which printer a device token is for
+        if key not in payload:
+            payload[key] = value
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

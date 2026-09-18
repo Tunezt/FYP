@@ -292,3 +292,115 @@ async def test_print_jobs_are_tenant_isolated(client, session_factory, cafe):
             if row:
                 await s.delete(row)
             await s.commit()
+
+
+# ── prt-4: printer devices pull; the till recovers ──────────────────────────
+
+
+async def _printer_token(client, c, printer):
+    resp = await client.post(f"/api/printers/{printer}/token", headers=_owner(c))
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['token']}"}
+
+
+async def test_a_printer_device_pulls_only_its_own_printers_jobs_and_reports_back(client, session_factory, cafe):
+    c = cafe
+    await _stations(client, c)
+    sale = (await client.post("/pos/orders", headers=_auth(c["pos"]), json={
+        "lines": [_line(c, variant="standar", mods=["panas"]), _line(c, item="roti")], "payments": _cash(33000),
+        "order_type": "dine_in", "table_label": "Meja 7"})).json()
+    kitchen = await _printer_token(client, c, "kitchen")
+    front = await _printer_token(client, c, "front")
+
+    claimed = (await client.post("/print/agent/claim", headers=kitchen, json={"device": "dapur-epson"})).json()["job"]
+    assert claimed["kind"] == "kitchen_ticket" and claimed["status"] == "sending" and claimed["order_label"] == "Pesanan 001"
+    assert claimed["document"]["blocks"][1]["text"] == "MEJA 7"
+    assert (await client.post("/print/agent/claim", headers=kitchen, json={"device": "dapur-epson"})).json()["job"] is None
+    # The front printer's device cannot answer for the kitchen's job.
+    assert (await client.post(f"/print/agent/jobs/{claimed['id']}/result", headers=front, json={"device": "x", "ok": True})).status_code == 404
+    done = await client.post(f"/print/agent/jobs/{claimed['id']}/result", headers=kitchen, json={"device": "dapur-epson", "ok": True})
+    assert done.status_code == 200 and done.json()["status"] == "printed" and done.json()["confirmed_by_person"] is False
+    # The same answer twice is the same answer.
+    assert (await client.post(f"/print/agent/jobs/{claimed['id']}/result", headers=kitchen, json={"device": "dapur-epson", "ok": True})).status_code == 200
+
+    kinds = []
+    while True:
+        job = (await client.post("/print/agent/claim", headers=front, json={"device": "depan"})).json()["job"]
+        if job is None:
+            break
+        kinds.append(job["kind"])
+        await client.post(f"/print/agent/jobs/{job['id']}/result", headers=front, json={"device": "depan", "ok": True})
+    assert kinds == ["receipt", "bar_ticket"]                     # two separate slips, in order
+    summary = {p["kind"]: p["status"] for p in {a["id"]: a for a in (await client.get("/pos/active-orders", headers=_auth(c["pos"]))).json()}[sale["id"]]["print_jobs"]}
+    assert summary == {"receipt": "printed", "bar_ticket": "printed", "kitchen_ticket": "printed"}
+
+
+async def test_printer_tokens_are_scoped_and_die_with_a_re_pairing(client, session_factory, cafe):
+    c = cafe
+    kitchen = await _printer_token(client, c, "kitchen")
+    # A printer token opens nothing at the till; a till token is not a printer.
+    assert (await client.get("/pos/active-orders", headers=kitchen)).status_code == 403
+    assert (await client.post("/print/agent/claim", headers=_auth(c["pos"]), json={"device": "x"})).status_code == 403
+    assert (await client.post("/api/printers/kitchen/token", headers=_auth(c["pos"]))).status_code == 403
+    assert (await client.post("/print/agent/claim", json={"device": "x"})).status_code == 401
+    async with session_factory() as s:
+        biz = await s.get(Business, c["bid"])
+        biz.pairing_generation = biz.pairing_generation + 1
+        await s.commit()
+    revoked = await client.post("/print/agent/claim", headers=kitchen, json={"device": "x"})
+    assert revoked.status_code == 401 and "dicabut" in revoked.json()["detail"]
+
+
+async def test_the_till_sees_the_queue_honestly_and_recovers_it(client, session_factory, cafe):
+    c = cafe
+    await _stations(client, c)
+    pos = _auth(c["pos"])
+    await client.post("/pos/orders", headers=pos, json={"lines": [_line(c, item="roti")], "payments": _cash(15000)})
+    kitchen = await _printer_token(client, c, "kitchen")
+    job = (await client.post("/print/agent/claim", headers=kitchen, json={"device": "dapur"})).json()["job"]
+    failed = await client.post(f"/print/agent/jobs/{job['id']}/result", headers=kitchen, json={"device": "dapur", "ok": False, "error": "tutup printer terbuka"})
+    assert failed.json()["status"] == "failed"
+    queue = (await client.get("/pos/print-jobs?printer=kitchen", headers=pos)).json()
+    assert [(j["kind"], j["status"], j["error"]) for j in queue] == [("kitchen_ticket", "failed", "tutup printer terbuka")]
+    # Retry puts it back; the device takes it again and never answers.
+    assert (await client.post(f"/pos/print-jobs/{job['id']}/retry", headers=pos)).json()["status"] == "pending"
+    again = (await client.post("/print/agent/claim", headers=kitchen, json={"device": "dapur"})).json()["job"]
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        row = await s.get(PrintJob, uuid.UUID(again["id"]))
+        row.claimed_at = row.claimed_at - timedelta(minutes=3)       # a while ago
+        await s.commit()
+    queue = (await client.get("/pos/print-jobs?printer=kitchen", headers=pos)).json()
+    assert [j["status"] for j in queue] == ["uncertain"]
+    # Uncertain is not silently re-sent: retry is refused, a marked reprint is not.
+    refused = await client.post(f"/pos/print-jobs/{again['id']}/retry", headers=pos)
+    assert refused.status_code == 409 and "cetak ulang" in refused.json()["detail"]
+    copy = await client.post(f"/pos/print-jobs/{again['id']}/reprint", headers=pos)
+    assert copy.status_code == 201 and copy.json()["copy_kind"] == "reprint" and copy.json()["status"] == "pending"
+    doc = (await client.get(f"/pos/print-jobs/{copy.json()['id']}", headers=pos)).json()["document"]
+    assert "CETAK ULANG" in _texts(doc)
+    # A person holding the first slip closes it; that is recorded as a person's word.
+    confirmed = (await client.post(f"/pos/print-jobs/{again['id']}/confirm", headers=pos)).json()
+    assert confirmed["status"] == "printed" and confirmed["confirmed_by_person"] is True
+
+
+async def test_browser_printing_is_a_manual_fallback_that_never_assumes_paper(client, session_factory, cafe):
+    c = cafe
+    await _stations(client, c)
+    pos = _auth(c["pos"])
+    await client.post("/pos/orders", headers=pos, json={"lines": [_line(c, item="roti")], "payments": _cash(15000)})
+    receipt = next(j for j in (await client.get("/pos/print-jobs?printer=front", headers=pos)).json() if j["kind"] == "receipt")
+    taken = await client.post(f"/pos/print-jobs/{receipt['id']}/browser", headers=pos)
+    assert taken.status_code == 200 and taken.json()["status"] == "sending" and taken.json()["document"]["kind"] == "receipt"
+    # The dialog closed. Nothing is printed until the person says so.
+    assert next(j for j in (await client.get("/pos/print-jobs?printer=front", headers=pos)).json() if j["id"] == receipt["id"])["status"] == "sending"
+    # Taken by the browser: a printer device cannot also take it.
+    front = await _printer_token(client, c, "front")
+    assert (await client.post("/print/agent/claim", headers=front, json={"device": "depan"})).json()["job"] is None
+    said_no = (await client.post(f"/pos/print-jobs/{receipt['id']}/browser-result", headers=pos, json={"ok": False})).json()
+    assert said_no["status"] == "failed"
+    retaken = await client.post(f"/pos/print-jobs/{receipt['id']}/browser", headers=pos)       # a failed one can be taken again
+    assert retaken.status_code == 200 and retaken.json()["attempts"] == 2
+    said_yes = (await client.post(f"/pos/print-jobs/{receipt['id']}/browser-result", headers=pos, json={"ok": True})).json()
+    assert said_yes["status"] == "printed" and said_yes["confirmed_by_person"] is True
+    assert all(j["id"] != receipt["id"] for j in (await client.get("/pos/print-jobs?printer=front", headers=pos)).json())

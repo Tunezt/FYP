@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { IconAlert, IconChevronRight, IconClose, IconNote, IconPrinter } from "@/components/icons";
 import { formatRupiah } from "@/lib/format";
 import {
@@ -51,6 +51,7 @@ export function ActiveOrders({
   busyId,
   actions,
   onRetry,
+  printSlot,
 }: {
   orders: ActiveOrder[] | null;
   stale: boolean;
@@ -58,6 +59,8 @@ export function ActiveOrders({
   busyId: string | null;
   actions: ActiveActions;
   onRetry: () => void;
+  /** prt-4: the order's paper — receipt, Bar and Dapur slips — with recovery. */
+  printSlot?: (o: ActiveOrder) => ReactNode;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<string | null>(null);
@@ -138,7 +141,7 @@ export function ActiveOrders({
       <aside className="hidden lg:block">
         <div className="glass-card sticky top-[5.5rem] max-h-[calc(100dvh-7rem)] overflow-y-auto p-0">
           {current ? (
-            <OrderDetail order={current} busy={busyId === current.id} actions={actions} onClose={() => setSelected(null)} />
+            <OrderDetail order={current} busy={busyId === current.id} actions={actions} onClose={() => setSelected(null)} printSlot={printSlot} />
           ) : (
             <div className="px-6 py-16 text-center">
               <p className="text-[15px] font-medium">Pilih pesanan</p>
@@ -151,7 +154,7 @@ export function ActiveOrders({
         <div className="sheet-scrim lg:hidden" onClick={() => setSelected(null)}>
           <div className="sheet-panel sm:max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="overflow-y-auto">
-              <OrderDetail order={current} busy={busyId === current.id} actions={actions} onClose={() => setSelected(null)} />
+              <OrderDetail order={current} busy={busyId === current.id} actions={actions} onClose={() => setSelected(null)} printSlot={printSlot} />
             </div>
           </div>
         </div>
@@ -237,11 +240,13 @@ function OrderDetail({
   busy,
   actions,
   onClose,
+  printSlot,
 }: {
   order: ActiveOrder;
   busy: boolean;
   actions: ActiveActions;
   onClose: () => void;
+  printSlot?: (o: ActiveOrder) => ReactNode;
 }) {
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState("");
@@ -324,6 +329,7 @@ function OrderDetail({
         ))}
       </ul>
       {o.note && <p className="ink-soft mt-2 text-sm">Catatan: {o.note}</p>}
+      {printSlot && o.print_jobs.length > 0 && printSlot(o)}
       <div className="mt-3 flex items-baseline justify-between">
         <span className="ink-soft text-sm">{o.is_estimate ? "Perkiraan total" : "Total dibayar"}</span>
         <span className="text-[22px] font-semibold tabular-nums">{formatRupiah(o.total)}</span>

@@ -710,6 +710,10 @@ async def _active_views(session, orders, tickets_by_id=None):
     from app.services.service_numbers import service_day
 
     today = await service_day(session, orders[0].business_id) if orders else None
+    from app.schemas.menu import PrintSummaryOut
+    from app.services.printing import display_status, jobs_for_orders
+
+    jobs_by_order = await jobs_for_orders(session, [o.id for o in orders])
     parents = {}
     parent_ids = {getattr(o, "parent_order_id", None) for o in orders} - {None}
     if parent_ids:
@@ -748,7 +752,16 @@ async def _active_views(session, orders, tickets_by_id=None):
             from app.services.tickets import price_changes
 
             changes = [PriceChangeOut(name=ch.name, was=ch.was, now=ch.now) for ch in await price_changes(session, o)]
+        summaries: dict[str, PrintSummaryOut] = {}
+        for j in jobs_by_order.get(o.id, []):
+            if j.copy == "reprint":
+                if j.kind in summaries:
+                    summaries[j.kind].reprints += 1
+                    summaries[j.kind].job_id, summaries[j.kind].status = j.id, display_status(j)
+                continue
+            summaries[j.kind] = PrintSummaryOut(job_id=j.id, kind=j.kind, printer=j.printer, status=display_status(j))
         out.append(ActiveOrderOut(
+            print_jobs=list(summaries.values()),
             order_no=service_label(o), service_date=o.service_date, batch_no=o.batch_no or 0,
             external_ref=o.external_ref, previous_day=bool(today and o.service_date and o.service_date < today),
             price_changes=changes,

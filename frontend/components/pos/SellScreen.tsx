@@ -20,7 +20,16 @@ import {
 import { newRef, orderLabel, type ActiveOrder, type PosItem } from "@/lib/pos";
 import { OrderPanel, type PanelContext } from "@/components/pos/OrderPanel";
 import { ActiveOrders, type ActiveActions } from "@/components/pos/ActiveOrders";
-import { ReceiptSheet, TransactionsView, type Receipt } from "@/components/pos/Receipts";
+import { TransactionsView } from "@/components/pos/Receipts";
+import {
+  BrowserPrintSheet,
+  PRINT_STATUS,
+  PRINTER_LABEL,
+  PrintJobActions,
+  PrintQueueSheet,
+  usePrintQueue,
+  type PrintJob,
+} from "@/components/pos/PrintQueue";
 
 type Item = PosItem;
 
@@ -300,6 +309,21 @@ export function SellScreen({
     }, 6000);
     return () => clearInterval(id);
   }, [loadActive]);
+  // Paper (prt-4): the queue, its sheet, and the manual browser fallback.
+  const printQueue = usePrintQueue(token);
+  const [printSheet, setPrintSheet] = useState(false);
+  const [browserJob, setBrowserJob] = useState<string | null>(null);
+  async function printReceiptOf(orderId: string) {
+    try {
+      const jobs = await api<PrintJob[]>("/pos/print-jobs?scope=recent&printer=front", { token });
+      const receipt = jobs.find((j) => j.order_id === orderId && j.kind === "receipt" && j.copy_kind === "original");
+      if (!receipt) return showToast("Struk pesanan ini belum ada di antrean cetak.");
+      if (receipt.status === "pending" || receipt.status === "failed") setBrowserJob(receipt.id);
+      else setPrintSheet(true);
+    } catch (e: unknown) {
+      showToast(e instanceof ApiError ? e.detail : "Antrean cetak tidak bisa dimuat.");
+    }
+  }
   const unpaidQr = (active ?? []).filter((o) => o.payment === "unpaid" && o.source === "menu").length;
   const readyCount = (active ?? []).filter((o) => o.prep === "ready").length;
 
@@ -431,7 +455,6 @@ export function SellScreen({
   const [usePoints, setUsePoints] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [flash, setFlash] = useState<OrderResult | null>(null);
-  const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [lineDiscountFor, setLineDiscountFor] = useState<string | null>(null);
   const [lineDiscountDraft, setLineDiscountDraft] = useState("");
 
@@ -571,13 +594,7 @@ export function SellScreen({
     }
   }
 
-  async function printReceipt(orderId: string) {
-    try {
-      setReceipt(await api<Receipt>(`/pos/orders/${orderId}/receipt`, { token }));
-    } catch (e: unknown) {
-      showToast(e instanceof ApiError ? e.detail : "Struk tidak bisa dimuat.");
-    }
-  }
+
 
   // ── Active-order actions ─────────────────────────────────────────────────
   const actions: ActiveActions = {
@@ -628,7 +645,7 @@ export function SellScreen({
         await loadActive();
       }
     },
-    print: (o) => void printReceipt(o.id),
+    print: (o) => void printReceiptOf(o.id),
   };
 
   // ── Shift and cash (M7) ──────────────────────────────────────────────────
@@ -828,6 +845,18 @@ export function SellScreen({
                 <span className="block text-sm font-semibold tabular-nums leading-tight">{formatRupiah(shift.expected_cash ?? shift.opening_float)}</span>
               </button>
             )}
+            <button
+              onClick={() => setPrintSheet(true)}
+              className="icon-btn h-10 w-auto gap-1.5 rounded-xl px-2.5 text-sm"
+              title="Antrean cetak"
+              style={{ color: printQueue.attention > 0 ? "var(--bad)" : printQueue.error ? "var(--warn)" : "var(--ink-soft)" }}
+            >
+              <IconPrinter className="h-[18px] w-[18px]" />
+              <span className="tabular-nums">
+                {printQueue.attention > 0 ? `${printQueue.attention} perlu dicek` : printQueue.waiting > 0 ? `${printQueue.waiting} antre` : ""}
+              </span>
+              <span className="hidden xl:inline">{printQueue.attention === 0 && printQueue.waiting === 0 ? "Cetak" : ""}</span>
+            </button>
             <button onClick={openCashSheet} className="icon-btn ink-soft h-10 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Kas masuk / keluar">
               <IconWallet className="h-[18px] w-[18px]" /> <span className="hidden xl:inline">Kas</span>
             </button>
@@ -955,6 +984,34 @@ export function SellScreen({
               busyId={busyId}
               actions={actions}
               onRetry={() => void loadActive()}
+              printSlot={(o) => (
+                <div className="surface-inset mt-3 rounded-2xl px-3 py-2.5">
+                  <p className="text-[13px] font-semibold">Cetakan</p>
+                  <ul className="mt-1 space-y-2">
+                    {o.print_jobs.map((p) => (
+                      <li key={p.kind} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                        <span className="text-[13px]">
+                          {{ receipt: "Struk", bar_ticket: "Slip bar", kitchen_ticket: "Slip dapur", bar_cancel: "Batal bar", kitchen_cancel: "Batal dapur" }[p.kind] ?? p.kind}
+                          <span className="ink-faint"> · {PRINTER_LABEL[p.printer]}{p.reprints ? ` · cetak ulang ${p.reprints}×` : ""}</span>
+                        </span>
+                        <span className={PRINT_STATUS[p.status].cls}>{PRINT_STATUS[p.status].text}</span>
+                        <div className="w-full">
+                          <PrintJobActions
+                            job={{ id: p.job_id, status: p.status, printer: p.printer }}
+                            token={token}
+                            compact
+                            onChanged={() => {
+                              void loadActive();
+                              void printQueue.load();
+                            }}
+                            onBrowserPrint={setBrowserJob}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             />
           </div>
         )}
@@ -1343,10 +1400,10 @@ export function SellScreen({
               </p>
               <p className="ink-soft truncate text-xs">
                 {flash.payments.map((p) => `${p.method === "cash" ? "tunai" : p.method === "points" ? "poin" : p.method.toUpperCase()} ${formatRupiah(p.amount)}`).join(" + ")}
-                {" · "}masuk dapur
+                {" · "}struk & slip masuk antrean cetak
               </p>
             </div>
-            <button onClick={() => void printReceipt(flash.id)} className="btn-quiet ml-1 shrink-0 px-3 py-2 text-sm">
+            <button onClick={() => void printReceiptOf(flash.id)} className="btn-quiet ml-1 shrink-0 px-3 py-2 text-sm">
               <IconPrinter className="h-4 w-4" /> Struk
             </button>
             <button onClick={() => setFlash(null)} className="ink-soft shrink-0 rounded-lg px-2 py-2 text-sm" aria-label="Tutup">
@@ -1362,7 +1419,18 @@ export function SellScreen({
         </div>
       )}
 
-      {receipt && <ReceiptSheet receipt={receipt} onClose={() => setReceipt(null)} />}
+      {printSheet && <PrintQueueSheet token={token} queue={printQueue} onClose={() => setPrintSheet(false)} onBrowserPrint={setBrowserJob} />}
+      {browserJob && (
+        <BrowserPrintSheet
+          jobId={browserJob}
+          token={token}
+          onDone={() => {
+            setBrowserJob(null);
+            void printQueue.load();
+            void loadActive();
+          }}
+        />
+      )}
     </div>
   );
 }

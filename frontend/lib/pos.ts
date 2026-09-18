@@ -57,6 +57,7 @@ export type ActiveOrder = {
   parent_id: string | null;
   parent_code: string | null;
   price_changes: PriceChange[];
+  print_jobs: { job_id: string; kind: string; printer: "front" | "kitchen"; status: "pending" | "sending" | "uncertain" | "printed" | "failed" | "cancelled"; reprints: number }[];
   order_no: string;
   service_date: string | null;
   batch_no: number;
