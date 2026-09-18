@@ -168,9 +168,10 @@ class PosCustomerIn(BaseModel):
 
 
 class QuoteIn(BaseModel):
-    """The cart, priced but not sold (M7-T4b): what the kiosk shows before payment."""
+    """The cart, priced but not sold (M7-T4b): what the kiosk shows before payment.
+    A table's open bill is quoted whole, so up to its 80 lines (bill-3)."""
 
-    lines: list[OrderLineIn] = Field(min_length=1, max_length=50)
+    lines: list[OrderLineIn] = Field(min_length=1, max_length=100)
     bill_discount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))
     voucher_code: str | None = Field(default=None, max_length=40)  # M8-T4
     order_type: PosOrderType = "takeaway"  # M11-T3: the type routes service charge and delivery fee

@@ -687,8 +687,8 @@ export default function SettingsPage() {
           {pairing ? (
             <div className="space-y-2">
               <CopyField value={pairing} />
-              <p className="ink-faint text-xs">Layar dapur (tiket pesanan yang sudah dibayar, dengan tombol selesai) — tautan yang sama, halaman berbeda:</p>
-              <CopyField value={pairing.replace("/pos/", "/kitchen/")} />
+              {/* bill-3: the kitchen screen is kept but hidden for now — the kitchen
+                  works from printed Dapur slips (owner's decision, 2026-09-18). */}
             </div>
           ) : (
             <button onClick={generatePairing} disabled={pairingBusy} className="btn-accent px-5 py-2.5 text-sm">

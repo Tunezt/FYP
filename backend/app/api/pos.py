@@ -812,14 +812,22 @@ async def _active_views(session, orders, tickets_by_id=None):
             from app.services.tickets import price_changes
 
             changes = [PriceChangeOut(name=ch.name, was=ch.was, now=ch.now) for ch in await price_changes(session, o)]
-        summaries: dict[str, PrintSummaryOut] = {}
+        # One entry per piece of paper: an open bill has a slip per send
+        # (bill-1), so a failed first slip is not hidden behind a later one.
+        summaries: dict[tuple, PrintSummaryOut] = {}
+        key_of: dict = {}
         for j in jobs_by_order.get(o.id, []):
             if j.copy == "reprint":
-                if j.kind in summaries:
-                    summaries[j.kind].reprints += 1
-                    summaries[j.kind].job_id, summaries[j.kind].status = j.id, display_status(j)
+                key = key_of.get(j.reprint_of)
+                if key in summaries:
+                    summaries[key].reprints += 1
+                    summaries[key].job_id, summaries[key].status = j.id, display_status(j)
                 continue
-            summaries[j.kind] = PrintSummaryOut(job_id=j.id, kind=j.kind, printer=j.printer, status=display_status(j))
+            parts = j.dedupe_key.split(":")
+            batch = int(parts[2]) if len(parts) > 3 and parts[1] == "send" else None
+            key = (j.kind, batch, j.dedupe_key)
+            key_of[j.id] = key
+            summaries[key] = PrintSummaryOut(job_id=j.id, kind=j.kind, printer=j.printer, status=display_status(j), batch=batch)
         out.append(ActiveOrderOut(
             sent_batches=len(cart.get("batches", [])),
             unsent_count=sum(1 for l in cart.get("lines", []) if not l.get("sent_batch")) if o.status == "open" else 0,

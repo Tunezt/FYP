@@ -7,11 +7,14 @@ export const POS_PAIRING_KEY = "wp_pos_pairing";
 export class ApiError extends Error {
   status: number;
   detail: string;
+  /** bill-1: a 409 for a table that already has an open bill names that bill. */
+  openBillId: string | null;
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, openBillId: string | null = null) {
     super(detail);
     this.status = status;
     this.detail = detail;
+    this.openBillId = openBillId;
   }
 }
 
@@ -35,7 +38,7 @@ export async function api<T>(
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, res.headers.get("X-Open-Bill-Id"));
   }
   return res.json() as Promise<T>;
 }

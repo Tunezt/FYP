@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, POS_TOKEN_KEY } from "@/lib/api";
 import { Select } from "@/components/Select";
 import { ProductPicker } from "@/components/ProductPicker";
-import { IconCheck, IconExternal, IconLock, IconPrinter, IconSearch, IconWallet } from "@/components/icons";
+import { IconCheck, IconLock, IconPrinter, IconSearch, IconWallet } from "@/components/icons";
 import { formatQty, formatRupiah } from "@/lib/format";
 import {
   displayName,
@@ -17,8 +17,17 @@ import {
   type Selection,
   type Variant,
 } from "@/lib/choices";
-import { newRef, orderLabel, type ActiveOrder, type PosItem } from "@/lib/pos";
-import { OrderPanel, type PanelContext } from "@/components/pos/OrderPanel";
+import {
+  needsSending,
+  newRef,
+  orderHeading,
+  orderLabel,
+  PRINT_KIND_LABEL,
+  type ActiveLine,
+  type ActiveOrder,
+  type PosItem,
+} from "@/lib/pos";
+import { OrderPanel, type PanelContext, type SentPanelLine } from "@/components/pos/OrderPanel";
 import { ActiveOrders, type ActiveActions } from "@/components/pos/ActiveOrders";
 import { TransactionsView } from "@/components/pos/Receipts";
 import {
@@ -34,8 +43,19 @@ import {
 type Item = PosItem;
 
 // A cart line is an item at one size with its chosen modifiers and a
-// preparation note; lines merge only when all of them match (svc-1).
-type CartLine = { uid: string; item: Item; variant: Variant | null; modifiers: Modifier[]; qty: number; discount: number; notes: string };
+// preparation note; lines merge only when all of them match (svc-1). On an open
+// order it keeps the server's uid, and says if a guest added it (bill-1/2).
+type CartLine = {
+  uid: string;
+  item: Item;
+  variant: Variant | null;
+  modifiers: Modifier[];
+  qty: number;
+  discount: number;
+  notes: string;
+  serverUid?: string | null;
+  guest?: string | null;
+};
 
 type OrderResult = {
   id: string;
@@ -88,11 +108,11 @@ type Loyalty = { is_active: boolean; rupiah_per_point: string; point_value: stri
 
 /** What the order panel is working on. `open` carries the server revision it
  *  was loaded at and a fingerprint of that version, so "ada perubahan" is true
- *  exactly when saving would change something. */
+ *  exactly when saving would change something. On a table's bill the panel
+ *  edits only the unsent lines; the sent ones are shown, locked (bill-3). */
 type Ctx =
   | { kind: "new" }
-  | { kind: "open"; id: string; rev: number; code: string; source: "pos" | "menu"; guest: string | null; baseline: string }
-  | { kind: "addition"; parentId: string; parentCode: string };
+  | { kind: "open"; id: string; rev: number; title: string; source: "pos" | "menu"; baseline: string };
 
 type View = "new" | "active" | "history";
 
@@ -114,7 +134,16 @@ const cartBody = (cart: CartLine[]) =>
     modifier_ids: l.modifiers.map((m) => m.id),
     quantity: l.qty,
     notes: l.notes || null,
+    ...(l.serverUid ? { uid: l.serverUid } : {}),
   }));
+const sentBody = (lines: ActiveLine[]) =>
+  lines
+    .filter((l) => l.item_id)
+    .map((l) => ({ item_id: l.item_id, variant_id: l.variant_id, modifier_ids: l.modifier_ids, quantity: Number(l.quantity), notes: l.notes }));
+const titleOf = (o: ActiveOrder) => {
+  const h = orderHeading(o);
+  return h.sub ? `${h.main === `PESANAN ${o.order_no}` ? `Pesanan ${o.order_no}` : `${h.main.replace("MEJA", "Meja")} · ${h.sub}`}` : `Pesanan ${o.order_no}`;
+};
 const fingerprint = (cart: CartLine[], orderType: string, guest: string, table: string) =>
   JSON.stringify([cart.map(lineKey).map((k, i) => `${k}×${cart[i].qty}`).sort(), orderType, guest.trim(), table.trim()]);
 
@@ -161,6 +190,7 @@ export function SellScreen({
   // ── The order being built ───────────────────────────────────────────────
   const [ctx, setCtx] = useState<Ctx>({ kind: "new" });
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [sentLines, setSentLines] = useState<ActiveLine[]>([]);
   const [orderType, setOrderType] = useState("takeaway");
   const [guestName, setGuestName] = useState("");
   const [tableLabel, setTableLabel] = useState("");
@@ -173,9 +203,11 @@ export function SellScreen({
   const holdRef = useRef(newRef());
   const payRef = useRef(newRef());
 
-  const stockCap = (item: Item) => (item.made_to_order ? 999 : Number(item.current_stock));
+  const stockCap = (item: Item) =>
+    item.made_to_order ? 999 : Number(item.current_stock) - sentLines.filter((l) => l.item_id === item.id).reduce((n, l) => n + Number(l.quantity), 0);
   const dirty = ctx.kind === "open" && fingerprint(cart, orderType, guestName, tableLabel) !== ctx.baseline;
   const hasWork = cart.length > 0 && (ctx.kind !== "open" || dirty);
+  const tableBill = orderType === "dine_in";
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -184,6 +216,7 @@ export function SellScreen({
 
   function resetOrder() {
     setCart([]);
+    setSentLines([]);
     setCtx({ kind: "new" });
     setOrderType("takeaway");
     setGuestName("");
@@ -253,7 +286,7 @@ export function SellScreen({
   const [voucherCode, setVoucherCode] = useState("");
   const [managerPin, setManagerPin] = useState("");
   useEffect(() => {
-    if (cart.length === 0) {
+    if (cart.length === 0 && sentLines.length === 0) {
       setQuote(null);
       return;
     }
@@ -262,7 +295,10 @@ export function SellScreen({
       api<Quote>("/pos/quote", {
         token,
         body: {
-          lines: cart.map((l) => ({ ...cartBody([l])[0], line_discount: l.discount })),
+          lines: [
+            ...sentBody(sentLines),
+            ...cart.map((l) => ({ ...cartBody([l])[0], line_discount: l.discount })),
+          ],
           bill_discount: Number(billDiscount || 0),
           voucher_code: voucherCode.trim() || null,
           order_type: orderType,
@@ -279,8 +315,10 @@ export function SellScreen({
         .finally(() => setQuoting(false));
     }, 150);
     return () => clearTimeout(handle);
-  }, [cart, billDiscount, voucherCode, token, orderType]);
-  const cartTotal = quote ? Number(quote.total) : cart.reduce((s, l) => s + linePrice(l) * l.qty - l.discount, 0);
+  }, [cart, sentLines, billDiscount, voucherCode, token, orderType]);
+  const cartTotal = quote
+    ? Number(quote.total)
+    : cart.reduce((s, l) => s + linePrice(l) * l.qty - l.discount, 0) + sentLines.reduce((s, l) => s + Number(l.line_total ?? 0), 0);
 
   // ── Active orders: polled, never pushed (café wifi) ──────────────────────
   const [active, setActive] = useState<ActiveOrder[] | null>(null);
@@ -324,8 +362,8 @@ export function SellScreen({
       showToast(e instanceof ApiError ? e.detail : "Antrean cetak tidak bisa dimuat.");
     }
   }
-  const unpaidQr = (active ?? []).filter((o) => o.payment === "unpaid" && o.source === "menu").length;
-  const readyCount = (active ?? []).filter((o) => o.prep === "ready").length;
+  const openOrders = (active ?? []).filter((o) => o.payment === "unpaid");
+  const toSend = openOrders.filter(needsSending).length;
 
   // ── Holding, resuming, switching customers ───────────────────────────────
   /** Save what is on the panel to the server. Returns false (and says why)
@@ -357,7 +395,6 @@ export function SellScreen({
             guest_name: guestName.trim() || null,
             table_label: orderType === "dine_in" ? tableLabel.trim() || null : null,
             client_ref: holdRef.current,
-            parent_order_id: ctx.kind === "addition" ? ctx.parentId : null,
             external_ref: orderType === "dine_in" ? null : externalRef.trim() || null,
           },
         });
@@ -367,6 +404,7 @@ export function SellScreen({
       void loadActive();
       return true;
     } catch (e: unknown) {
+      if (e instanceof ApiError && e.openBillId) setConflict({ billId: e.openBillId, message: e.detail });
       setPanelError(e instanceof ApiError ? e.detail : "Belum tersimpan — periksa koneksi, lalu coba lagi.");
       if (!quiet) setDrawer(true);
       setView("new");
@@ -377,10 +415,14 @@ export function SellScreen({
     }
   }
 
-  function loadIntoPanel(o: ActiveOrder) {
+  /** Put an open order on the panel. The unsent lines become the editable cart
+   *  (keeping their server uid); the sent ones are shown, locked. `keep` adds
+   *  lines the cashier was building, e.g. when a table turned out to have a
+   *  bill already. */
+  function loadIntoPanel(o: ActiveOrder, keep: CartLine[] = []) {
     const lines: CartLine[] = [];
     const missing: string[] = [];
-    for (const l of o.lines) {
+    for (const l of o.lines.filter((x) => !x.sent_batch)) {
       const item = l.item_id ? itemById.get(l.item_id) : undefined;
       if (!item) {
         missing.push(l.name);
@@ -388,10 +430,21 @@ export function SellScreen({
       }
       const variant = l.variant_id ? item.variants.find((v) => v.id === l.variant_id) ?? null : selectedVariant(item, freshSelection(item));
       const mods = item.modifier_groups.flatMap((g) => g.modifiers).filter((m) => l.modifier_ids.includes(m.id));
-      lines.push({ uid: `l${++lineSeq}`, item, variant, modifiers: mods, qty: Number(l.quantity), discount: 0, notes: l.notes ?? "" });
+      lines.push({
+        uid: `l${++lineSeq}`,
+        item,
+        variant,
+        modifiers: mods,
+        qty: Number(l.quantity),
+        discount: 0,
+        notes: l.notes ?? "",
+        serverUid: l.uid,
+        guest: l.from_guest ? `QR${l.guest_name ? ` · ${l.guest_name}` : ""}` : null,
+      });
     }
     const type = HELD_TYPES.includes(o.order_type) ? o.order_type : "takeaway";
-    setCart(lines);
+    setCart([...lines, ...keep.map((l) => ({ ...l, serverUid: null, discount: 0 }))]);
+    setSentLines(o.lines.filter((x) => x.sent_batch));
     setOrderType(type);
     setGuestName(o.guest_name ?? "");
     setTableLabel(o.table_label ?? "");
@@ -400,9 +453,8 @@ export function SellScreen({
       kind: "open",
       id: o.id,
       rev: o.rev,
-      code: o.order_no,
+      title: titleOf(o),
       source: o.source,
-      guest: o.guest_name,
       baseline: fingerprint(lines, type, o.guest_name ?? "", o.table_label ?? ""),
     });
     payRef.current = newRef();
@@ -420,14 +472,91 @@ export function SellScreen({
     return true;
   }
 
-  async function startAddition(o: ActiveOrder) {
-    if (hasWork && !(await holdCurrent(true))) return;
-    resetOrder();
-    setCtx({ kind: "addition", parentId: o.id, parentCode: o.order_no });
-    setGuestName(o.guest_name ?? "");
-    setOrderType(HELD_TYPES.includes(o.order_type) ? o.order_type : "takeaway");
-    setTableLabel(o.table_label ?? "");
-    setView("new");
+  // ── Sending a table's order to the Bar/Dapur (bill-3) ────────────────────
+  const [conflict, setConflict] = useState<{ billId: string; message: string } | null>(null);
+  /** "Kirim ke dapur/bar": save what is new on the table's bill and send it, in
+   *  one request. Slips and the table's nota print; payment waits. */
+  async function sendCurrent(): Promise<void> {
+    if (busy) return;
+    if (!tableLabel.trim()) {
+      setPanelError("Isi nomor meja dulu — slip dan nota memakai nomor meja.");
+      return;
+    }
+    setBusy(true);
+    setPanelError(null);
+    try {
+      const saved =
+        ctx.kind === "open"
+          ? await api<ActiveOrder>(`/pos/open-orders/${ctx.id}`, {
+              token,
+              method: "PUT",
+              body: { rev: ctx.rev, lines: cartBody(cart), order_type: "dine_in", guest_name: guestName, table_label: tableLabel, send: true },
+            })
+          : await api<ActiveOrder>("/pos/drafts", {
+              token,
+              body: {
+                lines: cartBody(cart),
+                order_type: "dine_in",
+                guest_name: guestName.trim() || null,
+                table_label: tableLabel.trim(),
+                client_ref: holdRef.current,
+                send: true,
+              },
+            });
+      const n = cart.reduce((s, l) => s + l.qty, 0);
+      showToast(`${orderHeading(saved).main} · ${n} item dikirim ke dapur/bar — nota dicetak`);
+      resetOrder();
+      setDrawer(false);
+      void loadActive();
+      void printQueue.load();
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.openBillId) setConflict({ billId: e.openBillId, message: e.detail });
+      setPanelError(e instanceof ApiError ? e.detail : "Belum terkirim — periksa koneksi, lalu coba lagi. Tidak akan terkirim dua kali.");
+      if (e instanceof ApiError && e.status === 409) void loadActive();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The table already has a bill: open it, keeping what was being typed as
+   *  new, unsent items on it. */
+  async function joinExistingBill() {
+    if (!conflict) return;
+    try {
+      const bill = await api<ActiveOrder>(`/pos/open-orders/${conflict.billId}`, { token });
+      const keep = ctx.kind === "new" ? cart : [];
+      setConflict(null);
+      holdRef.current = newRef();
+      loadIntoPanel(bill, keep);
+    } catch (e: unknown) {
+      setPanelError(e instanceof ApiError ? e.detail : "Tagihan meja belum bisa dibuka — coba lagi.");
+      setConflict(null);
+    }
+  }
+
+  // ── Taking a sent item off a bill (bill-1: a reason, no PIN) ─────────────
+  const [voiding, setVoiding] = useState<{ uid: string; title: string; max: number; qty: number; reason: string; error: string | null } | null>(null);
+  async function submitVoid() {
+    if (!voiding || ctx.kind !== "open") return;
+    if (!voiding.reason.trim()) return setVoiding({ ...voiding, error: "Tulis alasannya — dapur/bar menerima slip BATAL dengan alasan ini." });
+    if (dirty) return setVoiding({ ...voiding, error: "Simpan atau kirim perubahan lain dulu, lalu batalkan item ini." });
+    setBusy(true);
+    try {
+      const updated = await api<ActiveOrder>(`/pos/open-orders/${ctx.id}/lines/${voiding.uid}/cancel`, {
+        token,
+        body: { rev: ctx.rev, quantity: voiding.qty, reason: voiding.reason.trim() },
+      });
+      showToast(`${voiding.qty}× ${voiding.title} dibatalkan — slip BATAL ke ${"dapur/bar"}`);
+      setVoiding(null);
+      loadIntoPanel(updated);
+      void loadActive();
+      void printQueue.load();
+    } catch (e: unknown) {
+      setVoiding({ ...voiding, error: e instanceof ApiError ? e.detail : "Belum tersimpan — periksa koneksi, lalu coba lagi." });
+      if (e instanceof ApiError && e.status === 409) void loadActive();
+    } finally {
+      setBusy(false);
+    }
   }
 
   function closePanelWork() {
@@ -454,7 +583,7 @@ export function SellScreen({
   const [loyalty, setLoyalty] = useState<Loyalty | null>(null);
   const [usePoints, setUsePoints] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
-  const [flash, setFlash] = useState<OrderResult | null>(null);
+  const [flash, setFlash] = useState<(OrderResult & { paper: string }) | null>(null);
   const [lineDiscountFor, setLineDiscountFor] = useState<string | null>(null);
   const [lineDiscountDraft, setLineDiscountDraft] = useState("");
 
@@ -504,7 +633,7 @@ export function SellScreen({
   const splitValid = payMode !== "split" || (cashAmount > 0 && cashAmount < moneyDue) || moneyDue === 0;
 
   function openPay() {
-    if (cart.length === 0) return;
+    if (cart.length === 0 && sentLines.length === 0) return;
     const missing = cart.filter((l) => !itemById.has(l.item.id));
     if (missing.length) {
       setPanelError("Ada item yang sudah tidak ada di menu — hapus dulu.");
@@ -516,7 +645,7 @@ export function SellScreen({
   }
 
   async function confirmPay() {
-    if (cart.length === 0 || busy || !splitValid) return;
+    if ((cart.length === 0 && sentLines.length === 0) || busy || !splitValid) return;
     if (orderType === "delivery" && !deliveryAddress.trim()) return setPayError("Pesanan antar perlu alamat pengantaran.");
     if (orderType === "delivery" && !deliveryPhone.trim() && !customer?.phone) return setPayError("Pesanan antar perlu nomor HP penerima.");
     if (needsPin && managerPin.length < 4) return setPayError("Diskon perlu PIN manajer — minta pemilik atau manajer memasukkan PIN-nya.");
@@ -568,12 +697,19 @@ export function SellScreen({
             customer_id: customer?.id ?? null,
             voucher_code: quote?.voucher_code ?? null,
             client_ref: payRef.current,
-            parent_order_id: ctx.kind === "addition" ? ctx.parentId : null,
             external_ref: orderType === "dine_in" ? null : externalRef.trim() || null,
           },
         });
       }
-      setFlash(res);
+      // A table's bill that was sent already has its slips; only the receipt is new.
+      setFlash({
+        ...res,
+        paper: !sentLines.length
+          ? "struk & slip masuk antrean cetak"
+          : cart.length
+            ? "slip item baru & struk masuk antrean cetak"
+            : "struk masuk antrean cetak",
+      });
       window.setTimeout(() => setFlash((f) => (f?.id === res.id ? null : f)), 6000);
       setPaying(false);
       setPayMode("cash");
@@ -607,7 +743,7 @@ export function SellScreen({
       try {
         await api(`/pos/tickets/${o.id}/cancel`, { token, body: { reason: reason || null } });
         if (ctx.kind === "open" && ctx.id === o.id) resetOrder();
-        showToast(`${orderLabel(o)} dibatalkan`);
+        showToast(`${orderLabel(o)} dibatalkan${o.sent_batches ? " — slip BATAL ke dapur/bar" : ""}`);
         await loadActive();
         return true;
       } catch (e: unknown) {
@@ -632,20 +768,25 @@ export function SellScreen({
         setBusyId(null);
       }
     },
-    addTo: (o) => void startAddition(o),
-    handover: async (o) => {
+    send: async (o) => {
+      if (ctx.kind === "open" && ctx.id === o.id && dirty) {
+        // The panel holds newer edits of this bill: send from there.
+        setView("new");
+        return;
+      }
       setBusyId(o.id);
       try {
-        await api(`/pos/kitchen/${o.id}/state`, { token, body: { state: "done", expected: "ready" } });
-        showToast(`${orderLabel(o)} sudah diserahkan`);
+        const sent = await api<ActiveOrder>(`/pos/open-orders/${o.id}/send`, { token, body: { rev: o.rev } });
+        showToast(`${orderHeading(sent).main} · dikirim ke dapur/bar — nota dicetak`);
+        if (ctx.kind === "open" && ctx.id === o.id) loadIntoPanel(sent);
+        void printQueue.load();
       } catch (e: unknown) {
-        showToast(e instanceof ApiError ? e.detail : "Gagal menyimpan — coba lagi.");
+        showToast(e instanceof ApiError ? e.detail : "Belum terkirim — coba lagi.");
       } finally {
         setBusyId(null);
         await loadActive();
       }
     },
-    print: (o) => void printReceiptOf(o.id),
   };
 
   // ── Shift and cash (M7) ──────────────────────────────────────────────────
@@ -728,12 +869,7 @@ export function SellScreen({
   }
 
   // ── Panel props, shared by the side panel and the drawer ────────────────
-  const panelCtx: PanelContext =
-    ctx.kind === "new"
-      ? { kind: "new" }
-      : ctx.kind === "open"
-        ? { kind: "open", code: ctx.code, source: ctx.source, guest: ctx.guest, dirty }
-        : { kind: "addition", parentCode: ctx.parentCode };
+  const panelCtx: PanelContext = ctx.kind === "new" ? { kind: "new" } : { kind: "open", title: ctx.title, source: ctx.source, dirty };
   const panelLines = cart.map((l) => ({
     uid: l.uid,
     title: displayName(l.item, l.variant),
@@ -743,16 +879,27 @@ export function SellScreen({
     unitPrice: linePrice(l),
     discount: l.discount,
     maxQty: Math.max(0, stockCap(l.item) - cart.filter((o) => o.item.id === l.item.id && o.uid !== l.uid).reduce((n, o) => n + o.qty, 0)),
+    guest: l.guest ?? null,
+  }));
+  const panelSent: SentPanelLine[] = sentLines.map((l, i) => ({
+    uid: l.uid ?? `s${i}`,
+    title: l.size ? `${l.name} · ${l.size}` : l.name,
+    modifiers: l.modifiers,
+    notes: l.notes ?? "",
+    qty: Number(l.quantity),
+    lineTotal: Number(l.line_total ?? 0),
+    batch: l.sent_batch ?? 1,
   }));
   const panel = (onClose?: () => void) => (
     <OrderPanel
       context={panelCtx}
       lines={panelLines}
+      sentLines={panelSent}
       quote={quote}
       quoting={quoting}
       orderType={orderType}
       orderTypes={ctx.kind === "new" ? NEW_TYPES : HELD_TYPES}
-      onOrderType={setOrderType}
+      onOrderType={sentLines.length ? null : setOrderType}
       guestName={guestName}
       onGuestName={setGuestName}
       tableLabel={tableLabel}
@@ -773,8 +920,13 @@ export function SellScreen({
               setLineDiscountDraft(l?.discount ? String(l.discount) : "");
             }
       }
+      onCancelSent={(uid) => {
+        const l = panelSent.find((x) => x.uid === uid);
+        if (l) setVoiding({ uid, title: l.title, max: l.qty, qty: l.qty, reason: "", error: null });
+      }}
       onClear={closePanelWork}
       onHold={() => void holdCurrent()}
+      onSend={tableBill ? () => void sendCurrent() : null}
       onPay={openPay}
       onClose={onClose}
       error={panelError}
@@ -782,6 +934,7 @@ export function SellScreen({
     />
   );
   const count = cart.reduce((n, l) => n + l.qty, 0);
+  const panelTitle = ctx.kind === "open" ? ctx.title : "Pesanan baru";
 
   return (
     <div className="min-h-[100dvh]">
@@ -795,8 +948,8 @@ export function SellScreen({
             <div className="segmented flex w-full md:inline-flex md:w-auto" role="tablist">
               {(
                 [
-                  ["new", ctx.kind === "open" ? `Pesanan ${ctx.code}` : ctx.kind === "addition" ? "Tambah pesanan" : "Pesanan baru", count],
-                  ["active", "Pesanan aktif", (active ?? []).length],
+                  ["new", panelTitle, count],
+                  ["active", "Pesanan aktif", openOrders.length],
                   ["history", "Riwayat transaksi", null],
                 ] as [View, string, number | null][]
               ).map(([id, label, n]) => (
@@ -809,12 +962,8 @@ export function SellScreen({
                 >
                   {label}
                   {n !== null && n > 0 && <span className={`tabular-nums ${view === id ? "font-semibold" : "ink-faint"}`}>{n}</span>}
-                  {id === "active" && (unpaidQr > 0 || readyCount > 0) && (
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{ background: readyCount > 0 ? "var(--good)" : "var(--warn)" }}
-                      aria-label={`${unpaidQr} pesanan QR menunggu bayar, ${readyCount} siap diambil`}
-                    />
+                  {id === "active" && toSend > 0 && (
+                    <span className="h-2 w-2 rounded-full" style={{ background: "var(--warn)" }} aria-label={`${toSend} pesanan perlu dikirim ke dapur/bar`} />
                   )}
                 </button>
               ))}
@@ -860,9 +1009,6 @@ export function SellScreen({
             <button onClick={openCashSheet} className="icon-btn ink-soft h-10 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Kas masuk / keluar">
               <IconWallet className="h-[18px] w-[18px]" /> <span className="hidden xl:inline">Kas</span>
             </button>
-            <a href={`/kitchen/${pairingToken}`} target="_blank" rel="noreferrer" className="icon-btn ink-soft h-10 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Buka layar dapur">
-              <IconExternal className="h-[18px] w-[18px]" /> <span className="hidden xl:inline">Dapur</span>
-            </a>
             <button onClick={onLock} className="icon-btn ink-soft h-10 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Kunci kasir">
               <IconLock className="h-[18px] w-[18px]" /> <span className="hidden xl:inline">Kunci</span>
             </button>
@@ -886,7 +1032,7 @@ export function SellScreen({
                     type="search"
                   />
                 </label>
-                {ctx.kind === "addition" && <span className="pill-quiet shrink-0 py-1 text-[13px]">Tambahan · Pesanan {ctx.parentCode}</span>}
+                {ctx.kind === "open" && <span className="pill-quiet shrink-0 py-1 text-[13px]">{ctx.title}</span>}
               </div>
               {itemsError && (
                 <p className="notice notice-bad mt-3 flex items-center justify-between gap-3">
@@ -952,17 +1098,22 @@ export function SellScreen({
               <div className="dock mx-auto flex max-w-3xl items-center gap-3 rounded-3xl px-4 py-3">
                 <button onClick={() => setDrawer(true)} className="min-w-0 flex-1 text-left" aria-label="Lihat pesanan">
                   <p className="ink-soft truncate text-[13px] font-medium">
-                    {ctx.kind === "open" ? `Pesanan ${ctx.code}` : ctx.kind === "addition" ? `Tambahan · Pesanan ${ctx.parentCode}` : "Pesanan baru"} ·{" "}
-                    {count > 0 ? `${count} item · lihat` : "kosong"}
+                    {panelTitle} · {count > 0 ? `${count} item${sentLines.length ? " baru" : ""} · lihat` : sentLines.length ? "semua terkirim" : "kosong"}
                   </p>
                   <p className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{formatRupiah(cartTotal)}</p>
                 </button>
                 <button onClick={() => setDrawer(true)} className="btn-quiet px-4 py-3 text-sm">
                   Pesanan
                 </button>
-                <button onClick={openPay} disabled={cart.length === 0 || busy} className="btn-accent px-6 py-3">
-                  Bayar
-                </button>
+                {tableBill && cart.length > 0 ? (
+                  <button onClick={() => void sendCurrent()} disabled={busy} className="btn-accent px-6 py-3">
+                    Kirim
+                  </button>
+                ) : (
+                  <button onClick={openPay} disabled={(cart.length === 0 && sentLines.length === 0) || busy} className="btn-accent px-6 py-3">
+                    Bayar
+                  </button>
+                )}
               </div>
             </div>
             {drawer && (
@@ -989,9 +1140,10 @@ export function SellScreen({
                   <p className="text-[13px] font-semibold">Cetakan</p>
                   <ul className="mt-1 space-y-2">
                     {o.print_jobs.map((p) => (
-                      <li key={p.kind} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <li key={p.job_id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                         <span className="text-[13px]">
-                          {{ receipt: "Struk", bar_ticket: "Slip bar", kitchen_ticket: "Slip dapur", bar_cancel: "Batal bar", kitchen_cancel: "Batal dapur" }[p.kind] ?? p.kind}
+                          {PRINT_KIND_LABEL[p.kind] ?? p.kind}
+                          {p.batch ? (p.batch > 1 ? ` · tambahan ${p.batch - 1}` : " · kiriman pertama") : ""}
                           <span className="ink-faint"> · {PRINTER_LABEL[p.printer]}{p.reprints ? ` · cetak ulang ${p.reprints}×` : ""}</span>
                         </span>
                         <span className={PRINT_STATUS[p.status].cls}>{PRINT_STATUS[p.status].text}</span>
@@ -1097,7 +1249,7 @@ export function SellScreen({
           <div role="dialog" aria-modal="true" aria-label="Pembayaran" className="sheet-panel sm:max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="overflow-y-auto px-6 pb-6 pt-5">
               <p className="ink-soft text-[13px] font-medium">
-                {ctx.kind === "open" ? `Pesanan ${ctx.code}` : ctx.kind === "addition" ? `Tambahan · Pesanan ${ctx.parentCode}` : "Pesanan baru"} · {count} item
+                {panelTitle} · {count + sentLines.reduce((n, l) => n + Number(l.quantity), 0)} item
               </p>
               <p className="text-[32px] font-semibold tabular-nums tracking-[-0.025em]">{formatRupiah(cartTotal)}</p>
               {quote && Number(quote.promo_total) > 0 && (
@@ -1278,6 +1430,21 @@ export function SellScreen({
             {shiftSheet === "open" ? (
               <p className="ink-soft text-sm">Modal awal di laci kasir.</p>
             ) : shift ? (
+              <>
+              {openOrders.length > 0 && (
+                <div className="notice notice-warn mt-3 text-sm" role="alert">
+                  <p className="font-semibold">
+                    Masih ada {openOrders.length} pesanan belum dibayar
+                  </p>
+                  <p className="mt-0.5">
+                    {openOrders
+                      .slice(0, 4)
+                      .map((o) => orderHeading(o).main)
+                      .join(", ")}
+                    {openOrders.length > 4 ? `, +${openOrders.length - 4} lagi` : ""}. Uangnya belum masuk laci. Pesanan ini tetap tersimpan dan terbawa ke shift berikutnya — pastikan memang belum dibayar sebelum menutup.
+                  </p>
+                </div>
+              )}
               <dl className="mt-3 space-y-1 text-sm">
                 <Row label="Modal awal" value={formatRupiah(shift.opening_float)} />
                 <Row label="Penjualan tunai" value={`+${formatRupiah(shift.cash_sales)}`} />
@@ -1289,6 +1456,7 @@ export function SellScreen({
                   <dd className="tabular-nums">{formatRupiah(shift.expected_cash ?? 0)}</dd>
                 </div>
               </dl>
+              </>
             ) : null}
             <label className="mt-5 block">
               <span className="text-[13px] font-medium">{shiftSheet === "open" ? "Modal awal (Rp)" : "Uang dihitung (Rp)"}</span>
@@ -1301,7 +1469,7 @@ export function SellScreen({
                 Batal
               </button>
               <button onClick={submitShift} disabled={busy} className="btn-accent flex-1 py-3">
-                {shiftSheet === "open" ? "Buka shift" : "Tutup shift"}
+                {shiftSheet === "open" ? "Buka shift" : openOrders.length > 0 ? "Tetap tutup shift" : "Tutup shift"}
               </button>
             </div>
           </div>
@@ -1387,6 +1555,65 @@ export function SellScreen({
         </div>
       )}
 
+      {voiding && (
+        <div className="sheet-scrim z-[60]" onClick={() => !busy && setVoiding(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Batalkan item" className="sheet-panel block px-6 pb-8 pt-5 sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <p className="text-[19px] font-semibold tracking-[-0.015em]">Batalkan {voiding.title}</p>
+            <p className="ink-soft text-sm">Sudah dikirim. Bar/dapur menerima slip BATAL dengan alasan di bawah; tagihan berkurang.</p>
+            {voiding.max > 1 && (
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-sm font-medium">Jumlah dibatalkan</span>
+                <div className="surface-inset flex items-center rounded-xl p-0.5">
+                  <button onClick={() => setVoiding({ ...voiding, qty: Math.max(1, voiding.qty - 1) })} className="h-9 w-9 rounded-[10px] text-lg" aria-label="Kurangi">
+                    −
+                  </button>
+                  <span className="w-8 text-center text-sm font-semibold tabular-nums">{voiding.qty}</span>
+                  <button onClick={() => setVoiding({ ...voiding, qty: Math.min(voiding.max, voiding.qty + 1) })} className="h-9 w-9 rounded-[10px] text-lg" aria-label="Tambah">
+                    +
+                  </button>
+                </div>
+              </div>
+            )}
+            <label className="mt-4 block">
+              <span className="text-[13px] font-medium">Alasan</span>
+              <input
+                autoFocus
+                value={voiding.reason}
+                onChange={(e) => setVoiding({ ...voiding, reason: e.target.value.slice(0, 200), error: null })}
+                className="field mt-1 text-sm"
+                placeholder="mis. salah ukuran, tamu tidak jadi"
+              />
+            </label>
+            {voiding.error && <p className="notice notice-bad mt-3 text-sm">{voiding.error}</p>}
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setVoiding(null)} disabled={busy} className="btn-quiet flex-1 py-3">
+                Kembali
+              </button>
+              <button onClick={() => void submitVoid()} disabled={busy || !voiding.reason.trim()} className="btn-danger flex-1 py-3">
+                Batalkan {voiding.qty} item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {conflict && (
+        <div className="sheet-scrim z-[60]" onClick={() => setConflict(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Meja sudah punya tagihan" className="sheet-panel block px-6 pb-8 pt-5 sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <p className="text-[19px] font-semibold tracking-[-0.015em]">Meja ini sudah punya tagihan</p>
+            <p className="ink-soft mt-1 text-sm">{conflict.message}</p>
+            <div className="mt-5 space-y-2">
+              <button onClick={() => void joinExistingBill()} className="btn-accent w-full py-3">
+                {ctx.kind === "new" && cart.length ? `Tambahkan ${count} item ke tagihan itu` : "Buka tagihan itu"}
+              </button>
+              <button onClick={() => setConflict(null)} className="btn-quiet w-full py-3">
+                Ganti nomor meja
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {flash && (
         <div className="fixed inset-x-0 bottom-24 z-40 flex justify-center px-4 lg:bottom-8" role="status">
           <div className="dock flex max-w-xl animate-scale-in items-center gap-3 rounded-3xl px-5 py-3.5">
@@ -1400,7 +1627,8 @@ export function SellScreen({
               </p>
               <p className="ink-soft truncate text-xs">
                 {flash.payments.map((p) => `${p.method === "cash" ? "tunai" : p.method === "points" ? "poin" : p.method.toUpperCase()} ${formatRupiah(p.amount)}`).join(" + ")}
-                {" · "}struk & slip masuk antrean cetak
+                {" · "}
+                {flash.paper}
               </p>
             </div>
             <button onClick={() => void printReceiptOf(flash.id)} className="btn-quiet ml-1 shrink-0 px-3 py-2 text-sm">

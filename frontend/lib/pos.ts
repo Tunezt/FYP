@@ -29,7 +29,13 @@ export type ActiveLine = {
   variant_id: string | null;
   modifier_ids: string[];
   done: boolean;
+  uid: string | null;              // bill-1: the line's identity on an open order
+  sent_batch: number | null;       // bill-1: which send it went out in; null = not sent yet
+  from_guest: boolean;             // bill-2: a guest added it from the QR menu
+  guest_name: string | null;
 };
+
+export type CancelledLine = { name: string; size: string | null; quantity: string; modifiers: string[]; sent_batch: number; reason: string; at: string };
 
 export type PriceChange = { name: string; was: string | null; now: string | null };
 
@@ -57,12 +63,39 @@ export type ActiveOrder = {
   parent_id: string | null;
   parent_code: string | null;
   price_changes: PriceChange[];
-  print_jobs: { job_id: string; kind: string; printer: "front" | "kitchen"; status: "pending" | "sending" | "uncertain" | "printed" | "failed" | "cancelled"; reprints: number }[];
+  print_jobs: {
+    job_id: string;
+    kind: string;
+    printer: "front" | "kitchen";
+    status: "pending" | "sending" | "uncertain" | "printed" | "failed" | "cancelled";
+    reprints: number;
+    batch: number | null;
+  }[];
   order_no: string;
   service_date: string | null;
   batch_no: number;
   external_ref: string | null;
   previous_day: boolean;
+  sent_batches: number;            // bill-1
+  unsent_count: number;            // lines not sent yet
+  cancelled_lines: CancelledLine[];
+};
+
+/** A dine-in order with a table is that table's open bill (bill-1): sent to the
+ *  Bar/Dapur as it grows, paid once when the table leaves. */
+export const isTableBill = (o: { order_type: string; table_label: string | null }) =>
+  o.order_type === "dine_in" && !!(o.table_label ?? "").trim();
+
+/** What the counter must still do for an unpaid order. */
+export const needsSending = (o: ActiveOrder) => o.payment === "unpaid" && isTableBill(o) && o.unsent_count > 0;
+
+export const PRINT_KIND_LABEL: Record<string, string> = {
+  receipt: "Struk",
+  nota: "Nota meja",
+  bar_ticket: "Slip bar",
+  kitchen_ticket: "Slip dapur",
+  bar_cancel: "Batal bar",
+  kitchen_cancel: "Batal dapur",
 };
 
 export type KitchenLine = {

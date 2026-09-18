@@ -421,3 +421,24 @@ async def test_a_takeaway_qr_order_is_paid_before_it_is_made(client, session_fac
     paid = await client.post(f"/pos/tickets/{placed['id']}/settle", headers=_auth(c["pos"]), json={"payments": _cash(15000)})
     assert paid.status_code == 200, paid.text
     assert (await client.get(watch)).json()["stage"] == "paid"
+
+
+# ── bill-3: the till can see every piece of a bill's paper ───────────────────
+
+
+async def test_the_till_lists_each_sends_paper_separately(client, session_factory, cafe):
+    c = cafe
+    await _stations(client, c)
+    pos = _auth(c["pos"])
+    bill = await _bill(client, c, _line(c, variant="standar", mods=["panas"]), table="Meja 3")
+    more = await client.put(f"/pos/open-orders/{bill['id']}", headers=pos, json={
+        "rev": bill["rev"], "lines": [_line(c, item="roti")], "send": True})
+    jobs = more.json()["print_jobs"]
+    assert sorted((p["kind"], p["batch"]) for p in jobs) == [
+        ("bar_ticket", 1), ("kitchen_ticket", 2), ("nota", 1), ("nota", 2)]
+    # A reprint of the first Bar slip is counted on that slip, not on another.
+    first_bar = next(p for p in jobs if p["kind"] == "bar_ticket")
+    assert (await client.post(f"/pos/print-jobs/{first_bar['job_id']}/reprint", headers=pos)).status_code in (200, 201)
+    after = (await client.get(f"/pos/open-orders/{bill['id']}", headers=pos)).json()["print_jobs"]
+    assert [(p["kind"], p["batch"], p["reprints"]) for p in after if p["kind"] == "bar_ticket"] == [("bar_ticket", 1, 1)]
+    assert len(after) == 4

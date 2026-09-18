@@ -279,6 +279,7 @@ class PrintSummaryOut(BaseModel):
     printer: str         # front · kitchen
     status: str          # pending · sending · uncertain · printed · failed · cancelled
     reprints: int = 0
+    batch: int | None = None   # bill-1: which send of an open bill (1, 2, ...); None for paper written at payment
 
 
 class PriceChangeOut(BaseModel):

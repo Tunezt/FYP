@@ -298,10 +298,11 @@ def display_status(job: PrintJob, now: datetime | None = None) -> str:
 
 
 # Jobs written in one transaction share its `now()`, so within a moment the
-# paper comes out in this order: the customer's copy first, then the slips.
+# paper comes out in this order: the customer's copy first, then the slips
+# (Bar before Dapur, so lists read the same way every time), then notices.
 PAPER_ORDER = case(
-    {"receipt": 0, "nota": 0, "bar_ticket": 1, "kitchen_ticket": 1, "bar_cancel": 2, "kitchen_cancel": 2},
-    value=PrintJob.kind, else_=3,
+    {"receipt": 0, "nota": 0, "bar_ticket": 1, "kitchen_ticket": 2, "bar_cancel": 3, "kitchen_cancel": 4},
+    value=PrintJob.kind, else_=5,
 )
 
 

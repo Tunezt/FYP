@@ -39,6 +39,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # bill-1: a 409 for a busy table names the open bill so the till can open it
+    expose_headers=["X-Open-Bill-Id"],
 )
 
 
