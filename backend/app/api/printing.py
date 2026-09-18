@@ -194,7 +194,7 @@ async def pos_print_jobs(
     if printer:
         stmt = stmt.where(PrintJob.printer == printer)
     if scope == "open":
-        stmt = stmt.where(PrintJob.status.in_(("pending", "claimed", "failed"))).order_by(PrintJob.created_at, PrintJob.id)
+        stmt = stmt.where(PrintJob.status.in_(("pending", "claimed", "failed"))).order_by(PrintJob.created_at, printing.PAPER_ORDER, PrintJob.id)
     else:
         stmt = stmt.order_by(PrintJob.created_at.desc(), PrintJob.id).limit(100)
     jobs = (await ctx.session.execute(stmt)).scalars().all()

@@ -30,7 +30,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Business, Order, PrintJob, Staff
@@ -266,13 +266,21 @@ def display_status(job: PrintJob, now: datetime | None = None) -> str:
     return job.status
 
 
+# Jobs written in one transaction share its `now()`, so within a moment the
+# paper comes out in this order: the customer's copy first, then the slips.
+PAPER_ORDER = case(
+    {"receipt": 0, "bar_ticket": 1, "kitchen_ticket": 1, "bar_cancel": 2, "kitchen_cancel": 2},
+    value=PrintJob.kind, else_=3,
+)
+
+
 async def claim_next(session: AsyncSession, *, printer: str, device: str, now: datetime | None = None) -> PrintJob | None:
     """A printer device asks for work. Oldest pending job for that printer, taken
     with `for update skip locked` so two devices never take the same job."""
     moment = now or datetime.now(timezone.utc)
     job = (await session.execute(
         select(PrintJob).where(PrintJob.printer == printer, PrintJob.status == "pending")
-        .order_by(PrintJob.created_at, PrintJob.id).limit(1).with_for_update(skip_locked=True)
+        .order_by(PrintJob.created_at, PAPER_ORDER, PrintJob.id).limit(1).with_for_update(skip_locked=True)
     )).scalar_one_or_none()
     if job is None:
         return None
@@ -366,7 +374,7 @@ async def jobs_for_orders(session: AsyncSession, order_ids: list[uuid.UUID]) -> 
     if not order_ids:
         return {}
     rows = (await session.execute(
-        select(PrintJob).where(PrintJob.order_id.in_(order_ids)).order_by(PrintJob.created_at, PrintJob.id)
+        select(PrintJob).where(PrintJob.order_id.in_(order_ids)).order_by(PrintJob.created_at, PAPER_ORDER, PrintJob.id)
     )).scalars().all()
     out: dict[uuid.UUID, list[PrintJob]] = {}
     for j in rows:

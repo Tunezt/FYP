@@ -1772,3 +1772,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Not done, deliberately:** no printer SDK, bridge or cloud-print adapter. That depends on hardware nobody has chosen, and could not be tested (documented with the bill sequence; NEEDS HUMAN note to follow).
 **Deviation:** none. No schema change.
 **Next:** bill-1. The owner changed direction (see the decision record at bill-1): dine-in becomes an open bill per table paid at the end, and per-item serving states (drafted as prt-5) are dropped, not landed.
+
+
+### [prt-7] The receipt comes out before the Bar slip, every time
+**Date:** 2026-09-18
+**Status:** done
+**Changed:** backend/app/services/printing.py (`PAPER_ORDER`; used by `claim_next` and `jobs_for_orders`), backend/app/api/printing.py (queue listing), backend/tests/test_prep_routing.py (+1 test)
+**Gates:** canary (§0.3) first: `git stash list` empty, `alembic downgrade base` then `upgrade head` (40 migrations), seed ok, pytest 596 passed 1 failed; that failure is this task. After the fix: pytest 598 passed 0 skipped - migrations round-trip ok (0040 -> 0039 -> 0040) - frontend build ok - seed ok
+**Notes:**
+- **The canary caught a real bug, not a flaky test.** Every print job one payment writes shares that transaction's `now()`, so the front printer's queue fell back to ordering by a random UUID. Roughly one sale in two printed the Bar slip before the customer's receipt. Now, within one moment, the receipt comes first, then the slips, then BATAL notices, then anything else. The till's queue lists them the same way.
+- The new test pays six orders and requires the front printer to pull `receipt, bar_ticket` six times in a row. It failed against the old ordering (checked by reverting the ordering locally) and passed five of five runs with the fix.
+- **Local DB housekeeping, stated for the record:** while landing prt-1 the gates first ran pytest before `alembic upgrade`, and 99 fixture businesses were left half-created (no chart or posting rules) and tripped two invariant tests. They were first completed with `ensure_standard_chart`/`ensure_standard_rules` (additive), then removed by this canary's rebuild from base. No test or application code was touched for it. The gate script now upgrades before testing.
+**Deviation:** none. No schema change.
+**Next:** bill-1.

@@ -335,6 +335,24 @@ async def test_a_printer_device_pulls_only_its_own_printers_jobs_and_reports_bac
     assert summary == {"receipt": "printed", "bar_ticket": "printed", "kitchen_ticket": "printed"}
 
 
+async def test_the_front_printer_gives_the_receipt_before_the_bar_slip_every_time(client, session_factory, cafe):
+    """Jobs from one payment share the transaction's timestamp; the order the
+    paper comes out in must not fall to a random id (canary after prt-4)."""
+    c = cafe
+    await _stations(client, c)
+    for n in range(6):
+        sale = await client.post("/pos/orders", headers=_auth(c["pos"]), json={
+            "lines": [_line(c, variant="standar", mods=["panas"])], "payments": _cash(18000),
+            "order_type": "dine_in", "table_label": f"Meja {n + 1}"})
+        assert sale.status_code == 201, sale.text
+    front = await _printer_token(client, c, "front")
+    kinds = []
+    while (job := (await client.post("/print/agent/claim", headers=front, json={"device": "depan"})).json()["job"]) is not None:
+        kinds.append(job["kind"])
+        await client.post(f"/print/agent/jobs/{job['id']}/result", headers=front, json={"device": "depan", "ok": True})
+    assert kinds == ["receipt", "bar_ticket"] * 6
+
+
 async def test_printer_tokens_are_scoped_and_die_with_a_re_pairing(client, session_factory, cafe):
     c = cafe
     kitchen = await _printer_token(client, c, "kitchen")
