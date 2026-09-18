@@ -1847,3 +1847,33 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Fixed during the run: the badge counted lines where the button counted items (both count items now); the paid toast said "struk & slip" for a bill whose slips had already gone (it now says which paper is new); slips within one send listed Dapur and Bar in random order.
 **Deviation:** none. No schema change.
 **Next:** bill-4. docs/printing.md and the runbook for open bills, the prt-6 paper-rules test adapted, a full end-to-end run, and the final report.
+
+
+### [bill-4] Open bills documented, both stations' paper rules tested, one full service run
+**Date:** 2026-09-18
+**Status:** done
+**Changed:** docs/printing.md (new: the room, how an order moves, what prints when, stock and open bills, job states, device API, hardware options), docs/runbook.md ("The printer will not print" rewritten; new "A table wants to add, change or cancel something"; closing the day checks open bills first; known-gaps row updated), backend/tests/test_prep_routing.py (+1 test, the prt-6 test carried over unchanged)
+**Gates:** canary (§0.3) first: `git stash list` empty, `alembic downgrade base` then `upgrade head` (41 migrations from nothing), seed ok, pytest 612 passed 0 skipped. Then the task gates: pytest 612 passed 0 skipped - migrations round-trip ok (0041 -> 0040 -> 0041) - frontend build ok - seed ok
+**Notes:**
+- **The prt-6 test landed unchanged.** It never depended on the dropped serving states. One takeaway with a driver reference: every slip printed, then marked reprints of the Bar and Dapur slips went to the right printers, then a refund produced a BATAL notice per printer, each listing only that station's items and no prices, and shown as waiting rather than printed.
+- **One service against the running server** (seeded Poernama; simulated printer devices with real printer tokens; `scratchpad/e2e.py`, all 13 checks passed):
+  1. A takeaway was paid first: receipt and Bar slip at the front, Dapur slip in the kitchen.
+  2. Meja 3's first round was sent. A guest at table "3" joined from the phone, *waiting* until the cashier sent it, and the page then said *sent*.
+  3. The front printer gave, in order: receipt and Bar (takeaway); nota and Bar (Meja 3); nota TAMBAHAN and Bar TAMBAHAN (the guest's Croissant). The kitchen gave the two Dapur slips.
+  4. The guest ordered another round from the phone. The cashier cancelled the already printed Nasi Goreng, giving a kitchen BATAL.
+  5. Meja 3 paid Rp 63.000 (promotions applied by the till). A replayed tap returned the same payment. The unsent Teh Tarik went to the Bar as TAMBAHAN, and the receipt listed Croissant, Kopi and Teh Tarik only.
+  6. At the end, Pesanan aktif had no unpaid orders and the print queue was empty.
+- **Seen, not changed (existing behaviour):** receipt lines of one payment can list in a different order from the cart, because lines written in one transaction share a timestamp and are ordered by id. The amounts are right. Worth a small follow-up if the owner cares about the order on the receipt.
+
+**Final report: software verified vs physical printing**
+- **Verified in software:** against the real Postgres, 612 tests (29 of them in `test_open_bills.py` and `test_prep_routing.py` for the prt/bill work), plus the browser runs recorded in bill-2 and bill-3 and the service run above. That covers: daily numbers shared by till and QR; Bar/Dapur routing per product; per-send slips and notas with only new items; TAMBAHAN, BATAL and CETAK ULANG labels; withdrawal of untouched slips; one bill per table under races; locked sent items; cancellation with a reason; guests joining and adding; stock promised to open bills; payment sending the remainder then only the receipt; deduplication of double taps and replays; honest print states; the pull API with device tokens; and the till and QR screens.
+- **Not verified, because no hardware exists here:** that any physical printer prints these documents, cuts between nota/receipt and Bar slip, fits 58/80 mm, or reports failures correctly. No printer model is claimed compatible. The only way to paper today is *Cetak manual* (the browser dialog), exercised up to the dialog on a machine without a receipt printer.
+**Deviation:** none. Nothing was pushed or deployed.
+**Next:** the owner's hardware decision below.
+
+### [bill-4] Unattended printing hardware — NEEDS HUMAN
+**Status:** NEEDS HUMAN (roadmap §3: needs hardware that does not exist here; guessing is expensive)
+**Blocker:** which printers the café buys, and how they connect. Unattended printing to the kitchen needs either printers that poll a URL themselves (Epson Server Direct Print / Star CloudPRNT, via an adapter to `/print/agent/*`), or a small always-on bridge on the café network that sends ESC/POS to both printers. Neither can be built honestly without the device to test it.
+**What I need:** printer models and connection (Ethernet/Wi-Fi/USB/Bluetooth), and whether an always-on bridge device (Raspberry Pi or spare Android phone) is acceptable.
+**What I did instead:** everything independent of that choice (prt-1 to prt-4, prt-7, bill-1 to bill-4), plus the browser fallback, clearly labelled as manual.
+**Next:** the adapter or bridge for the chosen hardware, tested end to end on the real printers (paper width, wrapping, the cut between nota/receipt and Bar slip, the kitchen buzzer, a pulled network cable mid-print).

@@ -422,3 +422,45 @@ async def test_browser_printing_is_a_manual_fallback_that_never_assumes_paper(cl
     said_yes = (await client.post(f"/pos/print-jobs/{receipt['id']}/browser-result", headers=pos, json={"ok": True})).json()
     assert said_yes["status"] == "printed" and said_yes["confirmed_by_person"] is True
     assert all(j["id"] != receipt["id"] for j in (await client.get("/pos/print-jobs?printer=front", headers=pos)).json())
+
+
+# ── prt-6: both stations follow the same paper rules ────────────────────────
+
+
+async def test_bar_and_dapur_both_get_batal_notices_and_marked_reprints(client, session_factory, cafe):
+    c = cafe
+    await _stations(client, c)
+    pos = _auth(c["pos"])
+    sale = (await client.post("/pos/orders", headers=pos, json={
+        "lines": [_line(c, variant="large", mods=["dingin"]), _line(c, item="roti")], "payments": _cash(37000),
+        "order_type": "takeaway", "external_ref": "GF-7731"})).json()
+    front, kitchen = await _printer_token(client, c, "front"), await _printer_token(client, c, "kitchen")
+    # Every slip reaches paper.
+    for token, device in ((front, "depan"), (front, "depan"), (kitchen, "dapur")):
+        job = (await client.post("/print/agent/claim", headers=token, json={"device": device})).json()["job"]
+        await client.post(f"/print/agent/jobs/{job['id']}/result", headers=token, json={"device": device, "ok": True})
+    queue = {j["kind"]: j for j in (await client.get("/pos/print-jobs?scope=recent", headers=pos)).json() if j["order_id"] == sale["id"]}
+    # A reprint of either slip is marked as one, on its own printer.
+    bar_copy = (await client.post(f"/pos/print-jobs/{queue['bar_ticket']['id']}/reprint", headers=pos)).json()
+    kitchen_copy = (await client.post(f"/pos/print-jobs/{queue['kitchen_ticket']['id']}/reprint", headers=pos)).json()
+    assert (bar_copy["printer"], kitchen_copy["printer"]) == ("front", "kitchen")
+    for copy in (bar_copy, kitchen_copy):
+        doc = (await client.get(f"/pos/print-jobs/{copy['id']}", headers=pos)).json()["document"]
+        texts = _texts(doc)
+        assert "CETAK ULANG" in texts and "PESANAN 001" in texts and "Driver: GF-7731" in texts
+    # Refunded after both slips were printed: both stations are told.
+    refund = await client.post(f"/pos/orders/{sale['id']}/refund", headers=pos, json={"manager_pin": "1234", "note": "salah pesan", "restock": True})
+    assert refund.status_code == 200, refund.text
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        jobs = [j for j in await _jobs(s, sale["id"]) if j.copy == "original"]
+        by_kind = {j.kind: j for j in jobs}
+        assert {"bar_cancel", "kitchen_cancel"} <= set(by_kind)
+        assert (by_kind["bar_cancel"].printer, by_kind["kitchen_cancel"].printer) == ("front", "kitchen")
+        bar_notice, kitchen_notice = _texts(by_kind["bar_cancel"].document), _texts(by_kind["kitchen_cancel"].document)
+        assert "BATAL" in bar_notice and "Americano" in bar_notice and "Roti" not in bar_notice
+        assert "BATAL" in kitchen_notice and "Roti" in kitchen_notice and "Americano" not in kitchen_notice
+        assert not any("Rp" in t for t in bar_notice + kitchen_notice)
+    # The till's order detail and queue show the notices waiting; nothing claims they are on paper yet.
+    open_kinds = {j["kind"]: j["status"] for j in (await client.get("/pos/print-jobs", headers=pos)).json() if j["order_id"] == sale["id"]}
+    assert open_kinds.get("bar_cancel") == "pending" and open_kinds.get("kitchen_cancel") == "pending"

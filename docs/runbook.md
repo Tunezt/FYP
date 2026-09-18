@@ -67,12 +67,44 @@ that costs.
 
 ### The printer will not print
 
-1. Ask first whether the customer needs paper at all. Most do not.
-2. Check the obvious: paper roll in the right way round, lid clicked shut, power, cable or
-   Bluetooth pairing.
-3. **The receipt still exists without the printer.** It is on the sale in the app, and it can be
-   shown on the screen or read out.
-4. Never hold up the queue for a receipt. Sell, then sort the printer out between customers.
+The kitchen works from paper, so a Dapur slip that did not print is food nobody is making.
+Deal with that first; receipts and notas can wait.
+
+1. **Look at the printer icon in the till's header.** "*n* perlu dicek" means a slip failed or
+   its outcome is unknown. Tap it to open *Antrean cetak*. A table's bill lists each send's
+   slips separately in its detail in *Pesanan aktif*.
+2. **If a Dapur slip failed or is "Belum pasti tercetak", walk to the kitchen and ask** whether
+   the chef has it. Then:
+   - they have it → **Kertas sudah ada**
+   - they do not → **Cetak ulang** (the new slip says CETAK ULANG, so it cannot be mistaken for a
+     second order), or read the order out to them from *Pesanan aktif* while the printer is fixed
+3. Check the printer itself: paper roll the right way round, lid shut, power, network cable or
+   wifi. Then **Coba lagi** on anything *Gagal cetak*.
+4. **Nothing is lost while the printer is down.** Every slip waits in the queue and prints when
+   the printer is back. Sends and sales are already recorded and never undone by a printer.
+5. For the front printer only, **Cetak manual** prints through the tablet's print dialog. It
+   asks afterwards whether paper came out; answer truthfully.
+6. If a table's nota did not print, tell the table what was sent; the bill is on the till and on
+   the guest's QR page. Never hold up the queue for a receipt.
+
+A cancelled item or order whose slip may already be printed sends a **BATAL** slip to the same
+printer, with the reason. Still walk over and tell the chef or barista: they may have started.
+
+How the printers connect, and what is still undecided, is in `docs/printing.md`.
+
+### A table wants to add, change or cancel something
+
+Tables pay when they leave, so their order stays open in **Pesanan aktif** until then.
+
+- **Add:** open the table (Pesanan aktif → the table → *Tambah / ubah*, or just type its table
+  number on a new order and choose *Tambahkan ke tagihan itu*), add the items, **Kirim ke
+  dapur/bar**. Only the new items print, marked TAMBAHAN, and a nota goes to the table.
+- **A guest ordered from their phone:** the table shows *Perlu dikirim* with a dot on the tab.
+  Check the items, then **Kirim**. That is the confirmation; the nota goes to the table.
+- **Change something already sent:** it cannot be edited. **Batalkan** it with a reason (the
+  station gets a BATAL slip), then add the right one and send it.
+- **The whole table leaves without eating:** Pesanan aktif → the table → *Batalkan* with a
+  reason. Nothing was paid, so nothing is refunded; every station is told.
 
 ### The API is down (the app loads but nothing works)
 
@@ -218,18 +250,21 @@ café's WiFi and the café's tablet take.
 
 ## Closing the day
 
-1. **The cashier closes the shift at the till.** Tutup shift → count the drawer → type what is
+1. **Check Pesanan aktif first.** Every table still listed has not paid. Tutup shift warns
+   with their names. A table that really left without paying is cancelled with the reason; one
+   still sitting stays open and carries over to the next shift.
+2. **The cashier closes the shift at the till.** Tutup shift → count the drawer → type what is
    actually there. Do not type what the screen expects. The difference is the point of the
    exercise, and it is posted to the books as a variance either way.
-2. **A difference is information, not an accusation.** Small and both directions over a week is
+3. **A difference is information, not an accusation.** Small and both directions over a week is
    normal. Consistently short is worth a quiet conversation. Consistently short on one person's
    shifts is worth a louder one.
-3. **The owner checks Keuangan**: the shift you just closed, its expected-versus-counted, and the
+4. **The owner checks Keuangan**: the shift you just closed, its expected-versus-counted, and the
    day's expenses. Then **Otorisasi manajer** — anything approved today that you did not know
    about.
-4. **The nightly job runs by itself** and sends what needs attention to WhatsApp. You do not have
+5. **The nightly job runs by itself** and sends what needs attention to WhatsApp. You do not have
    to wait up for it. If it found nothing, it sends nothing — silence means normal.
-5. **If the day's number looks wrong**, check the business day boundary before anything else:
+6. **If the day's number looks wrong**, check the business day boundary before anything else:
    Pengaturan → Profil usaha → "Hari usaha dimulai jam". A café that closes after midnight with
    this set to 00.00 splits every night across two days.
 
@@ -243,7 +278,7 @@ Honest list, so nobody discovers these at 8am. Each one is a task that exists an
 |---|---|---|
 | No offline till | the internet going down stops sales; paper and re-entry | M14 |
 | No uptime alert | you find out the API is down by trying to use it | M15-T5 |
-| No tested printer | receipt printing has not been proven on real hardware | M15-T6 |
+| No tested printer | receipts, notas and Bar/Dapur slips are queued and rendered, but no printer or bridge has printed them unattended; only browser printing exists | M15-T6, `docs/printing.md` |
 
 ---
 
