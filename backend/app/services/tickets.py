@@ -187,6 +187,7 @@ async def price_cart(
             "modifier_prices": [str(Decimal(m.price_delta)) for m in modifiers],
             "quantity": str(quantity), "base_price": str(base), "unit_price": str(unit_price),
             "line_total": str(line_total), "notes": (spec.notes or "").strip() or None,
+            "prep_station": item.prep_station,
         })
     bill = price_order(inputs, config, order_type=order_type)
     return cart_lines, bill

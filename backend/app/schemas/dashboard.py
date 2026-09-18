@@ -56,6 +56,7 @@ class InventoryItem(BaseModel):
     avg_daily_usage: float | None
     days_remaining: float | None
     below_reorder_threshold: bool
+    prep_station: str | None = None   # prt-2: bar · kitchen · none; None = not set
 
 
 class ItemCreateIn(BaseModel):
@@ -66,6 +67,7 @@ class ItemCreateIn(BaseModel):
     sell_price: Decimal = Field(ge=0, default=Decimal(0))
     reorder_threshold: Decimal = Field(ge=0, default=Decimal(0))
     uom_id: uuid.UUID | None = None  # M4-T3; resolved from `unit` when omitted
+    prep_station: Literal["bar", "kitchen", "none"] | None = None   # prt-2
 
 
 class ItemUpdateIn(BaseModel):
@@ -76,6 +78,7 @@ class ItemUpdateIn(BaseModel):
     sell_price: Decimal | None = Field(default=None, ge=0)
     reorder_threshold: Decimal | None = Field(default=None, ge=0)
     uom_id: uuid.UUID | None = None
+    prep_station: Literal["bar", "kitchen", "none"] | None = None   # prt-2
 
 
 # ── Units of measure (M4-T3) ─────────────────────────────────────────────────

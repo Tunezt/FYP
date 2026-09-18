@@ -255,6 +255,7 @@ async def inventory(ctx: OwnerCtx):
                 avg_daily_usage=round(daily, 3) if daily > 0 else None,
                 days_remaining=r.get("days_remaining"),
                 below_reorder_threshold=bool(r.get("below_reorder_threshold", item.current_stock <= item.reorder_threshold)),
+                prep_station=item.prep_station,
             )
         )
     return out
@@ -291,6 +292,7 @@ async def create_item(payload: ItemCreateIn, ctx: OwnerCtx):
         avg_daily_usage=None,
         days_remaining=None,
         below_reorder_threshold=item.current_stock <= item.reorder_threshold,
+        prep_station=item.prep_station,
     )
 
 
@@ -329,6 +331,7 @@ async def update_item(item_id: uuid.UUID, payload: ItemUpdateIn, ctx: OwnerCtx):
         avg_daily_usage=None,
         days_remaining=None,
         below_reorder_threshold=item.current_stock <= item.reorder_threshold,
+        prep_station=item.prep_station,
     )
 
 

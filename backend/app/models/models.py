@@ -139,6 +139,9 @@ class Item(Base):
     )  # migration 0009 (M4-T3); `unit` stays as the free-text label
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
+    # Where it is prepared (prt-2, migration 0039): 'bar' | 'kitchen' | 'none';
+    # NULL = not decided yet, routed to the front with a warning.
+    prep_station: Mapped[str | None] = mapped_column(Text)
 
 
 class Sale(Base):
@@ -415,6 +418,8 @@ class OrderLine(Base):
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     line_discount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    # The item's preparation station at the moment of sale (prt-2, migration 0039).
+    prep_station: Mapped[str | None] = mapped_column(Text)
     unit_cost_at_sale: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()

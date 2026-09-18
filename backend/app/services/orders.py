@@ -494,6 +494,7 @@ async def create_order(
             line_total=pl.line_total,
             unit_cost_at_sale=cost,
             notes=spec.notes,
+            prep_station=item.prep_station,   # snapshot (prt-2): where it was made, then
         )
         session.add(line)
         await session.flush()

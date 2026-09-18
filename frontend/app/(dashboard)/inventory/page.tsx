@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatQty, formatRupiah } from "@/lib/format";
-import type { InventoryItem } from "@/lib/types";
+import { PREP_STATION_LABEL, type InventoryItem, type PrepStation } from "@/lib/types";
 import { EmptyState, ErrorState, Glass, ItemIcon, RowChevron, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { IconBox, IconPlus } from "@/components/icons";
@@ -15,6 +15,7 @@ type Draft = {
   cost_price: string;
   sell_price: string;
   reorder_threshold: string;
+  prep_station: PrepStation | null;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -24,6 +25,7 @@ const EMPTY_DRAFT: Draft = {
   cost_price: "0",
   sell_price: "0",
   reorder_threshold: "0",
+  prep_station: null,
 };
 
 function isAtRisk(item: InventoryItem): boolean {
@@ -76,6 +78,7 @@ export default function InventoryPage() {
       cost_price: String(Number(item.cost_price)),
       sell_price: String(Number(item.sell_price)),
       reorder_threshold: String(Number(item.reorder_threshold)),
+      prep_station: item.prep_station ?? null,
     });
     setError(null);
     setEditing(item);
@@ -92,6 +95,7 @@ export default function InventoryPage() {
         cost_price: Number(draft.cost_price) || 0,
         sell_price: Number(draft.sell_price) || 0,
         reorder_threshold: Number(draft.reorder_threshold) || 0,
+        ...(draft.prep_station ? { prep_station: draft.prep_station } : {}),
       };
       if (editing) {
         await mutate(`/api/items/${editing.id}`, body, "PATCH");
@@ -228,6 +232,32 @@ export default function InventoryPage() {
               onChange={(e) => setDraft({ ...draft, reorder_threshold: e.target.value })}
             />
           </Field>
+          {Number(draft.sell_price) > 0 && (
+            <div>
+              <p className="mb-1.5 text-[13px] font-medium">
+                Disiapkan di{" "}
+                <span className="ink-faint font-normal">— menentukan slip bar atau slip dapur</span>
+              </p>
+              <div className="segmented grid w-full grid-cols-3 gap-[3px]" role="group" aria-label="Disiapkan di">
+                {(Object.keys(PREP_STATION_LABEL) as PrepStation[]).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setDraft({ ...draft, prep_station: st })}
+                    aria-pressed={draft.prep_station === st}
+                    className="segmented-item min-h-[2.5rem] whitespace-nowrap px-2 text-[13px]"
+                  >
+                    {PREP_STATION_LABEL[st]}
+                  </button>
+                ))}
+              </div>
+              {!draft.prep_station && (
+                <p className="mt-1.5 text-xs" style={{ color: "var(--warn)" }}>
+                  Belum diatur — sampai dipilih, item ini dicetak di slip bar dengan tanda &ldquo;tujuan belum diatur&rdquo;.
+                </p>
+              )}
+            </div>
+          )}
           {error && (
             <p className="notice notice-bad">
               {error}
@@ -263,7 +293,7 @@ function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: Inven
                 <p className="truncate text-sm font-medium">{item.name}</p>
                 <p className="ink-faint truncate text-xs">
                   {Number(item.sell_price) > 0
-                    ? `jual ${formatRupiah(item.sell_price)}`
+                    ? `jual ${formatRupiah(item.sell_price)} · ${item.prep_station ? PREP_STATION_LABEL[item.prep_station] : "tujuan belum diatur"}`
                     : "bahan baku"}
                   {item.avg_daily_usage ? ` · ±${item.avg_daily_usage} ${item.unit}/hari` : ""}
                 </p>

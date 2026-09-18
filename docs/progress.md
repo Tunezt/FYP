@@ -1728,3 +1728,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Clock note:** the full suite was first run after 00:00 WIB, when 8-10 existing tests fail on an unmodified HEAD (verified in a separate worktree; memory updated). Work continued on a side branch and each commit landed only after the gates were re-run after 06:00 WIB.
 **Deviation:** none. Additive: one new table (RLS in the same migration, isolation tested), four nullable/defaulted columns, two partial unique indexes.
 **Next:** prt-2.
+
+
+### [prt-2] Every item says where it is made: Bar, Dapur, or nothing
+**Date:** 2026-09-18
+**Status:** done
+**Changed:** backend/alembic/versions/0039_prep_station.py (new: `items.prep_station`, `order_lines.prep_station`), backend/app/models/models.py, backend/app/schemas/dashboard.py + pos.py, backend/app/api/dashboard.py, backend/app/api/pos.py, backend/app/services/orders.py (snapshot on the sold line), backend/app/services/tickets.py (cart lines carry it), backend/app/seed.py (explicit stations for the demo menu), backend/tests/test_prep_routing.py (new, 2 tests), frontend/lib/types.ts, frontend/app/(dashboard)/inventory/page.tsx
+**Gates:** pytest 584 passed 0 skipped - migrations round-trip ok (0039 -> 0038 -> 0039) - frontend build ok - seed ok
+**Notes:**
+- **Set by the owner, never inferred.** `bar` (the front: coffee, tea, and display pastries such as the croissant), `kitchen`, or `none` (nothing to prepare). A new item has none until someone chooses, whatever its name. Stok → edit → *Disiapkan di* offers the three choices, and each row shows its station or "tujuan belum diatur".
+- **Snapshotted per sold line**, like `unit_cost_at_sale`: moving the roti to the front display tomorrow does not change where yesterday's order was made. Tested.
+- An item with no station set is routed to the front slip with a flag (prt-3). The person reading it stands beside the cashier and can walk it back.
+**Deviation:** none. Additive: two nullable columns with check constraints.
+**Next:** prt-3.

@@ -82,6 +82,13 @@ VARIANTS = [
     ("Americano", "Large", 22000, 7500),
 ]
 
+# Where each sellable item is prepared (prt-2). Set by hand, never inferred from
+# a name: the croissant is on the display at the front, so it is the bar's.
+PREP_STATIONS = {
+    "Es Kopi Susu": "bar", "Kopi Arabica (cup)": "bar", "Americano": "bar", "Matcha Latte": "bar",
+    "Teh Tarik": "bar", "Croissant": "bar", "Roti Bakar Coklat": "kitchen", "Nasi Goreng Spesial": "kitchen",
+}
+
 OWNER_PHONE = "628120001111"
 
 ITEMS = [
@@ -187,6 +194,7 @@ async def seed(confirm: bool = False) -> None:
                 current_stock=Decimal(stock), cost_price=Decimal(cost),
                 sell_price=Decimal(sell), reorder_threshold=Decimal(reorder),
                 uom_id=uoms[unit].id if unit in uoms else None,
+                prep_station=PREP_STATIONS.get(name),
             )
             session.add(item)
             items.append((item, weight))
@@ -269,7 +277,7 @@ async def seed(confirm: bool = False) -> None:
                 line = OrderLine(
                     business_id=business_id, order_id=order.id, item_id=item.id, variant_id=variant_id,
                     quantity=qty, unit_price=unit_price, line_total=total,
-                    unit_cost_at_sale=unit_cost, created_at=sold_at,
+                    unit_cost_at_sale=unit_cost, created_at=sold_at, prep_station=item.prep_station,
                 )
                 session.add(line)
                 method = rng.choices(["cash", "qris"], weights=[7, 3])[0]

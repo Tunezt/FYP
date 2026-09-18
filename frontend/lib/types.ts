@@ -36,6 +36,14 @@ export type InventoryItem = {
   avg_daily_usage: number | null;
   days_remaining: number | null;
   below_reorder_threshold: boolean;
+  prep_station?: PrepStation | null; // prt-2: null = not decided yet
+};
+
+export type PrepStation = "bar" | "kitchen" | "none";
+export const PREP_STATION_LABEL: Record<PrepStation, string> = {
+  bar: "Bar (depan)",
+  kitchen: "Dapur",
+  none: "Tanpa persiapan",
 };
 
 export type ExpenseRow = {
