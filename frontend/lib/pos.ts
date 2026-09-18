@@ -57,6 +57,11 @@ export type ActiveOrder = {
   parent_id: string | null;
   parent_code: string | null;
   price_changes: PriceChange[];
+  order_no: string;
+  service_date: string | null;
+  batch_no: number;
+  external_ref: string | null;
+  previous_day: boolean;
 };
 
 export type KitchenLine = {
@@ -84,6 +89,8 @@ export type KitchenTicket = {
   state_since: string | null;
   lines: KitchenLine[];
   parent_code: string | null;
+  order_no: string;
+  batch_no: number;
   status: string;
   reversal_reason: string | null;
   reversed_by: string | null;
@@ -116,6 +123,39 @@ export const SERVICE_LABEL: Record<string, string> = {
 
 /** A reference a device invents once per submission, so a retry is the same
  *  submission (svc-2). 20 url-safe characters. */
+/** How an order is named out loud and on paper (prt-1). Dine-in with a table:
+ *  "MEJA 7" first, "Pesanan 042" under it. Anything else: "PESANAN 042".
+ *  A paid addition keeps its original's number and says which batch it is. A
+ *  driver's reference is shown beside the local number, never instead of it. */
+export type Identity = {
+  order_type: string;
+  table_label: string | null;
+  order_no: string;
+  batch_no?: number | null;
+  external_ref?: string | null;
+};
+
+export function orderHeading(o: Identity): { main: string; sub: string | null } {
+  const batch = o.batch_no ? `Tambahan ${o.batch_no}` : null;
+  const table = (o.table_label ?? "").trim().replace(/^meja\s*/i, "");
+  const driver = o.external_ref ? `Driver ${o.external_ref}` : null;
+  if (o.order_type === "dine_in" && table) {
+    return { main: `MEJA ${table.toUpperCase()}`, sub: [`Pesanan ${o.order_no}`, batch, driver].filter(Boolean).join(" · ") };
+  }
+  return { main: `PESANAN ${o.order_no}`, sub: [batch, driver].filter(Boolean).join(" · ") || null };
+}
+
+/** "Pesanan 042" / "Pesanan 042 · Tambahan 1", for sentences and toasts. */
+export function orderLabel(o: Identity): string {
+  return `Pesanan ${o.order_no}${o.batch_no ? ` · Tambahan ${o.batch_no}` : ""}`;
+}
+
+export function serviceDateLabel(isoDate: string | null): string {
+  if (!isoDate) return "";
+  const [y, m, d] = isoDate.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+}
+
 export function newRef(): string {
   const bytes = new Uint8Array(15);
   crypto.getRandomValues(bytes);

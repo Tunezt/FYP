@@ -1,6 +1,6 @@
 """QR e-menu (M11-T1): what a guest sees and sends, and what the till sees of it."""
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -110,6 +110,8 @@ class TicketOut(BaseModel):
     rounding: Decimal
     total: Decimal
     is_estimate: bool
+    order_no: str | None = None         # prt-1: "042", the number said at the counter
+    batch_no: int = 0
     kitchen_state: str | None = None   # once paid: new · preparing · ready · done (M11-T2)
     access_key: str | None = None      # svc-5: returned to the device that placed it, nobody else
     revised: bool = False              # svc-5: the cashier changed it after it was sent
@@ -155,6 +157,7 @@ class DraftIn(BaseModel):
     note: str | None = Field(default=None, max_length=200)
     client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     parent_order_id: uuid.UUID | None = None   # svc-3: held addition to a paid order
+    external_ref: str | None = Field(default=None, max_length=40)   # prt-1: a driver's or platform's reference, typed by hand
 
 
 class OpenOrderUpdateIn(BaseModel):
@@ -166,6 +169,7 @@ class OpenOrderUpdateIn(BaseModel):
     table_label: str | None = Field(default=None, max_length=20)
     guest_name: str | None = Field(default=None, max_length=60)
     note: str | None = Field(default=None, max_length=200)
+    external_ref: str | None = Field(default=None, max_length=40)
 
 
 class ActiveLineOut(BaseModel):
@@ -206,6 +210,12 @@ class ActiveOrderOut(BaseModel):
     lines: list[ActiveLineOut]
     parent_id: uuid.UUID | None = None
     parent_code: str | None = None
+    # prt-1: the daily service number, its day, and which batch of the family
+    order_no: str = ""
+    service_date: date | None = None
+    batch_no: int = 0
+    external_ref: str | None = None
+    previous_day: bool = False       # numbered on an earlier business day than today
     # svc-5: unpaid lines whose catalogue price or availability moved since
     # they were priced. Payment is refused until the order is re-priced.
     price_changes: list["PriceChangeOut"] = []

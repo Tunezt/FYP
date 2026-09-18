@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -136,6 +136,7 @@ class OrderIn(BaseModel):
     # svc-2: a double tap on "Bayar" or a retried request is the same sale.
     client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     parent_order_id: uuid.UUID | None = None   # svc-3: an addition to this paid order
+    external_ref: str | None = Field(default=None, max_length=40)   # prt-1: driver pickup reference, typed by hand
 
 
 # ── Customers at the till (M8-T1) ───────────────────────────────────────────
@@ -253,6 +254,8 @@ class OrderOut(BaseModel):
     payments: list[PaymentOut]
     parent_order_id: uuid.UUID | None = None   # svc-3
     parent_number: str | None = None
+    order_no: str = ""                         # prt-1
+    batch_no: int = 0
 
 
 class ReceiptLineOut(BaseModel):
@@ -293,6 +296,10 @@ class ReceiptOut(BaseModel):
     total: Decimal
     payments: list[PaymentOut]
     parent_number: str | None = None   # svc-3: printed as "Tambahan untuk #..."
+    order_no: str = ""                 # prt-1: "042"
+    service_date: date | None = None
+    batch_no: int = 0
+    external_ref: str | None = None
 
 
 # ── Void / refund (M3-T4): reversals authorised by the manager (owner) PIN ────
@@ -314,6 +321,8 @@ class OrderSummaryOut(BaseModel):
     customer_name: str | None = None
     table_label: str | None = None
     entry_source: str = "live"        # M15-T10: 'manual_backdated' was typed from paper
+    order_no: str = ""                # prt-1
+    service_date: date | None = None  # the day that number belongs to
 
 
 class OrdersPage(BaseModel):
@@ -442,6 +451,8 @@ class KitchenTicketOut(BaseModel):
     state_since: datetime | None
     lines: list[KitchenLineOut]
     parent_code: str | None = None   # svc-3
+    order_no: str = ""               # prt-1
+    batch_no: int = 0
     status: str = "completed"        # svc-4: voided / refunded on a cancellation notice
     reversal_reason: str | None = None
     reversed_by: str | None = None

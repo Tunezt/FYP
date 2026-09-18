@@ -1710,3 +1710,21 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Browser screenshots in emulated mobile sizes were sometimes cropped or timed out in the preview pane. Those checks were confirmed by reading layout metrics and page text instead.
 **Deviation:** none. Nothing was pushed or deployed.
 **Next:** owner review of the three decisions and the NEEDS HUMAN items above; push only when asked.
+
+
+### [prt-1] Daily service numbers: Pesanan 042, one sequence for till and QR
+**Date:** 2026-09-18
+**Status:** done
+**Changed:** backend/alembic/versions/0038_service_numbers.py (new: `service_number_counters` with RLS; `orders.service_date/service_number/batch_no/external_ref`), backend/app/models/models.py + __init__.py, backend/app/services/service_numbers.py (new), backend/app/services/orders.py, backend/app/services/tickets.py, backend/app/services/kitchen.py, backend/app/api/pos.py, backend/app/api/menu.py, backend/app/schemas/pos.py + menu.py, backend/tests/test_service_numbers.py (new, 8 tests), frontend/lib/pos.ts (`orderHeading`, `orderLabel`), frontend/components/pos/ActiveOrders.tsx, OrderPanel.tsx, SellScreen.tsx, Receipts.tsx, frontend/components/TransactionHistory.tsx, frontend/lib/types.ts, frontend/app/kitchen/[businessToken]/page.tsx, frontend/app/menu/[token]/page.tsx
+**Gates:** pytest 582 passed 0 skipped - migrations round-trip ok (0038 -> 0037 -> 0038) - frontend build ok - seed ok
+**Notes:**
+- **User-directed: the café's real layout** (cashier and barista at the front, kitchen 15-20 m back, chef on paper). This supersedes the svc-sequence assumption that kitchen work runs through a screen. The svc improvements (choices, held orders, QR, Pesanan aktif) are kept.
+- **One number people say out loud.** 001, 002 ... per business per *business day* (M15-T4 boundary), shared by till and QR, allocated server-side when an order is first persisted (held draft, QR order, or sale). One `insert ... on conflict do update ... returning` on a counter row, so concurrent requests cannot share a number and no number is derived from a count of orders. A cancelled order keeps its number and the counter never goes back. A request that rolls back takes its increment with it, since nobody ever saw that number. Past 999 it is simply 1000.
+- **Kept through everything.** Retries replay the numbered order (svc-2); edits, payment and refresh never renumber. An order carried past the day boundary keeps its number and date, and Pesanan aktif marks it with the date. A paid addition shares its original's number and takes `batch_no` 1, 2 ... under a lock on the original ("Pesanan 042 · Tambahan 1").
+- **UUIDs and old references untouched.** The receipt's eight-character reference stays. Historical orders are not renumbered and display `#XXXX`. Additions made before this migration are ordered into batches by creation time (needed for the new unique index), and their numbers stay NULL.
+- **Headings:** dine-in with a table shows "MEJA 7" first and "Pesanan 042" second; everything else shows "PESANAN 042". A driver's reference (`external_ref`, typed by hand, no integration) is shown beside the number, never instead of it. Kasir/QR badges stay separate.
+- **History disambiguates.** `/api/orders?q=001` matches the service number across days and every row carries `service_date`; the dashboard list is grouped by day already. The number authorises nothing.
+- Tests: 12 concurrent mixed till/QR/draft requests get 001-012; the number is identical on the QR page, active orders, receipt, kitchen ticket and after a replayed payment; cancelled numbers are not reused; batches; a 04:00 day start puts 02:30 on the previous day's sequence; carried-over orders are flagged; 999 → 1000; legacy fallback; RLS on the counter table.
+- **Clock note:** the full suite was first run after 00:00 WIB, when 8-10 existing tests fail on an unmodified HEAD (verified in a separate worktree; memory updated). Work continued on a side branch and each commit landed only after the gates were re-run after 06:00 WIB.
+**Deviation:** none. Additive: one new table (RLS in the same migration, isolation tested), four nullable/defaulted columns, two partial unique indexes.
+**Next:** prt-2.

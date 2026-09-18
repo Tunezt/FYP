@@ -145,6 +145,8 @@ export type OrderRow = {
   table_label: string | null;
   /** M15-T10: "manual_backdated" was typed in afterwards from a paper slip. */
   entry_source: "live" | "manual_backdated";
+  order_no?: string; // prt-1: daily service number, "" for orders before it existed
+  service_date?: string | null;
 };
 
 export type OrdersPage = { total: number; rows: OrderRow[] };

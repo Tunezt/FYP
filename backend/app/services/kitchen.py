@@ -47,6 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import (
     Approval, Item, ItemVariant, KitchenEvent, KitchenLineEvent, Order, OrderLine, OrderLineModifier, Staff,
 )
+from app.services.service_numbers import service_label
 from app.services.tickets import ticket_code
 
 STATES = ("new", "preparing", "ready", "done")
@@ -98,6 +99,8 @@ class KitchenTicket:
     state_since: datetime | None
     lines: list[KitchenLine] = field(default_factory=list)
     parent_code: str | None = None   # svc-3: "Tambahan untuk #1234"
+    order_no: str = ""               # prt-1
+    batch_no: int = 0
     status: str = "completed"        # svc-4: voided / refunded for a cancellation notice
     reversal_reason: str | None = None
     reversed_by: str | None = None
@@ -203,6 +206,7 @@ async def ticket_view(session: AsyncSession, order: Order, event: KitchenEvent |
     state = event.state if event is not None else "new"
     return KitchenTicket(
         parent_code=order_code(parent) if parent is not None else None,
+        order_no=service_label(order), batch_no=order.batch_no or 0,
         order_id=order.id, code=order_code(order), source=order.source, order_type=order.order_type,
         table_label=order.table_label, guest_name=order.guest_name, note=cart.get("note"),
         delivery_address=order.delivery_address,

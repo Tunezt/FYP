@@ -47,7 +47,14 @@ function TransactionRow({ order, tz }: { order: OrderRow; tz?: string }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
-            <span className="tabular-nums">#{order.number}</span>
+            {order.order_no ? (
+              <>
+                <span className="tabular-nums">Pesanan {order.order_no}</span>
+                <span className="ink-faint tabular-nums">#{order.number}</span>
+              </>
+            ) : (
+              <span className="tabular-nums">#{order.number}</span>
+            )}
             {chip && <span className={chip.cls}>{chip.text}</span>}
             {order.entry_source === "manual_backdated" && (
               <span className="pill-quiet">dari nota kertas</span>

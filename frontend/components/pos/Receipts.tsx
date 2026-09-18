@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
+import { orderHeading, orderLabel, serviceDateLabel } from "@/lib/pos";
 
 export type Receipt = {
   order_id: string;
@@ -41,6 +42,10 @@ export type Receipt = {
   total: string;
   payments: { method: string; amount: string }[];
   parent_number?: string | null;
+  order_no: string;
+  service_date: string | null;
+  batch_no: number;
+  external_ref: string | null;
 };
 
 /** One row of the recent-sales list (M15-T11): enough to recognise the sale
@@ -48,6 +53,8 @@ export type Receipt = {
 type OrderRow = {
   id: string;
   number: string;
+  order_no: string;
+  service_date: string | null;
   sold_at: string;
   status: string;
   order_type: string;
@@ -174,7 +181,7 @@ export function TransactionsView({
                 {done.result.status === "voided" ? "Transaksi dibatalkan" : "Uang dikembalikan"}
               </p>
               <p className="text-sm">
-                #{done.receipt.number} · {formatRupiah(done.receipt.total)}
+                {orderLabel(done.receipt)} · #{done.receipt.number} · {formatRupiah(done.receipt.total)}
                 {done.result.reversing_lines.some((l) => l.stock_after !== null)
                   ? " · stok sudah dikembalikan"
                   : " · stok tidak dikembalikan"}
@@ -203,7 +210,9 @@ export function TransactionsView({
             </button>
             <div className="surface-inset rounded-2xl mt-3 px-4 py-3">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-lg font-bold tracking-[-0.02em]">#{open.number}</p>
+                <p className="text-lg font-bold tracking-[-0.02em]">
+                  {orderLabel(open)} <span className="ink-faint text-sm font-medium">#{open.number}</span>
+                </p>
                 <p className="text-lg font-bold tabular-nums">{formatRupiah(open.total)}</p>
               </div>
               <p className="ink-soft text-xs">
@@ -296,7 +305,7 @@ export function TransactionsView({
                       {busy
                         ? "Memproses…"
                         : mode === "void"
-                          ? `Batalkan #${open.number}`
+                          ? `Batalkan ${orderLabel(open)}`
                           : `Kembalikan ${formatRupiah(open.total)}`}
                     </button>
                   </div>
@@ -311,7 +320,7 @@ export function TransactionsView({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="field w-full py-3 text-sm"
-              placeholder="Cari nomor struk, mis. A1B2C3D4"
+              placeholder="Cari nomor pesanan (042) atau nomor struk"
             />
             {rows === null ? (
               <p className="surface-inset rounded-2xl mt-4 px-4 py-6 text-center text-sm">Memuat…</p>
@@ -329,7 +338,8 @@ export function TransactionsView({
                     >
                       <div className="min-w-0">
                         <p className="font-bold tracking-tight">
-                          #{row.number}
+                          {row.order_no ? `Pesanan ${row.order_no}` : `#${row.number}`}
+                          {row.order_no && <span className="ink-faint font-normal"> · #{row.number}</span>}
                           {row.status !== "completed" && (
                             <span className="ink-faint font-normal">
                               {" "}
@@ -373,8 +383,11 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
       >
         <p className="text-center text-sm font-bold uppercase">{receipt.business_name}</p>
         <p className="text-center">{when}</p>
+        <p className="mt-2 text-center text-2xl font-bold">{orderHeading(receipt).main}</p>
+        {orderHeading(receipt).sub && <p className="text-center font-bold">{orderHeading(receipt).sub}</p>}
         <p className="text-center">
-          #{receipt.number}
+          Struk #{receipt.number}
+          {receipt.service_date ? ` · ${serviceDateLabel(receipt.service_date)}` : ""}
           {receipt.staff_name ? ` · ${receipt.staff_name}` : ""}
           {receipt.customer_name ? ` · utk ${receipt.customer_name}` : ""}
           {receipt.status !== "completed" ? ` · ${receipt.status === "voided" ? "DIBATALKAN" : "DIKEMBALIKAN"}` : ""}
@@ -384,7 +397,6 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
           {receipt.table_label ? ` · ${receipt.table_label}` : ""}
           {receipt.delivery_address ? ` · ${receipt.delivery_address}` : ""}
         </p>
-        {receipt.parent_number && <p className="text-center">Tambahan untuk #{receipt.parent_number}</p>}
         <hr className="my-3 border-dashed border-black" />
         {receipt.lines.map((l, i) => (
           <div key={i} className="mb-2">

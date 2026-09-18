@@ -387,6 +387,12 @@ class Order(Base):
     # An addition bought after this family's first order was paid (svc-3,
     # migration 0036): always the original order, never another addition.
     parent_order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"))
+    # Daily service number (prt-1, migration 0038): "Pesanan 042". An addition
+    # shares its original's number and date and carries batch_no 1, 2, ...
+    service_date: Mapped[date | None] = mapped_column(Date)
+    service_number: Mapped[int | None] = mapped_column(Integer)
+    batch_no: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
+    external_ref: Mapped[str | None] = mapped_column(Text)
 
 
 class OrderLine(Base):
@@ -1016,6 +1022,20 @@ class KitchenEvent(Base):
     state: Mapped[str] = mapped_column(kitchen_state, nullable=False)
     staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
     created_at: Mapped[datetime] = _now()
+
+
+class ServiceNumberCounter(Base):
+    """The last daily service number handed out, per business per business day
+    (prt-1, migration 0038). Incremented atomically; never decremented."""
+
+    __tablename__ = "service_number_counters"
+
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True
+    )
+    service_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    last_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = _now()
 
 
 class KitchenLineEvent(Base):

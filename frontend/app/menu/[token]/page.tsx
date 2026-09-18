@@ -60,6 +60,8 @@ type Ticket = {
   kitchen_state: "new" | "preparing" | "ready" | "done" | null;
   access_key: string | null;
   revised: boolean;
+  order_no: string | null;
+  batch_no: number;
 };
 type OrderType = "dine_in" | "takeaway";
 
@@ -531,7 +533,7 @@ export default function MenuPage() {
                 <span className="ink-soft text-sm">Total</span>
                 <span className={`text-[26px] font-semibold tabular-nums tracking-[-0.02em] ${quote ? "" : "opacity-50"}`}>{formatRupiah(quote?.total ?? estimate)}</span>
               </div>
-              <p className="ink-soft mt-1 text-[13px] leading-snug">Belum dibayar. Setelah kirim, tunjukkan kode pesanan ke kasir dan bayar di sana. Pesanan mulai dibuat setelah dibayar.</p>
+              <p className="ink-soft mt-1 text-[13px] leading-snug">Belum dibayar. Setelah kirim, sebutkan nomor pesanan di kasir dan bayar di sana. Pesanan mulai dibuat setelah dibayar.</p>
               {(quoteError || submitError) && (
                 <p role="alert" className="notice notice-bad mt-2">
                   {submitError ?? quoteError}
@@ -577,7 +579,7 @@ function OrderStatus({
       setError(null);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 404) setGone(true);
-      else setError("Status belum bisa diperbarui — periksa sinyal. Kode pesananmu tetap berlaku.");
+      else setError("Status belum bisa diperbarui — periksa sinyal. Nomor pesananmu tetap berlaku.");
     }
   }, [token, placed]);
 
@@ -615,7 +617,7 @@ function OrderStatus({
         ? "Pesanan dikembalikan"
         : "Pesanan dibatalkan"
       : waiting
-        ? "Tunjukkan kode ini ke kasir"
+        ? "Sebutkan nomor ini di kasir"
         : handedOver
           ? "Pesanan sudah diserahkan"
           : ticket.kitchen_state === "ready"
@@ -636,16 +638,17 @@ function OrderStatus({
           ? "Terima kasih, selamat menikmati!"
           : ticket.kitchen_state === "ready"
             ? ticket.order_type === "takeaway"
-              ? "Sebutkan kode pesananmu saat mengambil."
-              : "Pesananmu segera diantar ke meja, atau ambil di kasir dengan kode ini."
+              ? "Sebutkan nomor pesananmu saat mengambil."
+              : "Pesananmu segera diantar ke meja."
             : "Halaman ini diperbarui otomatis.";
 
   return (
     <main className="mx-auto min-h-[100dvh] max-w-md px-4 pb-10 pt-6">
       <p className="ink-soft text-[13px] font-medium">{businessName}</p>
       <section className="glass-card mt-3 px-6 pb-6 pt-7 text-center" aria-live="polite">
-        <p className="ink-soft text-sm">Kode pesanan</p>
-        <p className="mt-1 text-[56px] font-semibold leading-none tabular-nums tracking-[-0.03em]">{ticket?.code ?? "…"}</p>
+        <p className="ink-soft text-sm">Nomor pesanan</p>
+        <p className="mt-1 text-[64px] font-semibold leading-none tabular-nums tracking-[-0.03em]">{ticket ? ticket.order_no ?? ticket.code : "…"}</p>
+        {ticket?.order_type === "dine_in" && ticket.table_label && <p className="mt-1 text-[17px] font-semibold">{ticket.table_label}</p>}
         <h1 className="mt-4 text-[20px] font-semibold tracking-[-0.015em]">{headline}</h1>
         <p className="ink-soft mx-auto mt-1 max-w-[18rem] text-[15px]">{sub}</p>
         {ticket?.revised && !cancelled && <p className="notice notice-warn mt-3 text-sm">Kasir memperbarui pesananmu. Periksa isi dan totalnya di bawah.</p>}

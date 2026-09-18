@@ -33,6 +33,7 @@ export type PanelContext =
   | { kind: "new" }
   | { kind: "open"; code: string; source: "pos" | "menu"; guest: string | null; dirty: boolean }
   | { kind: "addition"; parentCode: string };
+// `code` / `parentCode` carry "042" or "Meja 7 · Pesanan 042" (prt-1).
 
 /** The order being built, always in view on a wide till and in the drawer on a
  *  narrow one. Every line is tappable to change its choices; quantities have
@@ -49,6 +50,8 @@ export function OrderPanel({
   onGuestName,
   tableLabel,
   onTableLabel,
+  externalRef,
+  onExternalRef,
   onQty,
   onEdit,
   onDiscount,
@@ -70,6 +73,8 @@ export function OrderPanel({
   onGuestName: (v: string) => void;
   tableLabel: string;
   onTableLabel: (v: string) => void;
+  externalRef: string;
+  onExternalRef: (v: string) => void;
   onQty: (uid: string, delta: number) => void;
   onEdit: (uid: string) => void;
   onDiscount: ((uid: string) => void) | null;
@@ -86,7 +91,7 @@ export function OrderPanel({
   const empty = lines.length === 0;
 
   const title =
-    context.kind === "new" ? "Pesanan baru" : context.kind === "open" ? `Pesanan ${context.code}` : "Tambah pesanan";
+    context.kind === "new" ? "Pesanan baru" : context.kind === "open" ? `Pesanan ${context.code}` : `Tambahan · Pesanan ${context.parentCode}`;
 
   return (
     <section aria-label="Ringkasan pesanan" className="flex h-full min-h-0 flex-col">
@@ -101,7 +106,7 @@ export function OrderPanel({
                 {context.dirty ? " · ada perubahan" : ""}
               </>
             )}
-            {context.kind === "addition" && <>Tambahan untuk {context.parentCode} · dibayar terpisah</>}
+            {context.kind === "addition" && <>Nomor tetap {context.parentCode} · dibayar terpisah, struk sendiri</>}
           </p>
         </div>
         {onClose && (
@@ -132,6 +137,16 @@ export function OrderPanel({
             placeholder="Nama pelanggan (opsional)"
             aria-label="Nama pelanggan"
           />
+          {orderType !== "dine_in" && (
+            <input
+              value={externalRef}
+              onChange={(e) => onExternalRef(e.target.value.slice(0, 40))}
+              className="field w-32 py-2 text-sm"
+              placeholder="Kode driver"
+              aria-label="Kode driver (opsional)"
+              title="Nomor pesanan dari aplikasi ojol, kalau ada"
+            />
+          )}
           {orderType === "dine_in" && (
             <input
               value={tableLabel}

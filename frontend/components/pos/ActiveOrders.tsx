@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { IconAlert, IconChevronRight, IconClose, IconNote, IconPrinter } from "@/components/icons";
 import { formatRupiah } from "@/lib/format";
 import {
+  orderHeading,
+  serviceDateLabel,
   PREP_LABEL,
   SERVICE_LABEL,
   SOURCE_LABEL,
@@ -190,27 +192,30 @@ function PrepBadge({ o }: { o: ActiveOrder }) {
 
 function OrderRow({ order: o, active, onOpen }: { order: ActiveOrder; active: boolean; onOpen: () => void }) {
   const waited = minutesSince(o.placed_at);
+  const head = orderHeading(o);
   return (
     <button
       onClick={onOpen}
       aria-current={active}
       className={`list-row-action flex w-full items-center gap-4 px-4 py-3.5 text-left sm:px-5 ${active ? "bg-[color:var(--row-hover)]" : ""}`}
     >
-      <div className="w-[5.25rem] shrink-0">
-        <p className="text-[19px] font-semibold tabular-nums tracking-[-0.02em]">{o.code}</p>
-        <p className="ink-faint text-xs">{SOURCE_LABEL[o.source]}</p>
+      <div className="w-[8.75rem] shrink-0">
+        <p className="whitespace-nowrap text-[17px] font-semibold leading-tight tabular-nums tracking-[-0.015em]">{head.main}</p>
+        {head.sub && <p className="ink-soft text-[13px] font-medium tabular-nums">{head.sub}</p>}
+        <p className="mt-0.5 flex items-center gap-1">
+          <span className="pill-quiet">{SOURCE_LABEL[o.source]}</span>
+          {o.previous_day && <span className="pill-warn">{serviceDateLabel(o.service_date)}</span>}
+        </p>
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[15px] font-medium">
           {o.guest_name || SERVICE_LABEL[o.order_type] || o.order_type}
           {o.guest_name ? <span className="ink-soft font-normal"> · {SERVICE_LABEL[o.order_type] ?? o.order_type}</span> : null}
-          {o.table_label ? <span className="ink-soft font-normal"> · {o.table_label}</span> : null}
         </p>
         <p className="ink-soft truncate text-[13px]">{lineSummary(o.lines)}</p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <PaymentBadge o={o} />
           <PrepBadge o={o} />
-          {o.parent_code && <span className="pill-quiet">Tambahan untuk {o.parent_code}</span>}
           {o.price_changes.length > 0 && <span className="pill-warn">Harga berubah</span>}
         </div>
       </div>
@@ -245,16 +250,18 @@ function OrderDetail({
     setReason("");
   }, [o.id]);
   const unpaid = o.payment === "unpaid";
+  const head = orderHeading(o);
 
   return (
     <div className="px-5 pb-5 pt-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[28px] font-semibold leading-none tabular-nums tracking-[-0.025em]">{o.code}</p>
+          <p className="text-[28px] font-semibold leading-none tabular-nums tracking-[-0.025em]">{head.main}</p>
+          {head.sub && <p className="mt-1 text-[15px] font-medium tabular-nums">{head.sub}</p>}
           <p className="ink-soft mt-1.5 text-[13px]">
             {SOURCE_LABEL[o.source]} · {SERVICE_LABEL[o.order_type] ?? o.order_type}
-            {o.table_label ? ` · ${o.table_label}` : ""}
             {o.guest_name ? ` · ${o.guest_name}` : ""}
+            {o.previous_day ? ` · dari ${serviceDateLabel(o.service_date)}` : ""}
           </p>
           <p className="ink-faint text-[13px] tabular-nums">
             Diterima {clockTime(o.placed_at)} · {waitLabel(minutesSince(o.placed_at))} lalu
@@ -269,7 +276,6 @@ function OrderDetail({
       <div className="mt-3 flex flex-wrap gap-1.5">
         <PaymentBadge o={o} />
         <PrepBadge o={o} />
-        {o.parent_code && <span className="pill-quiet">Tambahan untuk {o.parent_code}</span>}
       </div>
 
       {o.price_changes.length > 0 && (

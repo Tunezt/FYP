@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { IconAlert, IconCheck, IconLock, IconNote, IconPlugOff } from "@/components/icons";
 import { formatQty } from "@/lib/format";
-import { clockTime, minutesSince, waitLabel, type KitchenBoard, type KitchenLine, type KitchenTicket, type PrepState } from "@/lib/pos";
+import { clockTime, minutesSince, orderHeading, orderLabel, waitLabel, type KitchenBoard, type KitchenLine, type KitchenTicket, type PrepState } from "@/lib/pos";
 
 // Kitchen display (M11-T2, svc-4/7). Same pairing link as the till, a
 // different page. Paid orders only, oldest first, in the order the work
@@ -245,7 +245,7 @@ function Board({
     } catch (e: unknown) {
       const message = e instanceof ApiError ? e.detail : "Belum tersimpan — periksa koneksi, lalu coba lagi.";
       notify(t.order_id, message);
-      announce(`${t.code}: ${message}`);
+      announce(`${orderLabel(t)}: ${message}`);
       void load();
     } finally {
       setBusy((b) => ({ ...b, [t.order_id]: false }));
@@ -262,7 +262,7 @@ function Board({
     } catch (e: unknown) {
       const message = e instanceof ApiError ? e.detail : "Belum tersimpan — coba lagi.";
       notify(t.order_id, message);
-      announce(`${t.code}: ${message}`);
+      announce(`${orderLabel(t)}: ${message}`);
       void load();
     } finally {
       setBusy((b) => ({ ...b, [t.order_id]: false }));
@@ -352,7 +352,8 @@ function Board({
                     <IconAlert className="h-5 w-5 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="text-[17px] font-semibold">
-                        {t.code} {t.status === "refunded" ? "dikembalikan" : "dibatalkan"} — hentikan pembuatan
+                        {orderHeading(t).main}
+                        {orderHeading(t).sub ? ` · ${orderHeading(t).sub}` : ""} {t.status === "refunded" ? "dikembalikan" : "dibatalkan"} — hentikan pembuatan
                       </p>
                       <p className="text-sm">
                         {lineText(t.lines)}
@@ -445,11 +446,12 @@ function TicketCard({
     <article
       className="glass-card overflow-hidden p-0"
       style={level === "long" && t.state !== "ready" ? { boxShadow: "0 0 0 1.5px var(--warn), var(--shadow-card)" } : undefined}
-      aria-label={`Pesanan ${t.code}`}
+      aria-label={orderLabel(t)}
     >
       <div className="flex items-start justify-between gap-3 px-4 pb-2 pt-3.5">
         <div className="min-w-0">
-          <p className="text-[30px] font-semibold leading-none tabular-nums tracking-[-0.025em]">{t.code}</p>
+          <p className="text-[30px] font-semibold leading-none tabular-nums tracking-[-0.025em]">{orderHeading(t).main}</p>
+          {orderHeading(t).sub && <p className="mt-1 text-[17px] font-semibold tabular-nums">{orderHeading(t).sub}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span
               className="rounded-md px-2 py-0.5 text-[13px] font-semibold"
@@ -457,7 +459,7 @@ function TicketCard({
             >
               {t.order_type === "dine_in" ? t.table_label || "Makan di sini" : SERVICE[t.order_type] ?? t.order_type}
             </span>
-            {t.parent_code && <span className="pill-warn text-[13px]">Tambahan untuk {t.parent_code}</span>}
+            {t.batch_no > 0 && <span className="pill-warn text-[13px]">TAMBAHAN</span>}
             {t.guest_name && <span className="ink-soft truncate text-sm">{t.guest_name}</span>}
           </div>
           {t.delivery_address && <p className="ink-soft mt-1 text-sm">{t.delivery_address}</p>}
@@ -579,13 +581,16 @@ function History({ tickets, now }: { tickets: KitchenTicket[]; now: number }) {
     <ul className="glass-card mx-auto max-w-3xl overflow-hidden p-0">
       {tickets.map((t, i) => (
         <li key={t.order_id} className={`flex items-start gap-4 px-5 py-3.5 ${i > 0 ? "hairline-t" : ""}`}>
-          <p className="w-20 shrink-0 text-[19px] font-semibold tabular-nums">{t.code}</p>
+          <p className="w-28 shrink-0 text-[17px] font-semibold leading-tight tabular-nums">
+            {orderHeading(t).main}
+            {orderHeading(t).sub && <span className="ink-soft block text-[13px] font-medium">{orderHeading(t).sub}</span>}
+          </p>
           <div className="min-w-0 flex-1">
             <p className="text-[15px] leading-snug">{lineText(t.lines)}</p>
             <p className="ink-soft text-[13px]">
               {t.order_type === "dine_in" ? t.table_label || "Makan di sini" : SERVICE[t.order_type] ?? t.order_type}
               {t.guest_name ? ` · ${t.guest_name}` : ""}
-              {t.parent_code ? ` · tambahan untuk ${t.parent_code}` : ""}
+
             </p>
           </div>
           <div className="shrink-0 text-right">

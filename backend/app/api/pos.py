@@ -84,6 +84,7 @@ from app.services.vouchers import VoucherInvalid
 from app.services.points import InsufficientPoints, PointsInvalid
 from app.services.pricing import PricingInvalid
 from app.services.sales import InsufficientStock, ItemNotFound, record_sale
+from app.services.service_numbers import service_label
 from app.services.velocity import check_low_stock_for_item
 
 router = APIRouter(prefix="/pos", tags=["pos"])
@@ -427,6 +428,7 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             guest_name=payload.guest_name,
             guest_phone=payload.guest_phone,
             parent_order_id=payload.parent_order_id,
+            external_ref=payload.external_ref,
         )
     except ParentOrderInvalid as exc:
         raise HTTPException(status_code=409, detail=_PARENT_ERRORS[exc.code])
@@ -521,6 +523,7 @@ async def _order_out(session, created) -> OrderOut:
         sold_at=order.sold_at,
         parent_order_id=order.parent_order_id,
         parent_number=order_number(order.parent_order_id) if order.parent_order_id else None,
+        order_no=service_label(order), batch_no=order.batch_no or 0,
         lines=[
             OrderLineOut(
                 id=cl.line.id, item_id=cl.line.item_id, variant_id=cl.line.variant_id, item_name=cl.item_name,
@@ -704,6 +707,9 @@ async def _active_views(session, orders, tickets_by_id=None):
     names = {}
     if staff_ids:
         names = dict((await session.execute(select(Staff.id, Staff.name).where(Staff.id.in_(staff_ids)))).all())
+    from app.services.service_numbers import service_day
+
+    today = await service_day(session, orders[0].business_id) if orders else None
     parents = {}
     parent_ids = {getattr(o, "parent_order_id", None) for o in orders} - {None}
     if parent_ids:
@@ -743,6 +749,8 @@ async def _active_views(session, orders, tickets_by_id=None):
 
             changes = [PriceChangeOut(name=ch.name, was=ch.was, now=ch.now) for ch in await price_changes(session, o)]
         out.append(ActiveOrderOut(
+            order_no=service_label(o), service_date=o.service_date, batch_no=o.batch_no or 0,
+            external_ref=o.external_ref, previous_day=bool(today and o.service_date and o.service_date < today),
             price_changes=changes,
             id=o.id, code=order_code(o), number=order_number(o.id), source=o.source, status=o.status, payment=payment,
             prep=ticket.state if ticket is not None else None,
@@ -797,6 +805,7 @@ async def pos_hold_draft(payload: DraftIn, ctx: PosCtx):
             ctx.session, business_id=ctx.business_id, staff_id=ctx.staff_id, lines=_cart_specs(payload.lines),
             order_type=payload.order_type, table_label=payload.table_label, guest_name=payload.guest_name,
             note=payload.note, client_ref=payload.client_ref, parent_order_id=payload.parent_order_id,
+            external_ref=payload.external_ref,
         ))
     except ParentOrderInvalid as exc:
         raise HTTPException(status_code=409, detail=_PARENT_ERRORS[exc.code])
@@ -818,7 +827,7 @@ async def pos_update_open_order(order_id: uuid.UUID, payload: OpenOrderUpdateIn,
         order = await _price_errors(lambda: update_open_order(
             ctx.session, business_id=ctx.business_id, order=order, expected_rev=payload.rev, staff_id=ctx.staff_id,
             lines=_cart_specs(payload.lines), order_type=payload.order_type, table_label=payload.table_label,
-            guest_name=payload.guest_name, note=payload.note,
+            guest_name=payload.guest_name, note=payload.note, external_ref=payload.external_ref,
         ))
     except TicketNotOpen as exc:
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
@@ -923,6 +932,8 @@ async def receipt_view(session, business_id: uuid.UUID, order_id: uuid.UUID) -> 
         total=order.total,
         payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in data["payments"]],
         parent_number=order_number(order.parent_order_id) if order.parent_order_id else None,
+        order_no=service_label(order), service_date=order.service_date, batch_no=order.batch_no or 0,
+        external_ref=order.external_ref,
     )
 
 
@@ -1202,6 +1213,7 @@ def _kitchen_out(t) -> KitchenTicketOut:
         order_id=t.order_id, code=t.code, source=t.source, order_type=t.order_type, table_label=t.table_label,
         guest_name=t.guest_name, note=t.note, delivery_address=t.delivery_address,
         sold_at=t.sold_at, state=t.state, state_since=t.state_since, parent_code=t.parent_code,
+        order_no=t.order_no, batch_no=t.batch_no,
         status=t.status, reversal_reason=t.reversal_reason, reversed_by=t.reversed_by, reversed_at=t.reversed_at,
         state_by=t.state_by,
         lines=[

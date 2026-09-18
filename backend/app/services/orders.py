@@ -39,6 +39,7 @@ from app.services.pricing import LineInput, price_order, pricing_config
 from app.services.promos import CartLine, apply_promos, load_rules
 from app.services.vouchers import check_voucher, redeem as redeem_voucher, reverse_for_order as reverse_voucher, voucher_by_code
 from app.services.sales import ATOMIC_DECREMENT, InsufficientStock, ItemNotFound
+from app.services.service_numbers import number_order, service_label
 from app.services.stock import record_movement
 from app.services.units import convert_quantity, to_ledger_precision
 
@@ -251,6 +252,7 @@ async def create_order(
     guest_phone: str | None = None,
     entry_source: str = "live",
     parent_order_id: uuid.UUID | None = None,
+    external_ref: str | None = None,
 ) -> CreatedOrder:
     """`ticket` (M11-T1): an open e-menu row to fulfil. The sale is written on
     that row — its status flips open → completed under an atomic claim, so two
@@ -434,6 +436,11 @@ async def create_order(
         order.table_label, order.delivery_address = table_label, delivery_address
         order.guest_name, order.guest_phone = guest_name, guest_phone
         order.entry_source = entry_source
+        if external_ref is not None:
+            order.external_ref = (external_ref or "").strip() or None
+        # A held or QR order was numbered when it was first saved; one from
+        # before daily numbers existed gets its number now (prt-1).
+        await number_order(session, order, at=order.created_at, parent=parent)
     else:
         order = Order(
             shift_id=shift_id,
@@ -458,7 +465,12 @@ async def create_order(
             guest_phone=guest_phone,
             entry_source=entry_source,
             parent_order_id=parent.id if parent is not None else None,
+            external_ref=(external_ref or "").strip() or None,
         )
+        # The daily service number (prt-1): allocated in this transaction, so a
+        # sale that fails takes its number back with it and one that commits
+        # keeps it for good. A backdated slip is numbered on its own day.
+        await number_order(session, order, at=sold_at, parent=parent)
         session.add(order)
     await session.flush()
 
@@ -969,6 +981,8 @@ class OrderSummary:
     customer_name: str | None
     table_label: str | None
     entry_source: str
+    order_no: str = ""
+    service_date: object = None
 
 
 def order_number(order_id: uuid.UUID) -> str:
@@ -1016,9 +1030,14 @@ async def list_orders(
         base = base.where(Order.sold_at < until)
     if staff_id is not None:
         base = base.where(Order.staff_id == staff_id)
-    needle = (q or "").strip().replace("-", "").upper()
+    needle = (q or "").strip().replace("-", "").replace("#", "").upper()
     if needle:
-        base = base.where(number.like(f"%{needle}%"))
+        # A short all-digit query is a daily service number ("042"); anything
+        # else is the receipt reference. The list always carries the date.
+        if needle.isdigit() and len(needle) <= 5:
+            base = base.where((Order.service_number == int(needle)) | number.like(f"%{needle}%"))
+        else:
+            base = base.where(number.like(f"%{needle}%"))
 
     total = (await session.execute(
         select(func.count()).select_from(base.order_by(None).subquery())
@@ -1031,7 +1050,8 @@ async def list_orders(
             id=o.id, number=order_number(o.id), sold_at=o.sold_at, status=o.status,
             order_type=o.order_type, total=Decimal(o.total), line_count=int(n),
             staff_name=staff_name, customer_name=customer_name, table_label=o.table_label,
-            entry_source=o.entry_source,
+            entry_source=o.entry_source, order_no=service_label(o) if o.service_number else "",
+            service_date=o.service_date,
         )
         for o, staff_name, customer_name, n in rows
     ], int(total)

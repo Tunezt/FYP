@@ -17,7 +17,7 @@ import {
   type Selection,
   type Variant,
 } from "@/lib/choices";
-import { newRef, type ActiveOrder, type PosItem } from "@/lib/pos";
+import { newRef, orderLabel, type ActiveOrder, type PosItem } from "@/lib/pos";
 import { OrderPanel, type PanelContext } from "@/components/pos/OrderPanel";
 import { ActiveOrders, type ActiveActions } from "@/components/pos/ActiveOrders";
 import { ReceiptSheet, TransactionsView, type Receipt } from "@/components/pos/Receipts";
@@ -35,6 +35,8 @@ type OrderResult = {
   lines: { item_name: string; quantity: string }[];
   payments: { method: string; amount: string }[];
   parent_number: string | null;
+  order_no: string;
+  batch_no: number;
 };
 
 type Quote = {
@@ -153,6 +155,7 @@ export function SellScreen({
   const [orderType, setOrderType] = useState("takeaway");
   const [guestName, setGuestName] = useState("");
   const [tableLabel, setTableLabel] = useState("");
+  const [externalRef, setExternalRef] = useState("");
   const [picker, setPicker] = useState<{ item: Item; editUid: string | null; initial: Selection } | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
@@ -176,6 +179,7 @@ export function SellScreen({
     setOrderType("takeaway");
     setGuestName("");
     setTableLabel("");
+    setExternalRef("");
     setPanelError(null);
     setBillDiscount("");
     setVoucherCode("");
@@ -318,7 +322,7 @@ export function SellScreen({
         saved = await api<ActiveOrder>(`/pos/open-orders/${ctx.id}`, {
           token,
           method: "PUT",
-          body: { rev: ctx.rev, lines: cartBody(cart), order_type: orderType, guest_name: guestName, table_label: tableLabel },
+          body: { rev: ctx.rev, lines: cartBody(cart), order_type: orderType, guest_name: guestName, table_label: tableLabel, external_ref: externalRef },
         });
       } else {
         saved = await api<ActiveOrder>("/pos/drafts", {
@@ -330,10 +334,11 @@ export function SellScreen({
             table_label: orderType === "dine_in" ? tableLabel.trim() || null : null,
             client_ref: holdRef.current,
             parent_order_id: ctx.kind === "addition" ? ctx.parentId : null,
+            external_ref: orderType === "dine_in" ? null : externalRef.trim() || null,
           },
         });
       }
-      showToast(`${saved.code} disimpan${saved.guest_name ? ` · ${saved.guest_name}` : ""} — ada di Pesanan aktif`);
+      showToast(`${orderLabel(saved)} disimpan${saved.guest_name ? ` · ${saved.guest_name}` : ""} — ada di Pesanan aktif`);
       resetOrder();
       void loadActive();
       return true;
@@ -366,11 +371,12 @@ export function SellScreen({
     setOrderType(type);
     setGuestName(o.guest_name ?? "");
     setTableLabel(o.table_label ?? "");
+    setExternalRef(o.external_ref ?? "");
     setCtx({
       kind: "open",
       id: o.id,
       rev: o.rev,
-      code: o.code,
+      code: o.order_no,
       source: o.source,
       guest: o.guest_name,
       baseline: fingerprint(lines, type, o.guest_name ?? "", o.table_label ?? ""),
@@ -393,7 +399,7 @@ export function SellScreen({
   async function startAddition(o: ActiveOrder) {
     if (hasWork && !(await holdCurrent(true))) return;
     resetOrder();
-    setCtx({ kind: "addition", parentId: o.id, parentCode: o.code });
+    setCtx({ kind: "addition", parentId: o.id, parentCode: o.order_no });
     setGuestName(o.guest_name ?? "");
     setOrderType(HELD_TYPES.includes(o.order_type) ? o.order_type : "takeaway");
     setTableLabel(o.table_label ?? "");
@@ -506,7 +512,7 @@ export function SellScreen({
           const saved = await api<ActiveOrder>(`/pos/open-orders/${ctx.id}`, {
             token,
             method: "PUT",
-            body: { rev, lines: cartBody(cart), order_type: orderType, guest_name: guestName, table_label: tableLabel },
+            body: { rev, lines: cartBody(cart), order_type: orderType, guest_name: guestName, table_label: tableLabel, external_ref: externalRef },
           });
           rev = saved.rev;
           setCtx({ ...ctx, rev, baseline: fingerprint(cart, orderType, guestName, tableLabel) });
@@ -540,6 +546,7 @@ export function SellScreen({
             voucher_code: quote?.voucher_code ?? null,
             client_ref: payRef.current,
             parent_order_id: ctx.kind === "addition" ? ctx.parentId : null,
+            external_ref: orderType === "dine_in" ? null : externalRef.trim() || null,
           },
         });
       }
@@ -583,7 +590,7 @@ export function SellScreen({
       try {
         await api(`/pos/tickets/${o.id}/cancel`, { token, body: { reason: reason || null } });
         if (ctx.kind === "open" && ctx.id === o.id) resetOrder();
-        showToast(`${o.code} dibatalkan`);
+        showToast(`${orderLabel(o)} dibatalkan`);
         await loadActive();
         return true;
       } catch (e: unknown) {
@@ -598,7 +605,7 @@ export function SellScreen({
       setBusyId(o.id);
       try {
         const updated = await api<ActiveOrder>(`/pos/open-orders/${o.id}/reprice`, { token, body: { rev: o.rev } });
-        showToast(`${o.code} diperbarui ke harga sekarang · ${formatRupiah(updated.total)}`);
+        showToast(`${orderLabel(o)} diperbarui ke harga sekarang · ${formatRupiah(updated.total)}`);
         if (ctx.kind === "open" && ctx.id === o.id) loadIntoPanel(updated);
         await loadActive();
       } catch (e: unknown) {
@@ -613,7 +620,7 @@ export function SellScreen({
       setBusyId(o.id);
       try {
         await api(`/pos/kitchen/${o.id}/state`, { token, body: { state: "done", expected: "ready" } });
-        showToast(`${o.code} sudah diserahkan`);
+        showToast(`${orderLabel(o)} sudah diserahkan`);
       } catch (e: unknown) {
         showToast(e instanceof ApiError ? e.detail : "Gagal menyimpan — coba lagi.");
       } finally {
@@ -733,6 +740,8 @@ export function SellScreen({
       onGuestName={setGuestName}
       tableLabel={tableLabel}
       onTableLabel={setTableLabel}
+      externalRef={externalRef}
+      onExternalRef={setExternalRef}
       onQty={changeQty}
       onEdit={(uid) => {
         const l = cart.find((x) => x.uid === uid);
@@ -848,7 +857,7 @@ export function SellScreen({
                     type="search"
                   />
                 </label>
-                {ctx.kind === "addition" && <span className="pill-quiet shrink-0 py-1 text-[13px]">Tambahan untuk {ctx.parentCode}</span>}
+                {ctx.kind === "addition" && <span className="pill-quiet shrink-0 py-1 text-[13px]">Tambahan · Pesanan {ctx.parentCode}</span>}
               </div>
               {itemsError && (
                 <p className="notice notice-bad mt-3 flex items-center justify-between gap-3">
@@ -914,7 +923,7 @@ export function SellScreen({
               <div className="dock mx-auto flex max-w-3xl items-center gap-3 rounded-3xl px-4 py-3">
                 <button onClick={() => setDrawer(true)} className="min-w-0 flex-1 text-left" aria-label="Lihat pesanan">
                   <p className="ink-soft truncate text-[13px] font-medium">
-                    {ctx.kind === "open" ? `Pesanan ${ctx.code}` : ctx.kind === "addition" ? `Tambahan untuk ${ctx.parentCode}` : "Pesanan baru"} ·{" "}
+                    {ctx.kind === "open" ? `Pesanan ${ctx.code}` : ctx.kind === "addition" ? `Tambahan · Pesanan ${ctx.parentCode}` : "Pesanan baru"} ·{" "}
                     {count > 0 ? `${count} item · lihat` : "kosong"}
                   </p>
                   <p className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{formatRupiah(cartTotal)}</p>
@@ -1031,7 +1040,7 @@ export function SellScreen({
           <div role="dialog" aria-modal="true" aria-label="Pembayaran" className="sheet-panel sm:max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="overflow-y-auto px-6 pb-6 pt-5">
               <p className="ink-soft text-[13px] font-medium">
-                {ctx.kind === "open" ? `Pesanan ${ctx.code}` : ctx.kind === "addition" ? `Tambahan untuk ${ctx.parentCode}` : "Pesanan baru"} · {count} item
+                {ctx.kind === "open" ? `Pesanan ${ctx.code}` : ctx.kind === "addition" ? `Tambahan · Pesanan ${ctx.parentCode}` : "Pesanan baru"} · {count} item
               </p>
               <p className="text-[32px] font-semibold tabular-nums tracking-[-0.025em]">{formatRupiah(cartTotal)}</p>
               {quote && Number(quote.promo_total) > 0 && (
@@ -1329,8 +1338,8 @@ export function SellScreen({
             </span>
             <div className="min-w-0">
               <p className="truncate font-semibold tabular-nums">
-                Lunas {formatRupiah(flash.total)}
-                {flash.parent_number ? ` · tambahan untuk #${flash.parent_number.slice(-4)}` : ""}
+                Pesanan {flash.order_no}
+                {flash.batch_no ? ` · Tambahan ${flash.batch_no}` : ""} · lunas {formatRupiah(flash.total)}
               </p>
               <p className="ink-soft truncate text-xs">
                 {flash.payments.map((p) => `${p.method === "cash" ? "tunai" : p.method === "points" ? "poin" : p.method.toUpperCase()} ${formatRupiah(p.amount)}`).join(" + ")}

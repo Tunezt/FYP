@@ -23,6 +23,7 @@ from app.models import Business, Item, ItemVariant, Order
 from app.schemas.menu import MenuItemOut, MenuOut, MenuQuoteIn, MenuQuoteLineOut, MenuQuoteOut, TicketIn, TicketLineOut, TicketOut
 from app.schemas.pos import PosModifierGroupOut, PosModifierOut, PosVariantOut
 from app.services.orders import ChoiceMissing, ItemNotFound, ModifierSelectionInvalid, OrderLineSpec, VariantNotFound
+from app.services.service_numbers import service_label
 from app.services.tickets import QueueFull, TicketNotFound, TicketUnavailable, get_ticket, place_ticket, ticket_code
 
 router = APIRouter(prefix="/menu", tags=["menu"])
@@ -73,6 +74,8 @@ def ticket_out(order: Order, model=TicketOut, kitchen_state: str | None = None, 
         subtotal=order.subtotal, service_charge=order.service_charge, tax_total=order.tax_total,
         rounding=order.rounding, total=order.total,
         is_estimate=order.status == "open",
+        order_no=service_label(order),
+        batch_no=order.batch_no or 0,
     )
 
 

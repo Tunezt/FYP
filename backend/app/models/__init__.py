@@ -13,6 +13,7 @@ from app.models.models import (  # noqa: F401
     JournalLine,
     KitchenEvent,
     KitchenLineEvent,
+    ServiceNumberCounter,
     LoginOtp,
     MetricBaseline,
     Modifier,

@@ -53,6 +53,7 @@ from app.services.orders import (
     require_explicit_choices,
 )
 from app.services.pricing import LineInput, price_order, pricing_config
+from app.services.service_numbers import number_order
 
 MAX_OPEN_TICKETS = 50   # a public endpoint: the queue cannot grow without bound
 MAX_OPEN_DRAFTS = 40    # a till holding more unpaid orders than this has a different problem
@@ -211,6 +212,7 @@ async def place_ticket(
     note: str | None = None,
     placed_at: datetime | None = None,
     client_ref: str | None = None,
+    external_ref: str | None = None,
 ) -> Order:
     """A guest's order: validate, estimate, write the open row."""
     if order_type not in MENU_ORDER_TYPES:
@@ -241,8 +243,10 @@ async def place_ticket(
         sold_at=placed_at,
         created_at=placed_at,
         client_ref=client_ref,
+        external_ref=(external_ref or "").strip() or None,
     )
     _apply_bill(ticket, bill)
+    await number_order(session, ticket, at=placed_at)
     session.add(ticket)
     await session.flush()
     return ticket
@@ -261,6 +265,7 @@ async def hold_draft(
     client_ref: str | None = None,
     now: datetime | None = None,
     parent_order_id: uuid.UUID | None = None,
+    external_ref: str | None = None,
 ) -> Order:
     """A cashier parks an unpaid order (svc-2). Same shape as a ticket, on the
     backend so a refresh, a second tablet or a crashed browser loses nothing."""
@@ -293,8 +298,10 @@ async def hold_draft(
         sold_at=moment,
         created_at=moment,
         client_ref=client_ref,
+        external_ref=(external_ref or "").strip() or None,
     )
     _apply_bill(draft, bill)
+    await number_order(session, draft, at=moment, parent=parent)
     session.add(draft)
     await session.flush()
     return draft
@@ -313,6 +320,7 @@ async def update_open_order(
     guest_name: str | None = None,
     note: str | None = None,
     now: datetime | None = None,
+    external_ref: str | None = None,
 ) -> Order:
     """Replace an unpaid order's cart (svc-2): add items, change quantities or
     options before payment. Re-priced from today's catalogue.
@@ -348,6 +356,8 @@ async def update_open_order(
         values["table_label"] = table_label.strip() or None
     if guest_name is not None:
         values["guest_name"] = guest_name.strip() or None
+    if external_ref is not None:
+        values["external_ref"] = external_ref.strip() or None
     rev_now = func.coalesce(Order.cart["rev"].astext.cast(Integer), 0)
     result = await session.execute(
         update(Order)
