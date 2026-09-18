@@ -20,12 +20,14 @@ import {
 } from "@/lib/choices";
 import { newRef } from "@/lib/pos";
 
-// The QR menu (M11-T1, svc-8): the customer's side of the same system. A guest
-// scans the code on the table, chooses, sees the real total, and sends. Nothing
-// is charged here — they show the order code at the counter and pay there; the
-// kitchen starts after payment, and this page follows the order until it is
-// handed over. The order is kept by the server; the phone keeps only its id and
-// the private key that lets it see its own details.
+// The QR menu (M11-T1, svc-8, bill-2): the customer's side of the same system.
+// A guest scans the code on the table, chooses, sees the real total, and sends.
+// Nothing is charged here. Dine-in: the order joins the table's open bill, the
+// cashier confirms it and sends it to the Bar/Dapur, staff bring the nota to the
+// table, and the table pays at the counter before leaving; the guest can add
+// another round from here. Takeaway: pay at the counter, then it is made. The
+// page says only what is known: waiting for the cashier, sent, paid. The order
+// is kept by the server; the phone keeps only its id and its private key.
 
 type MenuItem = {
   id: string;
@@ -50,7 +52,7 @@ type Ticket = {
   guest_name: string | null;
   note: string | null;
   placed_at: string;
-  lines: { name: string; modifiers: string[]; quantity: string; unit_price: string; line_total: string; notes: string | null }[];
+  lines: { name: string; modifiers: string[]; quantity: string; unit_price: string; line_total: string; notes: string | null; mine: boolean; sent: boolean }[];
   subtotal: string;
   service_charge: string;
   tax_total: string;
@@ -62,6 +64,8 @@ type Ticket = {
   revised: boolean;
   order_no: string | null;
   batch_no: number;
+  stage: "waiting" | "sent" | "pay" | "paid" | "cancelled";
+  can_add: boolean;
 };
 type OrderType = "dine_in" | "takeaway";
 
@@ -117,6 +121,9 @@ export default function MenuPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [placed, setPlaced] = useState<{ id: string; key: string | null } | null>(null);
+  // Adding another round to the table's open bill (bill-2): the menu again,
+  // but the checkout adds to that bill instead of starting a new order.
+  const [adding, setAdding] = useState<{ table: string | null } | null>(null);
   const submitRef = useRef<string | null>(null);
 
   const loadMenu = useCallback(async () => {
@@ -214,7 +221,7 @@ export default function MenuPage() {
     let cancelled = false;
     setQuoteError(null);
     const handle = setTimeout(() => {
-      api<Quote>(`/menu/${token}/quote`, { body: { lines: body, order_type: orderType } })
+      api<Quote>(`/menu/${token}/quote`, { body: { lines: body, order_type: adding ? "dine_in" : orderType } })
         .then((q) => !cancelled && setQuote(q))
         .catch(async (e: unknown) => {
           if (cancelled) return;
@@ -239,11 +246,11 @@ export default function MenuPage() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [checkout, body, orderType, token, loadMenu, rebuild, cart]);
+  }, [checkout, body, orderType, token, loadMenu, rebuild, cart, adding]);
 
   async function send() {
     if (cart.length === 0 || busy || !quote) return;
-    if (orderType === "dine_in" && !table.trim()) {
+    if (!adding && orderType === "dine_in" && !table.trim()) {
       setSubmitError("Isi nomor meja dulu ya.");
       return;
     }
@@ -255,18 +262,24 @@ export default function MenuPage() {
     if (!submitRef.current) submitRef.current = newRef();
     store(CART_KEY, { lines: cart.map((l) => ({ item_id: l.item.id, variant_id: l.variant?.id ?? null, modifier_ids: l.modifiers.map((m) => m.id), qty: l.qty, notes: l.notes })), ref: submitRef.current });
     try {
-      const t = await api<Ticket>(`/menu/${token}/orders`, {
-        body: {
-          lines: body,
-          order_type: orderType,
-          table_label: orderType === "dine_in" ? table.trim() : null,
-          guest_name: name.trim() || null,
-          note: note.trim() || null,
-          client_ref: submitRef.current,
-          expected_total: quote.total,
-        },
-      });
-      const saved = { id: t.id, key: t.access_key };
+      const t =
+        adding && placed?.key
+          ? await api<Ticket>(`/menu/${token}/orders/${placed.id}/lines`, {
+              body: { key: placed.key, lines: body, note: note.trim() || null, client_ref: submitRef.current, expected_total: quote.total },
+            })
+          : await api<Ticket>(`/menu/${token}/orders`, {
+              body: {
+                lines: body,
+                order_type: orderType,
+                table_label: orderType === "dine_in" ? table.trim() : null,
+                guest_name: name.trim() || null,
+                note: note.trim() || null,
+                client_ref: submitRef.current,
+                expected_total: quote.total,
+              },
+            });
+      const saved = adding && placed ? placed : { id: t.id, key: t.access_key };
+      setAdding(null);
       store(ORDER_KEY, saved);
       store(CART_KEY, null);
       submitRef.current = null;
@@ -276,7 +289,14 @@ export default function MenuPage() {
     } catch (e: unknown) {
       if (e instanceof ApiError) {
         setSubmitError(e.detail);
-        if (e.status === 409) {
+        if (e.status === 409 && adding && /dibayar|dibatalkan/.test(e.detail)) {
+          // The table paid (or the bill was cancelled) meanwhile: this round
+          // becomes a new order. The cart stays; the guest sends it again.
+          setAdding(null);
+          store(ORDER_KEY, null);
+          setPlaced(null);
+          submitRef.current = null;
+        } else if (e.status === 409) {
           // A price or availability moved: re-quote with the cart intact.
           submitRef.current = null;
           setQuote(null);
@@ -301,10 +321,23 @@ export default function MenuPage() {
   function orderAgain() {
     store(ORDER_KEY, null);
     setPlaced(null);
+    setAdding(null);
   }
 
-  if (placed) {
-    return <OrderStatus token={token} placed={placed} businessName={menu?.business_name ?? ""} onAgain={orderAgain} />;
+  if (placed && !adding) {
+    return (
+      <OrderStatus
+        token={token}
+        placed={placed}
+        businessName={menu?.business_name ?? ""}
+        onAgain={orderAgain}
+        onAdd={(tableLabel) => {
+          submitRef.current = null;
+          setSubmitError(null);
+          setAdding({ table: tableLabel });
+        }}
+      />
+    );
   }
 
   if (loadError && !menu) {
@@ -329,7 +362,16 @@ export default function MenuPage() {
   return (
     <main className="mx-auto min-h-[100dvh] max-w-lg px-4 pb-32">
       <header className="pb-3 pt-6">
-        <p className="ink-soft text-[13px] font-medium">Pesan dari meja · bayar di kasir</p>
+        {adding ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="ink-soft text-[13px] font-medium">Tambah pesanan{adding.table ? ` · ${adding.table}` : ""}</p>
+            <button onClick={() => setAdding(null)} className="text-[13px] font-semibold" style={{ color: "var(--accent)" }}>
+              Lihat pesananku
+            </button>
+          </div>
+        ) : (
+          <p className="ink-soft text-[13px] font-medium">Pesan dari meja · bayar di kasir</p>
+        )}
         <h1 className="mt-0.5 text-[26px] font-semibold tracking-[-0.025em]">{menu?.business_name ?? " "}</h1>
       </header>
       <div className="sticky-bar sticky top-0 z-10 -mx-4 px-4 py-2">
@@ -473,6 +515,10 @@ export default function MenuPage() {
                 </ul>
               )}
 
+              {adding ? (
+                <p className="ink-soft mt-4 text-[13px]">Ditambahkan ke pesanan{adding.table ? ` ${adding.table}` : " mejamu"}.</p>
+              ) : (
+              <>
               <div className="segmented mt-4 grid w-full grid-cols-2 gap-[3px]" role="group" aria-label="Makan di mana">
                 {(
                   [
@@ -497,6 +543,8 @@ export default function MenuPage() {
                   aria-label="Nama"
                 />
               </div>
+              </>
+              )}
               <input value={note} onChange={(e) => setNote(e.target.value.slice(0, 200))} className="field mt-2" placeholder="Pesan untuk dapur (opsional)" aria-label="Pesan untuk dapur" />
             </div>
 
@@ -533,14 +581,18 @@ export default function MenuPage() {
                 <span className="ink-soft text-sm">Total</span>
                 <span className={`text-[26px] font-semibold tabular-nums tracking-[-0.02em] ${quote ? "" : "opacity-50"}`}>{formatRupiah(quote?.total ?? estimate)}</span>
               </div>
-              <p className="ink-soft mt-1 text-[13px] leading-snug">Belum dibayar. Setelah kirim, sebutkan nomor pesanan di kasir dan bayar di sana. Pesanan mulai dibuat setelah dibayar.</p>
+              <p className="ink-soft mt-1 text-[13px] leading-snug">
+                {adding || orderType === "dine_in"
+                  ? "Belum dibayar. Kasir mengonfirmasi pesananmu lalu mengirimnya ke dapur/bar, dan notanya diantar ke meja. Bayar di kasir sebelum pulang."
+                  : "Belum dibayar. Setelah kirim, sebutkan nomor pesanan di kasir dan bayar di sana. Pesanan dibuat setelah dibayar."}
+              </p>
               {(quoteError || submitError) && (
                 <p role="alert" className="notice notice-bad mt-2">
                   {submitError ?? quoteError}
                 </p>
               )}
               <button onClick={send} disabled={busy || cart.length === 0 || !quote} className="btn-accent mt-3 w-full py-3.5 text-base">
-                {busy ? "Mengirim…" : !quote && !quoteError ? "Menghitung total…" : "Kirim pesanan"}
+                {busy ? "Mengirim…" : !quote && !quoteError ? "Menghitung total…" : adding ? "Tambahkan ke pesanan" : "Kirim pesanan"}
               </button>
             </div>
           </div>
@@ -550,23 +602,23 @@ export default function MenuPage() {
   );
 }
 
-const STEPS = [
-  { id: "pay", label: "Bayar di kasir" },
-  { id: "new", label: "Masuk dapur" },
-  { id: "preparing", label: "Disiapkan" },
-  { id: "ready", label: "Siap diambil" },
-] as const;
+// Only what is known (bill-2): the cashier has or has not sent the items, and
+// the bill is or is not paid. No kitchen progress is claimed from a printer.
+const DINE_IN_STEPS = ["Menunggu kasir", "Dikirim ke dapur/bar", "Lunas"];
+const TAKEAWAY_STEPS = ["Bayar di kasir", "Lunas · dibuat"];
 
 function OrderStatus({
   token,
   placed,
   businessName,
   onAgain,
+  onAdd,
 }: {
   token: string;
   placed: { id: string; key: string | null };
   businessName: string;
   onAgain: () => void;
+  onAdd: (table: string | null) => void;
 }) {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -583,7 +635,7 @@ function OrderStatus({
     }
   }, [token, placed]);
 
-  const finished = ticket !== null && (ticket.status === "voided" || ticket.status === "refunded" || ticket.kitchen_state === "done");
+  const finished = ticket !== null && (ticket.stage === "paid" || ticket.stage === "cancelled");
   useEffect(() => {
     void load();
     if (finished) return;
@@ -605,10 +657,12 @@ function OrderStatus({
     );
   }
 
-  const waiting = ticket?.status === "open";
-  const cancelled = ticket?.status === "voided" || ticket?.status === "refunded";
-  const stepIndex = !ticket ? -1 : waiting ? 0 : ticket.kitchen_state === "new" ? 1 : ticket.kitchen_state === "preparing" ? 2 : 3;
-  const handedOver = ticket?.kitchen_state === "done";
+  const stage = ticket?.stage;
+  const dineIn = ticket?.order_type === "dine_in" && stage !== "pay";
+  const steps = dineIn ? DINE_IN_STEPS : TAKEAWAY_STEPS;
+  const stepIndex = !ticket ? -1 : dineIn ? (stage === "waiting" ? 0 : stage === "sent" ? 1 : 2) : stage === "pay" ? 0 : 1;
+  const cancelled = stage === "cancelled";
+  const paid = stage === "paid";
 
   const headline = !ticket
     ? "Memuat pesanan…"
@@ -616,31 +670,31 @@ function OrderStatus({
       ? ticket.status === "refunded"
         ? "Pesanan dikembalikan"
         : "Pesanan dibatalkan"
-      : waiting
-        ? "Sebutkan nomor ini di kasir"
-        : handedOver
-          ? "Pesanan sudah diserahkan"
-          : ticket.kitchen_state === "ready"
-            ? ticket.order_type === "takeaway"
-              ? "Siap diambil di kasir"
-              : "Pesananmu siap"
-            : ticket.kitchen_state === "preparing"
-              ? "Sedang disiapkan"
-              : "Sudah dibayar · masuk dapur";
+      : stage === "waiting"
+        ? "Menunggu konfirmasi kasir"
+        : stage === "sent"
+          ? "Pesanan dikirim ke dapur/bar"
+          : stage === "pay"
+            ? "Sebutkan nomor ini di kasir"
+            : ticket.order_type === "takeaway"
+              ? "Sudah dibayar · sedang dibuat"
+              : "Lunas · terima kasih!";
 
   const sub = !ticket
     ? ""
     : cancelled
       ? "Kasir tidak memproses pesanan ini. Silakan tanya di kasir."
-      : waiting
-        ? "Bayar di kasir dulu ya. Pesanan mulai dibuat setelah dibayar."
-        : handedOver
-          ? "Terima kasih, selamat menikmati!"
-          : ticket.kitchen_state === "ready"
-            ? ticket.order_type === "takeaway"
+      : stage === "waiting"
+        ? "Kasir memeriksa pesananmu lalu mengirimnya ke dapur/bar. Nota akan diantar ke mejamu."
+        : stage === "sent"
+          ? "Nota diantar ke mejamu sebagai tanda pesanan diterima. Bayar di kasir sebelum pulang."
+          : stage === "pay"
+            ? "Bayar di kasir dulu ya. Pesanan dibuat setelah dibayar."
+            : ticket.order_type === "takeaway"
               ? "Sebutkan nomor pesananmu saat mengambil."
-              : "Pesananmu segera diantar ke meja."
-            : "Halaman ini diperbarui otomatis.";
+              : "Sampai jumpa lagi!";
+
+  const others = ticket ? ticket.lines.some((l) => !l.mine) && ticket.lines.some((l) => l.mine) : false;
 
   return (
     <main className="mx-auto min-h-[100dvh] max-w-md px-4 pb-10 pt-6">
@@ -650,24 +704,21 @@ function OrderStatus({
         <p className="mt-1 text-[64px] font-semibold leading-none tabular-nums tracking-[-0.03em]">{ticket ? ticket.order_no ?? ticket.code : "…"}</p>
         {ticket?.order_type === "dine_in" && ticket.table_label && <p className="mt-1 text-[17px] font-semibold">{ticket.table_label}</p>}
         <h1 className="mt-4 text-[20px] font-semibold tracking-[-0.015em]">{headline}</h1>
-        <p className="ink-soft mx-auto mt-1 max-w-[18rem] text-[15px]">{sub}</p>
-        {ticket?.revised && !cancelled && <p className="notice notice-warn mt-3 text-sm">Kasir memperbarui pesananmu. Periksa isi dan totalnya di bawah.</p>}
+        <p className="ink-soft mx-auto mt-1 max-w-[19rem] text-[15px]">{sub}</p>
+        {ticket?.revised && !cancelled && !paid && <p className="notice notice-warn mt-3 text-sm">Kasir memperbarui pesananmu. Periksa isi dan totalnya di bawah.</p>}
         {error && <p className="notice notice-warn mt-3 text-sm">{error}</p>}
 
         {ticket && !cancelled && (
-          <ol className="mt-6 grid grid-cols-4 gap-1.5 text-left" aria-label="Langkah pesanan">
-            {STEPS.map((s, i) => {
-              const done = handedOver || i < stepIndex;
-              const current = !handedOver && i === stepIndex;
+          <ol className="mt-6 grid gap-1.5 text-left" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }} aria-label="Langkah pesanan">
+            {steps.map((label, i) => {
+              const done = i < stepIndex || (paid && i === stepIndex);
+              const current = !done && i === stepIndex;
               return (
-                <li key={s.id} aria-current={current ? "step" : undefined}>
-                  <span
-                    className="block h-1.5 rounded-full"
-                    style={{ background: done ? "var(--good)" : current ? "var(--ink)" : "var(--fill)" }}
-                  />
+                <li key={label} aria-current={current ? "step" : undefined}>
+                  <span className="block h-1.5 rounded-full" style={{ background: done ? "var(--good)" : current ? "var(--ink)" : "var(--fill)" }} />
                   <span className={`mt-1.5 flex items-center gap-1 text-[12px] leading-tight ${current ? "font-semibold" : done ? "ink-soft" : "ink-faint"}`}>
                     {done && <IconCheck className="h-3 w-3 shrink-0" />}
-                    {s.label}
+                    {label}
                   </span>
                 </li>
               );
@@ -675,6 +726,12 @@ function OrderStatus({
           </ol>
         )}
       </section>
+
+      {ticket && ticket.can_add && dineIn && !paid && !cancelled && (
+        <button onClick={() => onAdd(ticket.table_label)} className="btn-accent mt-3 w-full py-3.5 text-base">
+          Tambah pesanan
+        </button>
+      )}
 
       {ticket && (
         <section className="glass-card mt-3 overflow-hidden p-0" aria-label="Isi pesanan">
@@ -684,16 +741,24 @@ function OrderStatus({
                 <div className="min-w-0">
                   <p className="text-[15px] font-semibold">
                     {Number(l.quantity)}× {l.name}
+                    {others && l.mine && <span className="ink-soft text-[13px] font-normal"> · kamu</span>}
                   </p>
                   {l.modifiers.length > 0 && <p className="ink-soft text-[13px]">{l.modifiers.join(", ")}</p>}
                   {l.notes && <p className="ink-soft text-[13px]">Catatan: {l.notes}</p>}
+                  {dineIn && ticket.status === "open" && (
+                    <p className={`mt-0.5 text-[12px] font-medium ${l.sent ? "ink-soft" : ""}`} style={l.sent ? undefined : { color: "var(--warn)" }}>
+                      {l.sent ? "Dikirim ke dapur/bar" : "Menunggu kasir"}
+                    </p>
+                  )}
                 </div>
                 <span className="shrink-0 text-sm tabular-nums">{formatRupiah(l.line_total)}</span>
               </li>
             ))}
           </ul>
           <div className="hairline-t flex items-baseline justify-between px-5 py-3">
-            <span className="ink-soft text-sm">{ticket.is_estimate ? "Total dibayar di kasir" : "Total dibayar"}</span>
+            <span className="ink-soft text-sm">
+              {!ticket.is_estimate ? "Total dibayar" : dineIn ? "Total meja sementara" : "Total dibayar di kasir"}
+            </span>
             <span className="text-[21px] font-semibold tabular-nums">{formatRupiah(ticket.total)}</span>
           </div>
           {(ticket.table_label || ticket.guest_name) && (

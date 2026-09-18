@@ -326,3 +326,98 @@ async def test_refunding_a_paid_bill_tells_each_station_about_what_it_printed(cl
     kitchen = [b for b in notices["kitchen_cancel"].document["blocks"] if b.get("t") == "item"]
     assert [(b["name"], b["qty"]) for b in kitchen] == [("Roti", "1"), ("Roti", "1")]     # both sends' roti
     assert await _stock(session_factory, c, "roti") == 30                                # restocked
+
+
+# ── bill-2: the QR menu joins the table's bill; the cashier's Kirim accepts ───
+
+
+def _qr(c, *lines, table="Meja 7", **extra):
+    return {"lines": list(lines), "order_type": "dine_in", "table_label": table, "client_ref": _ref(), **extra}
+
+
+async def test_a_qr_guest_joins_the_tables_bill_and_waits_for_the_cashier_to_send(client, session_factory, cafe):
+    c = cafe
+    await _stations(client, c)
+    pos = _auth(c["pos"])
+    bill = await _bill(client, c, _line(c, variant="standar", mods=["panas"]))            # the cashier opened Meja 7
+    body = _qr(c, _line(c, item="roti"), table="7", guest_name="Andi", expected_total="15000")
+    joined = await client.post(f"/menu/{c['menu']}/orders", json=body)
+    assert joined.status_code == 201, joined.text
+    guest = joined.json()
+    key = guest["access_key"]
+    assert guest["id"] == bill["id"] and key and guest["stage"] == "waiting" and guest["can_add"] is True
+    assert guest["table_label"] == "Meja 7" and guest["guest_name"] is None           # not the bill owner's details
+    assert [(l["name"], l["mine"], l["sent"]) for l in guest["lines"]] == [("Americano · Standar", False, True), ("Roti", True, False)]
+    # Nothing is made or printed for a guest's items until the cashier sends them.
+    assert len(await _order_jobs(session_factory, c, bill["id"])) == 2
+    till = (await client.get(f"/pos/open-orders/{bill['id']}", headers=pos)).json()
+    assert till["unsent_count"] == 1
+    assert [(l["name"], l["from_guest"], l["guest_name"]) for l in till["lines"] if not l["sent_batch"]] == [("Roti", True, "Andi")]
+    # A retried tap does not add the roti twice.
+    again = await client.post(f"/menu/{c['menu']}/orders", json=body)
+    assert again.json()["access_key"] == key and len(again.json()["lines"]) == 2
+
+    sent = await client.post(f"/pos/open-orders/{bill['id']}/send", headers=pos, json={"rev": till["rev"]})
+    assert sent.status_code == 200, sent.text
+    watch = f"/menu/{c['menu']}/orders/{bill['id']}"
+    assert (await client.get(f"{watch}?key={key}")).json()["stage"] == "sent"
+    nota = next(j for j in await _order_jobs(session_factory, c, bill["id"]) if j.kind == "nota" and "Roti" in _texts(j.document))
+    assert "TAMBAHAN" in _texts(nota.document)
+    # Another round from the phone waits again.
+    more = await client.post(f"{watch}/lines", json={"key": key, "lines": [_line(c, variant="large", mods=["dingin"])],
+                                                     "client_ref": _ref(), "expected_total": "22000"})
+    assert more.status_code == 200, more.text
+    assert more.json()["stage"] == "waiting" and [l["mine"] for l in more.json()["lines"]] == [False, True, True]
+    assert (await client.post(f"{watch}/lines", json={"key": "bukan-kunci-ini", "lines": [_line(c, item="roti")]})).status_code == 404
+    # A bill the cashier opened is not public: without a key it is not found.
+    assert (await client.get(watch)).status_code == 404
+    # Paying closes it for everyone at the table.
+    current = (await client.get(f"/pos/open-orders/{bill['id']}", headers=pos)).json()
+    paid = await client.post(f"/pos/tickets/{bill['id']}/settle", headers=pos, json={"payments": _cash(55000), "rev": current["rev"]})
+    assert paid.status_code == 200, paid.text
+    assert (await client.get(f"{watch}?key={key}")).json()["stage"] == "paid"
+    late = await client.post(f"{watch}/lines", json={"key": key, "lines": [_line(c, item="roti")]})
+    assert late.status_code == 409 and "sudah dibayar" in late.json()["detail"]
+
+
+async def test_two_phones_at_an_empty_table_make_one_bill_and_each_sees_its_own_items(client, session_factory, cafe):
+    c = cafe
+    first, second = await asyncio.gather(
+        client.post(f"/menu/{c['menu']}/orders", json=_qr(c, _line(c, item="roti"), table="Meja 5", guest_name="Rina")),
+        client.post(f"/menu/{c['menu']}/orders", json=_qr(c, _line(c, variant="large", mods=["panas"]), table="meja 5", guest_name="Bayu")),
+    )
+    assert first.status_code == 201 and second.status_code == 201
+    a, b = first.json(), second.json()
+    assert a["id"] == b["id"] and a["access_key"] != b["access_key"]
+    watch = f"/menu/{c['menu']}/orders/{a['id']}"
+    views = [(await client.get(f"{watch}?key={v['access_key']}")).json() for v in (a, b)]
+    for view in views:
+        assert len(view["lines"]) == 2 and sum(l["mine"] for l in view["lines"]) == 1 and view["table_label"].lower() == "meja 5"   # whichever phone came first named it
+    assert {l["name"] for v in views for l in v["lines"] if l["mine"]} == {"Roti", "Americano · Large"}
+    # Only the phone that started the bill sees the name it gave; the other sees none.
+    assert sorted(v["guest_name"] is None for v in views) == [False, True]
+    # A cashier opening Meja 5 is pointed at that bill.
+    busy = await client.post("/pos/drafts", headers=_auth(c["pos"]), json={
+        "lines": [_line(c, item="roti")], "order_type": "dine_in", "table_label": "5"})
+    assert busy.status_code == 409 and busy.headers["X-Open-Bill-Id"] == a["id"]
+
+
+async def test_a_joining_guest_is_quoted_for_their_own_items_only(client, session_factory, cafe):
+    c = cafe
+    bill = await _bill(client, c, _line(c, item="roti", qty=2), table="Meja 9", send=False)
+    moved = await client.post(f"/menu/{c['menu']}/orders", json=_qr(c, _line(c, item="roti"), table="9", expected_total="30000"))
+    assert moved.status_code == 409 and "Harga" in moved.json()["detail"]
+    unchanged = (await client.get(f"/pos/open-orders/{bill['id']}", headers=_auth(c["pos"]))).json()
+    assert len(unchanged["lines"]) == 1 and unchanged["rev"] == bill["rev"]
+    ok = await client.post(f"/menu/{c['menu']}/orders", json=_qr(c, _line(c, item="roti"), table="9", expected_total="15000"))
+    assert ok.status_code == 201 and D(ok.json()["total"]) == 45000                  # the table's bill so far
+
+
+async def test_a_takeaway_qr_order_is_paid_before_it_is_made(client, session_factory, cafe):
+    c = cafe
+    placed = (await client.post(f"/menu/{c['menu']}/orders", json={**_qr(c, _line(c, item="roti")), "order_type": "takeaway"})).json()
+    assert placed["stage"] == "pay"
+    watch = f"/menu/{c['menu']}/orders/{placed['id']}?key={placed['access_key']}"
+    paid = await client.post(f"/pos/tickets/{placed['id']}/settle", headers=_auth(c["pos"]), json={"payments": _cash(15000)})
+    assert paid.status_code == 200, paid.text
+    assert (await client.get(watch)).json()["stage"] == "paid"

@@ -791,6 +791,7 @@ async def _active_views(session, orders, tickets_by_id=None):
                     item_id=uuid.UUID(l["item_id"]), variant_id=uuid.UUID(l["variant_id"]) if l.get("variant_id") else None,
                     modifier_ids=[uuid.UUID(m) for m in l.get("modifier_ids", [])],
                     uid=l.get("uid"), sent_batch=l.get("sent_batch"),
+                    from_guest=bool(l.get("guest_ref")), guest_name=l.get("guest_name"),
                 )
                 for l in cart.get("lines", [])
             ]

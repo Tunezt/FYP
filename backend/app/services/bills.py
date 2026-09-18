@@ -35,7 +35,7 @@ from app.models import Item, Order
 from app.services.orders import OrderLineSpec, TicketNotOpen
 
 # Keys a cart line keeps across re-pricing: who it is and whether it went out.
-LINE_META = ("uid", "sent_batch", "sent_at")
+LINE_META = ("uid", "sent_batch", "sent_at", "guest_ref", "guest_name")
 
 
 class TableBusy(Exception):

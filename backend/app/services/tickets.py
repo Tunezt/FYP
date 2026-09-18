@@ -32,6 +32,7 @@ locked, and a table has one open bill at a time.
 """
 from __future__ import annotations
 
+import hashlib
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -62,6 +63,7 @@ from app.services.service_numbers import number_order
 MAX_OPEN_TICKETS = 50   # a public endpoint: the queue cannot grow without bound
 MAX_OPEN_DRAFTS = 40    # a till holding more unpaid orders than this has a different problem
 MENU_ORDER_TYPES = ("dine_in", "takeaway")
+MAX_BILL_LINES = 80     # a table's bill that grows past this is ordered at the counter
 POS_DRAFT_ORDER_TYPES = ("dine_in", "takeaway", "pickup")
 
 
@@ -74,6 +76,10 @@ class TicketUnavailable(Exception):
 
 class QueueFull(Exception):
     pass
+
+
+class QuoteMoved(Exception):
+    """The guest was shown one total and would be asked another (svc-5)."""
 
 
 class TicketNotFound(Exception):
@@ -232,6 +238,9 @@ async def place_ticket(
     if waiting >= MAX_OPEN_TICKETS:
         raise QueueFull()
     cart_lines, bill = await price_cart(session, business_id=business_id, lines=lines, order_type=order_type)
+    access_key = secrets.token_urlsafe(18)
+    mine = guest_ref(access_key)
+    cart_lines = [{**l, "guest_ref": mine, "guest_name": (guest_name or "").strip() or None} for l in cart_lines]
     ticket = Order(
         business_id=business_id,
         staff_id=None,
@@ -244,7 +253,7 @@ async def place_ticket(
         # The guest's own key to this order (svc-5). The menu link is shared by
         # every table; the order id alone must not show a stranger's name.
         cart={"lines": cart_lines, "note": note or None, "estimate": True, "rev": 0,
-              "access_key": secrets.token_urlsafe(18)},
+              "access_key": access_key},
         sold_at=placed_at,
         created_at=placed_at,
         client_ref=client_ref,
@@ -255,6 +264,157 @@ async def place_ticket(
     session.add(ticket)
     await session.flush()
     return ticket
+
+
+def guest_ref(key: str) -> str:
+    """What a line records about the phone that added it: never the key itself."""
+    return hashlib.sha256(key.encode()).hexdigest()[:12]
+
+
+def key_ref_for(order: Order, key: str | None) -> str | None:
+    """The guest_ref of `key` if it opens this order: the placing phone's key,
+    or the key of a phone that joined the table's bill later (bill-2)."""
+    if not key:
+        return None
+    cart = order.cart or {}
+    keys = [cart.get("access_key")] + [g.get("key") for g in cart.get("guests", [])]
+    for k in keys:
+        if k and secrets.compare_digest(k, key):
+            return guest_ref(k)
+    return None
+
+
+async def _guest_add_replay(session: AsyncSession, client_ref: str | None) -> tuple[Order, str] | None:
+    """A guest's submission that was already added to a bill, found by its
+    reference (the advisory lock on it is already held by find_by_client_ref)."""
+    if not client_ref:
+        return None
+    order = (await session.execute(
+        select(Order).where(Order.cart.contains({"guest_adds": [{"client_ref": client_ref}]}))
+    )).scalars().first()
+    if order is None:
+        return None
+    add = next(a for a in order.cart["guest_adds"] if a.get("client_ref") == client_ref)
+    cart = order.cart
+    for k in [cart.get("access_key")] + [g.get("key") for g in cart.get("guests", [])]:
+        if k and guest_ref(k) == add.get("key_ref"):
+            return order, k
+    return None
+
+
+async def guest_backlog(session: AsyncSession) -> int:
+    """Guest submissions still waiting for the cashier: every QR ticket and
+    every join or add-more on an open order that has an unsent guest line. The
+    public menu cannot pile up more than MAX_OPEN_TICKETS of them, whether it
+    opens new tickets or keeps adding to one table's bill."""
+    n = 0
+    for o in (await session.execute(select(Order).where(Order.status == "open", Order.cart.is_not(None)))).scalars().all():
+        cart = o.cart or {}
+        if o.source == "menu" and not any(l.get("sent_batch") for l in cart.get("lines", [])):
+            n += 1
+        if any(l.get("guest_ref") and not l.get("sent_batch") for l in cart.get("lines", [])):
+            n += len(cart.get("guest_adds", []))
+    return n
+
+
+async def add_guest_lines(
+    session: AsyncSession,
+    *,
+    business_id: uuid.UUID,
+    order: Order,
+    lines: list[OrderLineSpec],
+    key: str | None,
+    guest_name: str | None = None,
+    note: str | None = None,
+    client_ref: str | None = None,
+    expected_total: Decimal | None = None,
+    now: datetime | None = None,
+) -> tuple[Order, str]:
+    """A guest adds to an open bill (bill-2): joining the table's bill with a
+    new key (`key=None`), or adding more with the key they already hold. The
+    lines are unsent: they wait for the cashier, whose *Kirim* is the
+    acceptance, exactly like items the cashier typed. Nothing is made, printed
+    or charged before that."""
+    from app.services.bills import carry_meta, lock_order, spec_of
+
+    order = await lock_order(session, order)
+    if order.status != "open" or not is_open_order(order):
+        raise TicketNotOpen(order.status)
+    cart = dict(order.cart or {})
+    existing = list(cart.get("lines", []))
+    if len(existing) + len(lines) > MAX_BILL_LINES:
+        raise QueueFull()
+    new_lines, own = await price_cart(session, business_id=business_id, lines=lines, order_type=order.order_type)
+    if expected_total is not None and Decimal(own.total) != Decimal(expected_total).quantize(Decimal("0.01")):
+        raise QuoteMoved()
+    moment = now or datetime.now(timezone.utc)
+    joined = key is None
+    key = key or secrets.token_urlsafe(18)
+    ref = guest_ref(key)
+    name = (guest_name or "").strip() or None
+    metas = existing + [{"uid": l["uid"], "guest_ref": ref, "guest_name": name} for l in new_lines]
+    priced, bill = await price_cart(session, business_id=business_id, lines=[spec_of(l) for l in existing + new_lines],
+                                    order_type=order.order_type, check_stock=False)
+    guests = list(cart.get("guests", []))
+    if joined:
+        guests.append({"key": key, "guest_name": name, "at": moment.isoformat()})
+    adds = list(cart.get("guest_adds", []))
+    adds.append({"client_ref": client_ref, "key_ref": ref, "at": moment.isoformat(), "lines": len(new_lines)})
+    extra = (note or "").strip()
+    merged_note = cart.get("note")
+    if extra:
+        merged_note = f"{merged_note}; {extra}"[:200] if merged_note else extra[:200]
+    order.cart = {**cart, "lines": carry_meta(priced, metas), "guests": guests, "guest_adds": adds[-50:],
+                  "note": merged_note, "rev": int(cart.get("rev", 0)) + 1}
+    _apply_bill(order, bill)
+    await session.flush()
+    return order, key
+
+
+async def place_or_join(
+    session: AsyncSession,
+    *,
+    business_id: uuid.UUID,
+    lines: list[OrderLineSpec],
+    order_type: str = "dine_in",
+    table_label: str | None = None,
+    guest_name: str | None = None,
+    guest_phone: str | None = None,
+    note: str | None = None,
+    client_ref: str | None = None,
+    expected_total: Decimal | None = None,
+) -> tuple[Order, str | None]:
+    """The QR menu's order (bill-2). A dine-in guest at a table that already
+    has an open bill joins it; otherwise this is a new ticket, which becomes the
+    table's bill. Serialised per table, so two phones at an empty table make
+    one bill. Returns the order and the key this phone holds."""
+    from app.services.bills import open_bill_for_table, table_key
+
+    existing = await find_by_client_ref(session, business_id, client_ref)
+    if existing is not None:
+        return existing, (existing.cart or {}).get("access_key")
+    replay = await _guest_add_replay(session, client_ref)
+    if replay is not None:
+        return replay
+    if await guest_backlog(session) >= MAX_OPEN_TICKETS:
+        raise QueueFull()
+    kind = order_type if order_type in MENU_ORDER_TYPES else "dine_in"
+    key = table_key(table_label)
+    if kind == "dine_in" and key is not None:
+        await session.execute(text("select pg_advisory_xact_lock(hashtext(:k))"), {"k": f"table:{business_id}:{key}"})
+        bill = await open_bill_for_table(session, table_label)
+        if bill is not None:
+            return await add_guest_lines(
+                session, business_id=business_id, order=bill, lines=lines, key=None, guest_name=guest_name,
+                note=note, client_ref=client_ref, expected_total=expected_total,
+            )
+    ticket = await place_ticket(
+        session, business_id=business_id, lines=lines, order_type=kind, table_label=table_label,
+        guest_name=guest_name, guest_phone=guest_phone, note=note, client_ref=client_ref,
+    )
+    if expected_total is not None and Decimal(ticket.total) != Decimal(expected_total).quantize(Decimal("0.01")):
+        raise QuoteMoved()
+    return ticket, ticket.cart.get("access_key")
 
 
 async def hold_draft(

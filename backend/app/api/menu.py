@@ -20,11 +20,16 @@ from sqlalchemy import select
 from app.core.db import tenant_session
 from app.core.security import decode_token
 from app.models import Business, Item, ItemVariant, Order
-from app.schemas.menu import MenuItemOut, MenuOut, MenuQuoteIn, MenuQuoteLineOut, MenuQuoteOut, TicketIn, TicketLineOut, TicketOut
+from app.schemas.menu import (
+    GuestAddIn, MenuItemOut, MenuOut, MenuQuoteIn, MenuQuoteLineOut, MenuQuoteOut, TicketIn, TicketLineOut, TicketOut,
+)
 from app.schemas.pos import PosModifierGroupOut, PosModifierOut, PosVariantOut
 from app.services.orders import ChoiceMissing, ItemNotFound, ModifierSelectionInvalid, OrderLineSpec, VariantNotFound
 from app.services.service_numbers import service_label
-from app.services.tickets import QueueFull, TicketNotFound, TicketUnavailable, get_ticket, place_ticket, ticket_code
+from app.services.tickets import (
+    QueueFull, QuoteMoved, TicketNotFound, TicketUnavailable, add_guest_lines, get_open_order, guest_ref, key_ref_for,
+    place_or_join, ticket_code,
+)
 
 router = APIRouter(prefix="/menu", tags=["menu"])
 
@@ -39,21 +44,42 @@ def _menu_business_id(menu_token: str) -> uuid.UUID:
     return uuid.UUID(claims["business_id"])
 
 
+def _stage(order: Order, viewer_ref: str | None) -> str:
+    """What the guest may be told (bill-2). A dine-in bill is sent before it
+    is paid; anything else is paid at the counter first."""
+    if order.status in ("voided", "refunded"):
+        return "cancelled"
+    if order.status != "open":
+        return "paid"
+    from app.services.bills import table_key
+
+    if order.order_type != "dine_in" or table_key(order.table_label) is None:
+        return "pay"
+    lines = (order.cart or {}).get("lines", [])
+    theirs = [l for l in lines if viewer_ref is None or l.get("guest_ref") == viewer_ref] or lines
+    return "waiting" if any(not l.get("sent_batch") for l in theirs) else "sent"
+
+
 def ticket_out(order: Order, model=TicketOut, kitchen_state: str | None = None, *, private: bool = True,
-               with_key: bool = False) -> TicketOut:
+               with_key: bool | str = False, viewer_ref: str | None = None) -> TicketOut:
     """`private=False` is the view for someone holding only the order id
     (svc-5): the status, the items and the total, but not who ordered, where
-    they sit, or their notes."""
+    they sit, or their notes. `with_key` hands this phone its key, once;
+    `viewer_ref` marks which lines are the asking phone's (bill-2)."""
     cart = order.cart or {"lines": []}
+    key = with_key if isinstance(with_key, str) else (cart.get("access_key") if with_key else None)
     return model(
-        access_key=cart.get("access_key") if with_key else None,
-        revised=int(cart.get("rev", 0)) > 0,
+        access_key=key,
+        # svc-5: the cashier changed it; sends and guests adding more do not count
+        revised=bool(cart.get("revisions")),
+        stage=_stage(order, viewer_ref),
+        can_add=viewer_ref is not None and order.status == "open",
         kitchen_state=kitchen_state,
         id=order.id,
         code=ticket_code(order.id),
         status=order.status,
         order_type=order.order_type,
-        table_label=order.table_label if private else None,
+        table_label=order.table_label if private or viewer_ref is not None else None,   # a phone at the table knows its table
         guest_name=order.guest_name if private else None,
         guest_phone=order.guest_phone if private else None,
         note=cart.get("note") if private else None,
@@ -68,6 +94,8 @@ def ticket_out(order: Order, model=TicketOut, kitchen_state: str | None = None, 
                 variant_id=uuid.UUID(l["variant_id"]) if l.get("variant_id") else None,
                 size=l.get("variant_name"),
                 modifier_ids=[uuid.UUID(m) for m in l.get("modifier_ids", [])],
+                mine=viewer_ref is not None and l.get("guest_ref") == viewer_ref,
+                sent=bool(l.get("sent_batch")),
             )
             for l in cart["lines"]
         ],
@@ -129,22 +157,19 @@ async def place(menu_token: str, payload: TicketIn):
     business_id = _menu_business_id(menu_token)
     async with tenant_session(business_id) as session:
         try:
-            ticket = await place_ticket(
+            # A dine-in guest at a table with an open bill joins it (bill-2).
+            # Shown one total and asked another: refused, nothing written, and
+            # the phone re-quotes with the guest's cart intact.
+            ticket, key = await place_or_join(
                 session,
                 business_id=business_id,
-                lines=[
-                    OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, modifier_ids=list(l.modifier_ids),
-                                  quantity=l.quantity, notes=l.notes)
-                    for l in payload.lines
-                ],
+                lines=_specs(payload.lines),
                 order_type=payload.order_type, table_label=payload.table_label,
                 guest_name=payload.guest_name, guest_phone=payload.guest_phone, note=payload.note,
-                client_ref=payload.client_ref,
+                client_ref=payload.client_ref, expected_total=payload.expected_total,
             )
-            if payload.expected_total is not None and ticket.status == "open" and not (ticket.cart or {}).get("rev") and Decimal(ticket.total) != Decimal(payload.expected_total).quantize(Decimal("0.01")):
-                # Shown one total, would be asked another: refuse, write nothing,
-                # let the phone re-quote with the guest's cart intact.
-                raise _PriceMoved()
+        except QuoteMoved:
+            raise HTTPException(status_code=409, detail="Harga menu baru saja berubah — periksa lagi total pesananmu sebelum mengirim")
         except QueueFull:
             raise HTTPException(status_code=429, detail="Antrean pesanan sedang penuh — silakan pesan langsung ke kasir ya")
         except ItemNotFound:
@@ -165,9 +190,8 @@ async def place(menu_token: str, payload: TicketIn):
             raise HTTPException(status_code=422, detail=messages[exc.code])
         except TicketUnavailable as exc:
             raise HTTPException(status_code=409, detail=f"{exc.item_name} sedang tidak tersedia — pilih menu lain ya")
-        except _PriceMoved:
-            raise HTTPException(status_code=409, detail="Harga menu baru saja berubah — periksa lagi total pesananmu sebelum mengirim")
-        return ticket_out(ticket, with_key=True)
+        ref = guest_ref(key) if key else None
+        return ticket_out(ticket, with_key=key or False, viewer_ref=ref, private=ref is not None and key == (ticket.cart or {}).get("access_key"))
 
 
 @router.get("/{menu_token}/orders/{order_id}", response_model=TicketOut)
@@ -177,8 +201,12 @@ async def watch(menu_token: str, order_id: uuid.UUID, key: str | None = None):
     business_id = _menu_business_id(menu_token)
     async with tenant_session(business_id) as session:
         try:
-            ticket = await get_ticket(session, order_id)
+            ticket = await get_open_order(session, order_id)
         except TicketNotFound:
+            raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+        ref = key_ref_for(ticket, key)
+        if ticket.source != "menu" and ref is None:
+            # A bill the cashier opened is only visible to a phone that joined it.
             raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
         kitchen_state = None
         if ticket.status == "completed":
@@ -187,7 +215,68 @@ async def watch(menu_token: str, order_id: uuid.UUID, key: str | None = None):
             kitchen_state, _since = await current_state(session, ticket.id)
         stored = (ticket.cart or {}).get("access_key")
         private = bool(stored) and bool(key) and secrets.compare_digest(stored, key)
-        return ticket_out(ticket, kitchen_state=kitchen_state, private=private)
+        return ticket_out(ticket, kitchen_state=kitchen_state, private=private, viewer_ref=ref)
+
+
+@router.post("/{menu_token}/orders/{order_id}/lines", response_model=TicketOut)
+async def add_more(menu_token: str, order_id: uuid.UUID, payload: GuestAddIn):
+    """A guest orders another round onto their open bill (bill-2). The items
+    wait for the cashier to send them, like everything else on the bill."""
+    from app.services.orders import TicketNotOpen
+    from app.services.tickets import find_by_client_ref
+
+    business_id = _menu_business_id(menu_token)
+    async with tenant_session(business_id) as session:
+        try:
+            await find_by_client_ref(session, business_id, payload.client_ref)   # serialises a retried tap
+            ticket = await get_open_order(session, order_id)
+            ref = key_ref_for(ticket, payload.key)
+            if ref is None:
+                raise TicketNotFound()
+            if payload.client_ref and any(a.get("client_ref") == payload.client_ref for a in (ticket.cart or {}).get("guest_adds", [])):
+                return ticket_out(ticket, viewer_ref=ref, private=(ticket.cart or {}).get("access_key") == payload.key)
+            from app.services.tickets import MAX_OPEN_TICKETS, guest_backlog
+
+            if await guest_backlog(session) >= MAX_OPEN_TICKETS:
+                raise QueueFull()
+            ticket, _key = await add_guest_lines(
+                session, business_id=business_id, order=ticket, lines=_specs(payload.lines), key=payload.key,
+                note=payload.note, client_ref=payload.client_ref, expected_total=payload.expected_total,
+            )
+        except TicketNotFound:
+            raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+        except TicketNotOpen as exc:
+            raise HTTPException(status_code=409, detail=_CLOSED_FOR_GUEST.get(exc.status, "Pesanan ini sudah selesai — pesan lagi dari menu ya"))
+        except QuoteMoved:
+            raise HTTPException(status_code=409, detail="Harga menu baru saja berubah — periksa lagi total pesananmu sebelum mengirim")
+        except QueueFull:
+            raise HTTPException(status_code=429, detail="Pesanan meja ini sudah panjang sekali — tambah pesanan langsung di kasir ya")
+        except TicketUnavailable as exc:
+            raise HTTPException(status_code=409, detail=f"{exc.item_name} sedang tidak tersedia — pilih menu lain ya")
+        except (ItemNotFound, VariantNotFound):
+            raise HTTPException(status_code=404, detail="Menu tidak ditemukan — coba muat ulang halaman")
+        except ChoiceMissing as exc:
+            from app.api.pos import choice_missing_message
+
+            raise HTTPException(status_code=422, detail=choice_missing_message(exc))
+        except ModifierSelectionInvalid as exc:
+            raise HTTPException(status_code=422, detail=f"Pilihan '{exc.group_name}' perlu diperiksa lagi" if exc.group_name else "Pilihan tambahan sudah tidak tersedia")
+        private = (ticket.cart or {}).get("access_key") == payload.key
+        return ticket_out(ticket, viewer_ref=ref, private=private)
+
+
+_CLOSED_FOR_GUEST = {
+    "completed": "Tagihan ini sudah dibayar — kalau mau pesan lagi, buat pesanan baru dari menu ya",
+    "voided": "Pesanan ini sudah dibatalkan kasir — tanyakan ke kasir ya",
+    "refunded": "Pesanan ini sudah dibatalkan kasir — tanyakan ke kasir ya",
+}
+
+
+def _specs(lines) -> list[OrderLineSpec]:
+    return [
+        OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, modifier_ids=list(l.modifier_ids), quantity=l.quantity, notes=l.notes)
+        for l in lines
+    ]
 
 
 @router.post("/{menu_token}/quote", response_model=MenuQuoteOut)
@@ -224,6 +313,3 @@ async def quote(menu_token: str, payload: MenuQuoteIn):
             tax_inclusive=config.tax_inclusive, rounding=bill.rounding, total=bill.total,
         )
 
-
-class _PriceMoved(Exception):
-    pass

@@ -91,6 +91,9 @@ class TicketLineOut(BaseModel):
     variant_id: uuid.UUID | None = None
     size: str | None = None
     modifier_ids: list[uuid.UUID] = []
+    # bill-2: whose line it is (the phone asking) and whether the cashier sent it
+    mine: bool = False
+    sent: bool = False
 
 
 class TicketOut(BaseModel):
@@ -117,6 +120,25 @@ class TicketOut(BaseModel):
     kitchen_state: str | None = None   # once paid: new · preparing · ready · done (M11-T2)
     access_key: str | None = None      # svc-5: returned to the device that placed it, nobody else
     revised: bool = False              # svc-5: the cashier changed it after it was sent
+    # bill-2: what the guest may be told, and nothing more:
+    #   waiting    some of this phone's items wait for the cashier to send them
+    #   sent       everything of theirs went to the Bar/Dapur; the nota comes to the table
+    #   pay        an order that is paid before it is made (takeaway): pay at the counter
+    #   paid       paid; the bill is closed
+    #   cancelled  voided or refunded
+    stage: Literal["waiting", "sent", "pay", "paid", "cancelled"] = "pay"
+    can_add: bool = False              # this phone may add more to this open bill
+
+
+class GuestAddIn(BaseModel):
+    """A guest adds more to their open bill from the phone (bill-2). The key is
+    the one this phone was given when it placed or joined."""
+
+    key: str = Field(min_length=8, max_length=64)
+    lines: list[TicketLineIn] = Field(min_length=1, max_length=30)
+    note: str | None = Field(default=None, max_length=200)
+    client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    expected_total: Decimal | None = Field(default=None, ge=0)
 
 
 class PosTicketOut(TicketOut):
@@ -191,6 +213,8 @@ class ActiveLineOut(BaseModel):
     done: bool = False
     uid: str | None = None            # bill-1: the line's identity on an open order
     sent_batch: int | None = None     # bill-1: which send it went out in; None = not sent yet
+    from_guest: bool = False          # bill-2: a guest added it from the QR menu
+    guest_name: str | None = None
 
 
 class CancelledLineOut(BaseModel):
