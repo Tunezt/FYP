@@ -1041,7 +1041,7 @@ class PrintJob(Base):
     )
     order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
     printer: Mapped[str] = mapped_column(Text, nullable=False)          # front | kitchen
-    kind: Mapped[str] = mapped_column(Text, nullable=False)             # receipt | bar_ticket | kitchen_ticket | *_cancel
+    kind: Mapped[str] = mapped_column(Text, nullable=False)             # receipt | nota (0041) | bar_ticket | kitchen_ticket | *_cancel
     copy: Mapped[str] = mapped_column(Text, nullable=False, server_default="original")
     reprint_of: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("print_jobs.id"))
     dedupe_key: Mapped[str] = mapped_column(Text, nullable=False)

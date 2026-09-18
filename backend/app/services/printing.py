@@ -22,12 +22,22 @@ Cancelling a paid order cannot un-print a slip. If a slip may already be on
 paper (taken by a device, printed, or failed), a BATAL notice goes to the same
 printer. A slip still waiting in the queue is withdrawn instead, because nobody
 has seen it.
+
+Open bills (bill-1). A dine-in table orders, eats and orders again before it
+pays. Each *send* is a batch: its Bar and Dapur slips carry only that batch's
+items (TAMBAHAN and "Tambahan n" from the second send on), and the front
+printer gives a *nota* for the table, the new items with prices, the running
+total and BELUM DIBAYAR. When a bill that was sent is paid, only the receipt
+prints; whatever was still unsent goes out as one last batch of slips first.
+A sent item that is cancelled gets a BATAL notice naming only that item, or its
+slip is withdrawn if nothing has taken it and nothing else is on it.
 """
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import case, func, select, update
@@ -59,9 +69,11 @@ def _label(order: Order) -> str:
     return f"{order.service_number:03d}" if order.service_number is not None else f"#{str(order.id)[-4:].upper()}"
 
 
-def heading_blocks(order: Order) -> list[dict]:
+def heading_blocks(order: Order, batch: int | None = None) -> list[dict]:
     """"MEJA 7" over "Pesanan 042" for dine-in with a table; otherwise
-    "PESANAN 042". The batch and a driver reference follow, never replace."""
+    "PESANAN 042". The batch and a driver reference follow, never replace.
+    `batch` overrides the order's own (an open bill's later sends)."""
+    batch = order.batch_no if batch is None else batch
     table = (order.table_label or "").strip()
     if table.lower().startswith("meja"):
         table = table[4:].strip()
@@ -71,16 +83,17 @@ def heading_blocks(order: Order) -> list[dict]:
         blocks.append({"t": "line", "text": f"Pesanan {_label(order)}", "style": "bold", "size": "large"})
     else:
         blocks.append({"t": "banner", "text": f"PESANAN {_label(order)}"})
-    if order.batch_no:
-        blocks.append({"t": "line", "text": f"Tambahan {order.batch_no}", "style": "bold", "size": "large"})
+    if batch:
+        blocks.append({"t": "line", "text": f"Tambahan {batch}", "style": "bold", "size": "large"})
     if order.external_ref:
         blocks.append({"t": "line", "text": f"Driver: {order.external_ref}", "style": "bold"})
     return blocks
 
 
-def ticket_ref(order: Order, station: str) -> str:
+def ticket_ref(order: Order, station: str, batch: int | None = None) -> str:
     """The slip's own reference: service number, station letter, batch."""
-    return f"{_label(order).lstrip('#')}-{'B' if station == 'bar' else 'D'}{order.batch_no or 0}"
+    letter = {"bar": "B", "kitchen": "D", "nota": "N"}[station]
+    return f"{_label(order).lstrip('#')}-{letter}{(order.batch_no if batch is None else batch) or 0}"
 
 
 async def _local(session: AsyncSession, business_id: uuid.UUID, at: datetime) -> datetime:
@@ -130,22 +143,17 @@ def _qty(q) -> str:
     return str(int(q)) if q == q.to_integral_value() else f"{q.normalize()}"
 
 
-async def render_ticket(session: AsyncSession, order: Order, station: str, *, cancel: bool = False) -> dict | None:
-    """A preparation slip: no prices, no payment, no customer details — the
-    table or number, the service, the time, the reference, and exactly what to
-    make with every choice written out."""
-    lines = await _station_lines(session, order, station)
-    if not lines:
-        return None
-    when = await _local(session, order.business_id, order.sold_at)
+def _slip(order: Order, station: str, lines, *, when: datetime, batch: int, cancel: bool = False,
+          cancel_text: str = "Pesanan ini dibatalkan setelah slip dicetak. Konfirmasi ke kasir.",
+          reason: str | None = None) -> dict:
     blocks: list[dict] = [{"t": "title", "text": STATION_TITLE[station]}]
     if cancel:
         blocks.append({"t": "label", "text": "BATAL"})
-    elif order.batch_no:
+    elif batch:
         blocks.append({"t": "label", "text": "TAMBAHAN"})
-    blocks += heading_blocks(order)
+    blocks += heading_blocks(order, batch)
     blocks.append({"t": "kv", "left": SERVICE_LABEL.get(order.order_type, order.order_type), "right": when.strftime("%H.%M")})
-    blocks.append({"t": "kv", "left": f"Ref {ticket_ref(order, station)}", "right": when.strftime("%d/%m")})
+    blocks.append({"t": "kv", "left": f"Ref {ticket_ref(order, station, batch)}", "right": when.strftime("%d/%m")})
     blocks.append({"t": "rule"})
     if cancel:
         blocks.append({"t": "text", "text": "JANGAN DIBUAT / HENTIKAN:", "style": "bold"})
@@ -154,8 +162,21 @@ async def render_ticket(session: AsyncSession, order: Order, station: str, *, ca
     if note and not cancel:
         blocks += [{"t": "rule"}, {"t": "note", "text": f"Catatan pesanan: {note}"}]
     if cancel:
-        blocks += [{"t": "rule"}, {"t": "text", "text": "Pesanan ini dibatalkan setelah slip dicetak. Konfirmasi ke kasir.", "style": "bold"}]
+        blocks += [{"t": "rule"}, {"t": "text", "text": cancel_text, "style": "bold"}]
+        if reason:
+            blocks.append({"t": "note", "text": f"Alasan: {reason}"})
     return {"v": 1, "kind": CANCEL_KIND[station] if cancel else TICKET_KIND[station], "station": station, "blocks": blocks}
+
+
+async def render_ticket(session: AsyncSession, order: Order, station: str, *, cancel: bool = False) -> dict | None:
+    """A preparation slip: no prices, no payment, no customer details — the
+    table or number, the service, the time, the reference, and exactly what to
+    make with every choice written out."""
+    lines = await _station_lines(session, order, station)
+    if not lines:
+        return None
+    when = await _local(session, order.business_id, order.sold_at)
+    return _slip(order, station, lines, when=when, batch=order.batch_no or 0, cancel=cancel)
 
 
 async def render_receipt(session: AsyncSession, order: Order) -> dict:
@@ -225,6 +246,10 @@ async def enqueue_for_paid_order(session: AsyncSession, order: Order, *, staff_i
         return []
     jobs = [await _add_job(session, order, printer="front", kind="receipt", document=await render_receipt(session, order),
                            key=f"{order.id}:receipt", staff_id=staff_id)]
+    if (order.cart or {}).get("batches"):
+        # An open bill (bill-1): every item already went out on its batch's
+        # slips, the last of them just before payment. Only the receipt is new.
+        return jobs
     for station in ("bar", "kitchen"):
         doc = await render_ticket(session, order, station)
         if doc is not None:
@@ -237,6 +262,12 @@ async def on_order_reversed(session: AsyncSession, order: Order, *, staff_id: uu
     """A paid order was voided or refunded. For each station slip: withdraw it
     if nothing has taken it yet; otherwise send a BATAL notice to that printer,
     because paper may already be on the pass."""
+    if (order.cart or {}).get("batches"):
+        # An open bill has one slip per send and station: cancel item by item.
+        return await cancel_cart_lines(
+            session, order, [(l, Decimal(l["quantity"])) for l in order.cart.get("lines", []) if l.get("sent_batch")], [],
+            key="reversed", staff_id=staff_id,
+        )
     notices: list[PrintJob] = []
     for station in ("bar", "kitchen"):
         original = (await session.execute(
@@ -269,7 +300,7 @@ def display_status(job: PrintJob, now: datetime | None = None) -> str:
 # Jobs written in one transaction share its `now()`, so within a moment the
 # paper comes out in this order: the customer's copy first, then the slips.
 PAPER_ORDER = case(
-    {"receipt": 0, "bar_ticket": 1, "kitchen_ticket": 1, "bar_cancel": 2, "kitchen_cancel": 2},
+    {"receipt": 0, "nota": 0, "bar_ticket": 1, "kitchen_ticket": 1, "bar_cancel": 2, "kitchen_cancel": 2},
     value=PrintJob.kind, else_=3,
 )
 
@@ -380,3 +411,115 @@ async def jobs_for_orders(session: AsyncSession, order_ids: list[uuid.UUID]) -> 
     for j in rows:
         out.setdefault(j.order_id, []).append(j)
     return out
+
+
+# ── Open bills: sends and cancelled sent items (bill-1) ──────────────────────
+
+
+def cart_station(line: dict) -> str | None:
+    """Where a cart line is made: bar, kitchen, or None (nothing to make). An
+    item nobody assigned goes to the front, flagged, like a paid order's."""
+    st = line.get("prep_station")
+    if st is None:
+        return "bar"
+    return None if st == "none" else st
+
+
+def _cart_view(line: dict, quantity: Decimal | None = None) -> SimpleNamespace:
+    return SimpleNamespace(
+        quantity=Decimal(line["quantity"]) if quantity is None else quantity, item_name=line["item_name"], name=line["item_name"],
+        size=line.get("variant_name"), modifiers=list(line.get("modifier_names", [])), notes=line.get("notes"),
+        unassigned=line.get("prep_station") is None,
+    )
+
+
+async def render_nota(session: AsyncSession, order: Order, lines: list[dict], *, batch: int, when: datetime,
+                      staff_name: str | None) -> dict:
+    """What the staff put on the table after a send: the new items with their
+    prices and the bill so far. Not a receipt: nothing has been paid."""
+    business = await session.get(Business, order.business_id)
+    blocks: list[dict] = [{"t": "title", "text": (business.name if business else "").upper()}]
+    if batch:
+        blocks.append({"t": "label", "text": "TAMBAHAN"})
+    blocks += heading_blocks(order, batch)
+    blocks.append({"t": "kv", "left": SERVICE_LABEL.get(order.order_type, order.order_type), "right": when.strftime("%d/%m/%Y %H.%M")})
+    blocks.append({"t": "kv", "left": f"Nota {ticket_ref(order, 'nota', batch)}", "right": staff_name or ""})
+    blocks.append({"t": "rule"})
+    for l in lines:
+        names = list(l.get("modifier_names", []))
+        prices = list(l.get("modifier_prices", []) or ["0"] * len(names))
+        blocks.append({
+            "t": "item_priced", "qty": _qty(l["quantity"]), "name": l["item_name"], "size": l.get("variant_name"),
+            "modifiers": [n + (f" +{_rp(p)}" if Decimal(p) else "") for n, p in zip(names, prices)],
+            "notes": l.get("notes"), "amount": _rp(l["line_total"]),
+        })
+    blocks.append({"t": "rule"})
+    blocks.append({"t": "kv", "left": "Pesanan ini", "right": _rp(sum((Decimal(l["line_total"]) for l in lines), Decimal(0)))})
+    blocks.append({"t": "total", "left": "TOTAL SEMENTARA", "right": _rp(order.total)})
+    blocks += [
+        {"t": "label", "text": "BELUM DIBAYAR"},
+        {"t": "text", "text": "Bayar di kasir sebelum pulang. Terima kasih!", "align": "center"},
+    ]
+    return {"v": 1, "kind": "nota", "blocks": blocks}
+
+
+def send_key(order: Order, n: int, kind: str) -> str:
+    return f"{order.id}:send:{n}:{kind}"
+
+
+async def enqueue_for_send(session: AsyncSession, order: Order, *, n: int, lines: list[dict], staff_id: uuid.UUID | None,
+                           nota: bool = True) -> list[PrintJob]:
+    """Batch `n` of an open bill went out: one slip per station that has items
+    in it, and the table's nota. Keyed on the batch, so a retry adds nothing."""
+    batch = n - 1
+    when = await _local(session, order.business_id, datetime.now(timezone.utc))
+    jobs: list[PrintJob] = []
+    if nota:
+        staff = await session.get(Staff, staff_id) if staff_id else None
+        doc = await render_nota(session, order, lines, batch=batch, when=when, staff_name=staff.name if staff else None)
+        jobs.append(await _add_job(session, order, printer="front", kind="nota", document=doc,
+                                   key=send_key(order, n, "nota"), staff_id=staff_id))
+    for station in ("bar", "kitchen"):
+        mine = [_cart_view(l) for l in lines if cart_station(l) == station]
+        if mine:
+            jobs.append(await _add_job(session, order, printer=STATION_PRINTER[station], kind=TICKET_KIND[station],
+                                       document=_slip(order, station, mine, when=when, batch=batch),
+                                       key=send_key(order, n, TICKET_KIND[station]), staff_id=staff_id))
+    return jobs
+
+
+async def cancel_cart_lines(session: AsyncSession, order: Order, removed: list[tuple[dict, Decimal]], remaining: list[dict], *,
+                            key: str, staff_id: uuid.UUID | None, reason: str | None = None) -> list[PrintJob]:
+    """Sent items that will not be made. Per station and batch: a slip nothing
+    has taken, with nothing left on it, is withdrawn; otherwise the station
+    gets one BATAL notice naming exactly the cancelled items and quantities."""
+    notices: list[PrintJob] = []
+    when = await _local(session, order.business_id, datetime.now(timezone.utc))
+    for station in ("bar", "kitchen"):
+        by_batch: dict[int, list[tuple[dict, Decimal]]] = {}
+        for line, qty in removed:
+            if line.get("sent_batch") and cart_station(line) == station:
+                by_batch.setdefault(int(line["sent_batch"]), []).append((line, qty))
+        tell: list[SimpleNamespace] = []
+        for n, items in sorted(by_batch.items()):
+            slip = (await session.execute(
+                select(PrintJob).where(PrintJob.dedupe_key == send_key(order, n, TICKET_KIND[station]))
+            )).scalar_one_or_none()
+            if slip is None:
+                continue          # nothing was ever owed to paper for this batch
+            still_on_it = any(r.get("sent_batch") == n and cart_station(r) == station for r in remaining)
+            if not still_on_it:
+                withdrawn = await session.execute(
+                    update(PrintJob).where(PrintJob.id == slip.id, PrintJob.status == "pending")
+                    .values(status="cancelled", updated_at=func.now()).execution_options(synchronize_session=False)
+                )
+                if withdrawn.rowcount == 1:
+                    await session.refresh(slip)
+                    continue
+            tell += [_cart_view(line, qty) for line, qty in items]
+        if tell:
+            doc = _slip(order, station, tell, when=when, batch=0, cancel=True, reason=reason,
+                        cancel_text="Item di atas dibatalkan setelah slip dicetak. Konfirmasi ke kasir.")
+            notices.append(await _add_job(session, order, printer=STATION_PRINTER[station], kind=CANCEL_KIND[station],
+                                          document=doc, key=f"{order.id}:{key}:{CANCEL_KIND[station]}", staff_id=staff_id))
+    return notices

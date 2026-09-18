@@ -25,6 +25,10 @@ once, at payment, by the one code path that already does it — the status flips
 to `completed` under an atomic claim so two tills cannot settle one order.
 Cancelling flips it to `voided` with the reason kept in `cart`; there is nothing
 to reverse because nothing was taken. Nothing is deleted.
+
+A dine-in open order is the table's *bill* (bill-1, services/bills.py): its
+lines are sent to be made in batches before anything is paid, sent lines are
+locked, and a table has one open bill at a time.
 """
 from __future__ import annotations
 
@@ -187,7 +191,7 @@ async def price_cart(
             "modifier_prices": [str(Decimal(m.price_delta)) for m in modifiers],
             "quantity": str(quantity), "base_price": str(base), "unit_price": str(unit_price),
             "line_total": str(line_total), "notes": (spec.notes or "").strip() or None,
-            "prep_station": item.prep_station,
+            "prep_station": item.prep_station, "uid": secrets.token_hex(6),
         })
     bill = price_order(inputs, config, order_type=order_type)
     return cart_lines, bill
@@ -284,6 +288,10 @@ async def hold_draft(
     from app.services.orders import resolve_parent
 
     parent = await resolve_parent(session, business_id, parent_order_id)
+    from app.services.bills import ensure_table_free
+
+    await ensure_table_free(session, business_id, order_type=order_type, table_label=table_label,
+                            parent_order_id=parent.id if parent is not None else None)
     cart_lines, bill = await price_cart(session, business_id=business_id, lines=lines, order_type=order_type)
     draft = Order(
         parent_order_id=parent.id if parent is not None else None,
@@ -322,9 +330,15 @@ async def update_open_order(
     note: str | None = None,
     now: datetime | None = None,
     external_ref: str | None = None,
+    line_uids: list[str | None] | None = None,
 ) -> Order:
     """Replace an unpaid order's cart (svc-2): add items, change quantities or
     options before payment. Re-priced from today's catalogue.
+
+    On a bill with sent lines (bill-1) only the *unsent* part is replaced: a
+    sent line is kept as it is whether or not the device repeats it, and a
+    device that repeats it with a change is refused (cancel it instead).
+    `line_uids` pairs each incoming line with the uid the device knows.
 
     Guarded by the revision the device loaded: the UPDATE only lands when the
     row is still open *and* still at that revision, so a second tablet's edit,
@@ -333,9 +347,48 @@ async def update_open_order(
     unpaid order is not ledger data, but who changed it and when is kept."""
     if order.status != "open" or not is_open_order(order):
         raise TicketNotOpen(order.status)
+    from app.services.bills import (
+        SentLineLocked, carry_meta, ensure_table_free, same_line, sent_lines, spec_of, table_key,
+    )
+    from app.services.orders import EmptyOrder
+
     allowed = MENU_ORDER_TYPES if order.source == "menu" else POS_DRAFT_ORDER_TYPES
     kind = order_type if order_type in allowed else order.order_type
-    cart_lines, bill = await price_cart(session, business_id=business_id, lines=lines, order_type=kind)
+    locked = sent_lines(order)
+    if locked and kind != order.order_type:
+        raise SentLineLocked("")
+    by_uid = {l["uid"]: l for l in locked}
+    uids = list(line_uids or [])
+    uids += [None] * (len(lines) - len(uids))
+    fresh_specs: list[OrderLineSpec] = []
+    fresh_metas: list[dict] = []
+    taken = set(by_uid)
+    for spec, uid in zip(lines, uids):
+        if uid in by_uid:
+            if not same_line(by_uid[uid], spec):
+                raise SentLineLocked(by_uid[uid]["item_name"])
+            continue
+        if not uid or uid in taken:
+            uid = secrets.token_hex(6)
+        taken.add(uid)
+        fresh_specs.append(spec)
+        fresh_metas.append({"uid": uid})
+    if not locked and not fresh_specs:
+        raise EmptyOrder()
+    if locked:
+        # What was sent is not re-checked against stock (it is on the table);
+        # what is new is checked on its own.
+        if fresh_specs:
+            await price_cart(session, business_id=business_id, lines=fresh_specs, order_type=kind)
+        cart_lines, bill = await price_cart(session, business_id=business_id, lines=[spec_of(l) for l in locked] + fresh_specs,
+                                            order_type=kind, check_stock=False)
+    else:
+        cart_lines, bill = await price_cart(session, business_id=business_id, lines=fresh_specs, order_type=kind)
+    cart_lines = carry_meta(cart_lines, locked + fresh_metas)
+    new_table = table_label.strip() if table_label is not None else order.table_label
+    if kind == "dine_in" and (kind != order.order_type or table_key(new_table) != table_key(order.table_label)):
+        await ensure_table_free(session, business_id, order_type=kind, table_label=new_table,
+                                parent_order_id=order.parent_order_id, exclude_id=order.id)
     moment = now or datetime.now(timezone.utc)
     old = dict(order.cart or {})
     revisions = list(old.get("revisions", []))
@@ -486,7 +539,13 @@ async def settle_ticket(
 
     `client_ref` makes a repeated tap on "Bayar" return the first payment's
     result instead of a 409; `expected_rev` refuses to charge for a version of
-    the order the cashier has not seen (svc-2)."""
+    the order the cashier has not seen (svc-2).
+
+    A bill that was sent (bill-1) sends whatever is still unsent as a last
+    batch of slips first; the sale then prints only the receipt."""
+    from app.services.bills import lock_order, send_remainder_before_payment
+
+    ticket = await lock_order(session, ticket)
     if client_ref and ticket.status == "completed" and (ticket.cart or {}).get("paid_ref") == client_ref:
         return await replay_created(session, ticket)
     if ticket.status != "open":
@@ -502,6 +561,7 @@ async def settle_ticket(
         from app.services.orders import resolve_parent
 
         await resolve_parent(session, business_id, ticket.parent_order_id)
+    ticket = await send_remainder_before_payment(session, ticket, staff_id=staff_id)
     if client_ref:
         # `client_ref` on the row already names the submission that *created*
         # it (the guest's phone); the payment's own reference lives in the cart.
@@ -524,13 +584,23 @@ async def settle_ticket(
 async def cancel_ticket(session: AsyncSession, *, ticket: Order, reason: str | None, staff_id: uuid.UUID | None) -> Order:
     """The order will not be paid: the row stays, its status says so, the cart
     remembers why. Nothing was taken, so there is nothing to reverse — which is
-    exactly what makes this different from voiding a paid sale."""
+    exactly what makes this different from voiding a paid sale.
+
+    A bill with sent items (bill-1) may have food on the pass: the reason is
+    required, and every station with a slip is told (or its slip withdrawn)."""
+    from app.services.bills import ReasonRequired, cancel_bill_prints, lock_order, sent_lines
+
+    ticket = await lock_order(session, ticket)
     if ticket.status != "open":
         raise TicketNotOpen(ticket.status)
+    reason = (reason or "").strip() or None
+    if sent_lines(ticket) and reason is None:
+        raise ReasonRequired()
     ticket.status = "voided"
     ticket.cart = {
         **ticket.cart,
-        "cancelled": {"reason": reason or None, "at": datetime.now(timezone.utc).isoformat(), "staff_id": str(staff_id) if staff_id else None},
+        "cancelled": {"reason": reason, "at": datetime.now(timezone.utc).isoformat(), "staff_id": str(staff_id) if staff_id else None},
     }
     await session.flush()
+    await cancel_bill_prints(session, ticket, reason=reason, staff_id=staff_id)
     return ticket

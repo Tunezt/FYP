@@ -36,6 +36,8 @@ class TicketLineIn(BaseModel):
     modifier_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
     quantity: Decimal = Field(gt=0, le=Decimal("99"))
     notes: str | None = Field(default=None, max_length=200)
+    # bill-1: the line's identity on an open order, as the server gave it
+    uid: str | None = Field(default=None, min_length=6, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class TicketIn(BaseModel):
@@ -158,18 +160,22 @@ class DraftIn(BaseModel):
     client_ref: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     parent_order_id: uuid.UUID | None = None   # svc-3: held addition to a paid order
     external_ref: str | None = Field(default=None, max_length=40)   # prt-1: a driver's or platform's reference, typed by hand
+    send: bool = False   # bill-1: open the table's bill and send it to be made, in one step
 
 
 class OpenOrderUpdateIn(BaseModel):
-    """Replace an unpaid order's cart. `rev` is the version the device loaded."""
+    """Replace an unpaid order's cart. `rev` is the version the device loaded.
+    On a bill with sent lines, `lines` is the unsent part (sent lines are kept
+    and may be repeated unchanged); it may then be empty."""
 
     rev: int = Field(ge=0)
-    lines: list[TicketLineIn] = Field(min_length=1, max_length=50)
+    lines: list[TicketLineIn] = Field(max_length=50)
     order_type: DraftOrderType | None = None
     table_label: str | None = Field(default=None, max_length=20)
     guest_name: str | None = Field(default=None, max_length=60)
     note: str | None = Field(default=None, max_length=200)
     external_ref: str | None = Field(default=None, max_length=40)
+    send: bool = False   # bill-1: save, then send the unsent lines to be made
 
 
 class ActiveLineOut(BaseModel):
@@ -183,6 +189,20 @@ class ActiveLineOut(BaseModel):
     variant_id: uuid.UUID | None = None
     modifier_ids: list[uuid.UUID] = []
     done: bool = False
+    uid: str | None = None            # bill-1: the line's identity on an open order
+    sent_batch: int | None = None     # bill-1: which send it went out in; None = not sent yet
+
+
+class CancelledLineOut(BaseModel):
+    """A sent item taken off an open bill (bill-1): kept, with why."""
+
+    name: str
+    size: str | None = None
+    quantity: Decimal
+    modifiers: list[str] = []
+    sent_batch: int
+    reason: str
+    at: datetime
 
 
 class ActiveOrderOut(BaseModel):
@@ -220,6 +240,10 @@ class ActiveOrderOut(BaseModel):
     # they were priced. Payment is refused until the order is re-priced.
     price_changes: list["PriceChangeOut"] = []
     print_jobs: list["PrintSummaryOut"] = []   # prt-4
+    # bill-1: an open bill is sent in batches before it is paid
+    sent_batches: int = 0
+    unsent_count: int = 0             # lines not sent yet ("perlu dikirim")
+    cancelled_lines: list[CancelledLineOut] = []
 
 
 class PrintSummaryOut(BaseModel):
@@ -227,7 +251,7 @@ class PrintSummaryOut(BaseModel):
     about that piece of paper, and nothing more."""
 
     job_id: uuid.UUID
-    kind: str            # receipt · bar_ticket · kitchen_ticket · bar_cancel · kitchen_cancel
+    kind: str            # receipt · nota · bar_ticket · kitchen_ticket · bar_cancel · kitchen_cancel
     printer: str         # front · kitchen
     status: str          # pending · sending · uncertain · printed · failed · cancelled
     reprints: int = 0
@@ -241,6 +265,21 @@ class PriceChangeOut(BaseModel):
 
 class RepriceIn(BaseModel):
     rev: int = Field(ge=0)
+
+
+class SendIn(BaseModel):
+    """Send an open bill's unsent lines to be made (bill-1)."""
+
+    rev: int = Field(ge=0)
+
+
+class LineCancelIn(BaseModel):
+    """Take a sent item off an open bill (bill-1). No PIN: this is the
+    cashier's call. The reason is required and printed for the station."""
+
+    rev: int = Field(ge=0)
+    quantity: Decimal | None = Field(default=None, gt=0, le=Decimal("99"))   # None: the whole line
+    reason: str = Field(min_length=1, max_length=200)
 
 
 ActiveOrderOut.model_rebuild()

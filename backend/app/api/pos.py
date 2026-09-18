@@ -19,7 +19,9 @@ from app.ai.periods import period_range
 from app.services import pin_guard
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
-from app.schemas.menu import ActiveOrderOut, DraftIn, OpenOrderUpdateIn, PosTicketOut, RepriceIn, TicketCancelIn, TicketSettleIn
+from app.schemas.menu import (
+    ActiveOrderOut, DraftIn, LineCancelIn, OpenOrderUpdateIn, PosTicketOut, RepriceIn, SendIn, TicketCancelIn, TicketSettleIn,
+)
 from app.schemas.pos import KitchenBoardOut, KitchenLineIn, KitchenLineOut, KitchenStateIn, KitchenTicketOut
 from app.core.security import create_token, decode_token, verify_pin
 from app.models import Business, Item, ItemVariant, Modifier, RequestLog, Staff
@@ -630,6 +632,7 @@ _TICKET_CLOSED = {
 async def pos_cancel_ticket(order_id: uuid.UUID, payload: TicketCancelIn, ctx: PosCtx):
     from app.api.menu import ticket_out
     from app.services.orders import TicketNotOpen
+    from app.services.bills import ReasonRequired
     from app.services.tickets import TicketNotFound, cancel_ticket, get_open_order
 
     try:
@@ -639,6 +642,8 @@ async def pos_cancel_ticket(order_id: uuid.UUID, payload: TicketCancelIn, ctx: P
         raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
     except TicketNotOpen as exc:
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
+    except ReasonRequired:
+        raise HTTPException(status_code=422, detail=_REASON_REQUIRED)
     return ticket_out(ticket, PosTicketOut)
 
 
@@ -691,6 +696,57 @@ async def _price_errors(fn):
         raise HTTPException(status_code=422, detail=messages[exc.code])
 
 
+_REASON_REQUIRED = "Tulis alasan pembatalan — dapur dan bar perlu tahu kenapa"
+_NOT_SENDABLE = {
+    "not_dine_in": (422, "Hanya pesanan makan di sini yang dikirim dulu — pesanan bawa pulang dibayar langsung"),
+    "no_table": (422, "Isi nomor meja dulu sebelum mengirim pesanan"),
+    "addition": (422, "Tambahan untuk struk yang sudah dibayar langsung dibayar, tidak dikirim dulu"),
+    "nothing": (409, "Tidak ada item baru untuk dikirim"),
+}
+
+
+def _qty_text(q) -> str:
+    q = Decimal(q)
+    return str(int(q)) if q == q.to_integral_value() else f"{q.normalize()}"
+
+
+async def _bill_errors(fn):
+    """The open-bill failures (bill-1), in the till's own words, around the
+    cart-pricing ones."""
+    from app.services.bills import LineNotFound, NotSendable, ReasonRequired, SentLineLocked, StockShort, TableBusy, table_key
+    from app.services.orders import EmptyOrder, TicketNotOpen
+    from app.services.tickets import OrderChanged
+
+    try:
+        return await _price_errors(fn)
+    except TableBusy as exc:
+        other = exc.order
+        raise HTTPException(
+            status_code=409,
+            detail=f"Meja {table_key(other.table_label).upper()} sudah punya tagihan terbuka (Pesanan {service_label(other)}) — buka tagihan itu untuk menambah pesanan",
+            headers={"X-Open-Bill-Id": str(other.id)},
+        )
+    except NotSendable as exc:
+        code, message = _NOT_SENDABLE[exc.code]
+        raise HTTPException(status_code=code, detail=message)
+    except SentLineLocked as exc:
+        if not exc.name:
+            raise HTTPException(status_code=409, detail="Jenis pesanan tidak bisa diubah setelah ada item yang dikirim")
+        raise HTTPException(status_code=409, detail=f"{exc.name} sudah dikirim — tidak bisa diubah. Batalkan dengan alasan, lalu tambahkan yang baru")
+    except LineNotFound:
+        raise HTTPException(status_code=404, detail="Item itu tidak ada di tagihan ini, atau jumlahnya melebihi yang dipesan")
+    except ReasonRequired:
+        raise HTTPException(status_code=422, detail=_REASON_REQUIRED)
+    except StockShort as exc:
+        raise HTTPException(status_code=409, detail=f"Stok {exc.item_name} tidak cukup untuk dikirim — tersisa {_qty_text(exc.available)} setelah pesanan meja lain")
+    except EmptyOrder:
+        raise HTTPException(status_code=422, detail="Pesanan kosong — tambahkan barang atau batalkan pesanan")
+    except TicketNotOpen as exc:
+        raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
+    except OrderChanged as exc:
+        raise HTTPException(status_code=409, detail=order_changed_message(exc))
+
+
 def _cart_specs(lines) -> list[OrderLineSpec]:
     return [
         OrderLineSpec(item_id=l.item_id, variant_id=l.variant_id, modifier_ids=list(l.modifier_ids), quantity=l.quantity, notes=l.notes)
@@ -700,7 +756,9 @@ def _cart_specs(lines) -> list[OrderLineSpec]:
 
 async def _active_views(session, orders, tickets_by_id=None):
     """Unpaid carts and paid-not-handed-over tickets, in one shape."""
-    from app.schemas.menu import ActiveLineOut, ActiveOrderOut
+    from datetime import datetime
+
+    from app.schemas.menu import ActiveLineOut, ActiveOrderOut, CancelledLineOut
     from app.services.kitchen import order_code
 
     staff_ids = {o.staff_id for o in orders if o.staff_id}
@@ -732,6 +790,7 @@ async def _active_views(session, orders, tickets_by_id=None):
                     modifiers=list(l.get("modifier_names", [])), notes=l.get("notes"), line_total=l.get("line_total"),
                     item_id=uuid.UUID(l["item_id"]), variant_id=uuid.UUID(l["variant_id"]) if l.get("variant_id") else None,
                     modifier_ids=[uuid.UUID(m) for m in l.get("modifier_ids", [])],
+                    uid=l.get("uid"), sent_batch=l.get("sent_batch"),
                 )
                 for l in cart.get("lines", [])
             ]
@@ -761,6 +820,14 @@ async def _active_views(session, orders, tickets_by_id=None):
                 continue
             summaries[j.kind] = PrintSummaryOut(job_id=j.id, kind=j.kind, printer=j.printer, status=display_status(j))
         out.append(ActiveOrderOut(
+            sent_batches=len(cart.get("batches", [])),
+            unsent_count=sum(1 for l in cart.get("lines", []) if not l.get("sent_batch")) if o.status == "open" else 0,
+            cancelled_lines=[
+                CancelledLineOut(name=v["item_name"], size=v.get("variant_name"), quantity=v["quantity"],
+                                 modifiers=list(v.get("modifier_names", [])), sent_batch=v["sent_batch"], reason=v["reason"],
+                                 at=datetime.fromisoformat(v["at"]))
+                for v in cart.get("voids", [])
+            ],
             print_jobs=list(summaries.values()),
             order_no=service_label(o), service_date=o.service_date, batch_no=o.batch_no or 0,
             external_ref=o.external_ref, previous_day=bool(today and o.service_date and o.service_date < today),
@@ -811,15 +878,23 @@ async def pos_open_order(order_id: uuid.UUID, ctx: PosCtx):
 async def pos_hold_draft(payload: DraftIn, ctx: PosCtx):
     """Park an unpaid order on the server (svc-2). Replaying `client_ref`
     returns the draft already held."""
+    from app.services import bills
     from app.services.tickets import hold_draft
 
-    try:
-        order = await _price_errors(lambda: hold_draft(
+    async def run():
+        order = await hold_draft(
             ctx.session, business_id=ctx.business_id, staff_id=ctx.staff_id, lines=_cart_specs(payload.lines),
             order_type=payload.order_type, table_label=payload.table_label, guest_name=payload.guest_name,
             note=payload.note, client_ref=payload.client_ref, parent_order_id=payload.parent_order_id,
             external_ref=payload.external_ref,
-        ))
+        )
+        # A replayed "Kirim" finds its bill already sent, and sends nothing twice.
+        if payload.send and bills.unsent_lines(order) and order.status == "open":
+            order = await bills.send(ctx.session, order=order, expected_rev=None, staff_id=ctx.staff_id)
+        return order
+
+    try:
+        order = await _bill_errors(run)
     except ParentOrderInvalid as exc:
         raise HTTPException(status_code=409, detail=_PARENT_ERRORS[exc.code])
     return (await _active_views(ctx.session, [order]))[0]
@@ -836,12 +911,21 @@ async def pos_update_open_order(order_id: uuid.UUID, payload: OpenOrderUpdateIn,
         order = await get_open_order(ctx.session, order_id)
     except TicketNotFound:
         raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
-    try:
-        order = await _price_errors(lambda: update_open_order(
+    from app.services import bills
+
+    async def run():
+        updated = await update_open_order(
             ctx.session, business_id=ctx.business_id, order=order, expected_rev=payload.rev, staff_id=ctx.staff_id,
             lines=_cart_specs(payload.lines), order_type=payload.order_type, table_label=payload.table_label,
             guest_name=payload.guest_name, note=payload.note, external_ref=payload.external_ref,
-        ))
+            line_uids=[l.uid for l in payload.lines],
+        )
+        if payload.send:
+            updated = await bills.send(ctx.session, order=updated, expected_rev=None, staff_id=ctx.staff_id)
+        return updated
+
+    try:
+        order = await _bill_errors(run)
     except TicketNotOpen as exc:
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
     except OrderChanged as exc:
@@ -863,14 +947,50 @@ async def pos_reprice_open_order(order_id: uuid.UUID, payload: RepriceIn, ctx: P
         raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
     specs = [OrderLineSpec(item_id=s.item_id, variant_id=s.variant_id, modifier_ids=s.modifier_ids, quantity=s.quantity, notes=s.notes)
              for s in ticket_specs(order)] if order.status == "open" else []
+    uids = [l.get("uid") for l in (order.cart or {}).get("lines", [])] if order.status == "open" else []
     try:
-        order = await _price_errors(lambda: update_open_order(
+        order = await _bill_errors(lambda: update_open_order(
             ctx.session, business_id=ctx.business_id, order=order, expected_rev=payload.rev, staff_id=ctx.staff_id, lines=specs,
+            line_uids=uids,
         ))
     except TicketNotOpen as exc:
         raise HTTPException(status_code=409, detail=_TICKET_CLOSED.get(exc.status, "Pesanan ini sudah diproses"))
     except OrderChanged as exc:
         raise HTTPException(status_code=409, detail=order_changed_message(exc))
+    return (await _active_views(ctx.session, [order]))[0]
+
+
+@router.post("/open-orders/{order_id}/send", response_model=ActiveOrderOut)
+async def pos_send_open_order(order_id: uuid.UUID, payload: SendIn, ctx: PosCtx):
+    """Send a table's unsent items to be made (bill-1): the Bar and Dapur slips
+    carry only these items, and the front printer gives the table's nota. Only
+    the revision the cashier is looking at can be sent; a second tap is a 409."""
+    from app.services import bills
+    from app.services.tickets import TicketNotFound, get_open_order
+
+    try:
+        order = await get_open_order(ctx.session, order_id)
+    except TicketNotFound:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    order = await _bill_errors(lambda: bills.send(ctx.session, order=order, expected_rev=payload.rev, staff_id=ctx.staff_id))
+    return (await _active_views(ctx.session, [order]))[0]
+
+
+@router.post("/open-orders/{order_id}/lines/{uid}/cancel", response_model=ActiveOrderOut)
+async def pos_cancel_sent_line(order_id: uuid.UUID, uid: str, payload: LineCancelIn, ctx: PosCtx):
+    """Take a sent item off a table's bill (bill-1). The cashier's call, no PIN;
+    the reason is kept and printed for the station that may be making it."""
+    from app.services import bills
+    from app.services.tickets import TicketNotFound, get_open_order
+
+    try:
+        order = await get_open_order(ctx.session, order_id)
+    except TicketNotFound:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    order = await _bill_errors(lambda: bills.cancel_sent_line(
+        ctx.session, business_id=ctx.business_id, order=order, uid=uid, quantity=payload.quantity,
+        reason=payload.reason, expected_rev=payload.rev, staff_id=ctx.staff_id,
+    ))
     return (await _active_views(ctx.session, [order]))[0]
 
 
