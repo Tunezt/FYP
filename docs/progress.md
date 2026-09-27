@@ -1985,3 +1985,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Live Meta state recorded here** (the owner's steps, not code): webhook `https://fyp-production-b63c.up.railway.app/webhooks/whatsapp` verified with the verify token, `messages` subscribed at v26.0, `WHATSAPP_APP_SECRET` set in Railway, signature checking confirmed by the 200. Still dry-run: no access token in Railway until [auth-1] is deployed.
 **Deviation:** owner-directed, not a roadmap task.
 **Next:** [legal-1].
+
+
+### [legal-1] Public privacy and data-deletion pages, so the Meta app can be published
+**Date:** 2026-09-27
+**Status:** done in software; the contact address is **NEEDS HUMAN** (below)
+**Changed:** frontend/components/LegalPage.tsx (new), frontend/app/privasi/page.tsx (new), frontend/app/hapus-data/page.tsx (new)
+**Gates:** pytest 656 passed 0 skipped - migrations round-trip ok (0043 -> 0042 -> 0043) - frontend build ok (/privasi and /hapus-data prerendered static) - seed ok
+**Notes:**
+- **Why now.** The Meta app is unpublished, and WhatsApp Manager states that an unpublished app receives only the dashboard's test webhooks: no real message reaches the assistant, not even from the app's admins. Publishing needs a Privacy Policy URL (and data-deletion instructions) in App settings → Basic. The till, kitchen and dashboard do not depend on any of this.
+- **`/privasi`** says what is actually stored (owner and staff with hashed PINs, transactions, loyalty customers, QR guests' name and table, the owner's WhatsApp questions and receipt photos; unregistered senders' messages are not stored), what for, and who processes it (Meta, Google Gemini, Supabase, Railway, Vercel). **`/hapus-data`** says how to ask, what is removed within 30 days, and that transaction amounts stay in the books unlinked from the person. Both in Indonesian with a short English paragraph for Meta's reviewers. Public (the dashboard's login guard lives in its own layout), static, no data fetched.
+- **Deletion is a manual job today.** There is no delete-a-person feature (by design, nothing is deleted through the app), so honouring a request means an operator clearing those fields by hand. The page promises only that.
+- **Contact: NEEDS HUMAN.** The owner will create a Gmail for Poernama. Until `NEXT_PUBLIC_CONTACT_EMAIL` is set in Vercel (build-time), both pages say to contact Poernama's owner at the café. The owner's personal address was deliberately not put on a public page.
+- **Verified in the browser:** both pages render, link to each other and to /login, no horizontal scroll at 375 px, no console errors.
+**Deviation:** owner-directed, not a roadmap task.
+**Next:** push (owner's call), then in Meta: App settings → Basic → Privacy Policy URL `https://poernama-zeta.vercel.app/privasi`, User data deletion `https://poernama-zeta.vercel.app/hapus-data`, icon and category, then publish; permanent token into Railway once PIN login is live.
