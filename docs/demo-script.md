@@ -44,7 +44,7 @@ On WhatsApp (owner phone), send in sequence:
 
 ## Act 4 — the dashboard (2 min)
 
-1. Log in: phone number → OTP arrives on WhatsApp (Authentication template) → Ringkasan.
+1. Log in: owner phone number + owner PIN → Ringkasan. (WhatsApp OTP login waits on Meta business verification.)
 2. First-run tour fires (if reset) — otherwise walk: today + trend chart, bulan ini net, **perlu perhatian** (the sale from Act 1 may have pushed something below 3 days).
 3. Penjualan → the Act 1 sale at the top of the paginated history, recorded by Sari.
 4. Keuangan → the receipt from Act 2 as an expense with 🧾 provenance + thumbnail; P&L bars.

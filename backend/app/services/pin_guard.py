@@ -48,7 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PinAttempt, RequestLog
 
-SCOPES = ("pos_login", "pos_device", "manager_pin")
+SCOPES = ("pos_login", "pos_device", "manager_pin", "owner_login")
 
 # A gap longer than this and the count starts again: yesterday's fumbling must
 # not add to today's.
@@ -61,6 +61,11 @@ LADDER: dict[str, tuple[tuple[int, timedelta], ...]] = {
     # Four times the per-person numbers: one shared tablet carries every
     # cashier's mistakes, and a rush must not trip it.
     "pos_device": ((80, timedelta(minutes=15)), (40, timedelta(minutes=2)), (20, timedelta(seconds=30))),
+    # The dashboard PIN is reachable from the open internet, unlike the till,
+    # which needs the pairing link. So the ladder starts earlier and bites
+    # harder: at most ~10 guesses per 15 minutes, which puts a 4-digit PIN out
+    # of reach of a script without ever locking the owner out for good.
+    "owner_login": ((10, timedelta(minutes=15)), (5, timedelta(minutes=2)), (3, timedelta(seconds=30))),
 }
 
 
@@ -80,6 +85,13 @@ class Cooldown:
 
 def staff_subject(staff_id: uuid.UUID | str) -> str:
     return f"staff:{staff_id}"
+
+
+def phone_subject(phone: str) -> str:
+    """Owner dashboard login is counted against the phone that was typed, not a
+    staff id: the id is only known after the lookup succeeds, and guessing at a
+    number that has no business must be throttled too."""
+    return f"phone:{phone}"
 
 
 def device_subject(generation: int) -> str:

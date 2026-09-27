@@ -5,9 +5,11 @@ into **Meta Business Manager → WhatsApp → Message Templates → Create Templ
 moment the Meta App + WhatsApp product exist. Until they are approved, Phase 5
 (proactive alerts) and the dashboard OTP flow cannot be verified live.
 
-> **Status: SUBMISSION BLOCKED — no Meta developer account/App credentials provisioned
-> yet.** Tracked in `docs/progress.md`. Everything below is prepared so submission is a
-> five-minute task once credentials exist.
+> **Status (24 Sep 2026): owner login does not use WhatsApp.** The Meta app exists, but
+> `login_otp` cannot be created until Meta verifies the business (findings at the end of
+> this file), so the dashboard logs in with the owner's phone and PIN (`/auth/login-pin`).
+> `business_alert` is still unsubmitted; alerts show in the dashboard meanwhile. The
+> assistant itself (owner messages the number, it replies) needs neither template.
 
 ---
 
@@ -49,3 +51,28 @@ Backend env: `WHATSAPP_ALERT_TEMPLATE=business_alert`.
 - Verify token: value of `WHATSAPP_VERIFY_TOKEN`
 - Subscribe to the **`messages`** field
 - Allow-list up to 5 recipient phone numbers on the free test number (owner demo phone included)
+
+---
+
+## Findings from the real Meta account (24 Sep 2026)
+
+Portfolio **Poernama** (unverified), app **Poernama**, test WABA `1400425638345398`,
+test number `+1 555 175 2562`, phone number ID `1420306994492662`.
+
+**`login_otp` cannot be created: Authentication templates are gated.** WhatsApp Manager
+refuses with *"This WhatsApp Business account does not have permission to create message
+template"*. Creating Utility templates on the same account works, so it is the category,
+not the account: Meta gates the Authentication category behind **business verification**
+(and, per third-party reports, messaging volume history). An unverified portfolio cannot
+send OTPs, so **owner login cannot depend on WhatsApp until verification completes**.
+
+**`business_alert` is classified Marketing, not Utility.** Three wordings were rejected by
+the classifier before submission ("Peringatan ... untuk ...", "Pemberitahuan akun ...",
+"Laporan usaha ..."), each with *"Category does not match ... This message template will be
+rejected"*. The content is genuinely an account notification, but a body that is mostly
+free-text variables reads as promotional to their classifier. Options when this is picked
+up again: the pre-approved Template library, accepting the Marketing category (higher cost,
+user-mutable), or requesting a category review in Business Support Home.
+
+**Nothing is blocked by the alert template.** Alerts are still written and shown in the
+dashboard; only WhatsApp delivery waits. Login is the real dependency.

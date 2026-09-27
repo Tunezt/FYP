@@ -1151,8 +1151,9 @@ class PinAttempt(Base):
     """Failed PIN entries in a rolling window (M15-T12, migration 0034).
 
     One row per (scope, subject): a staff member's own PIN ('pos_login'), a
-    device generation ('pos_device'), or one cashier's attempts at somebody
-    else's manager PIN ('manager_pin'). A correct PIN deletes the row.
+    device generation ('pos_device'), one cashier's attempts at somebody else's
+    manager PIN ('manager_pin'), or a phone guessing the owner's dashboard PIN
+    ('owner_login', migration 0043). A correct PIN deletes the row.
 
     `locked_until` is the cooldown currently in force. It escalates rather than
     locking permanently, because a till that stops trading during a rush is a

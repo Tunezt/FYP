@@ -12,12 +12,13 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | POST | `/auth/request-otp` | `{phone}` → WhatsApp Authentication-template OTP (dev: code logged) |
 | POST | `/auth/verify-otp` | `{phone, code}` → owner JWT **or** `registration_token` |
 | POST | `/auth/register` | registration token + business profile + owner PIN → owner JWT |
+| POST | `/auth/login-pin` | `{phone, pin}` → owner JWT. The dashboard's only login while WhatsApp OTP is gated by Meta. Owner row only (a cashier's PIN is 401); one 401 message for every failure; throttled per phone on the `owner_login` ladder (3 → 30s, 5 → 2 min, 10 → 15 min) → 429 |
 
 ## Owner (scope=owner)
 
 | Method | Path | Notes |
 |---|---|---|
-| GET/POST | `/auth/staff` · PATCH `/auth/staff/{id}` · POST `/auth/staff/{id}/pin` | list / create (name + 4-digit PIN + `role`) / promote-demote / reset a forgotten PIN (M15-T8: owner-only, 4–6 digits, the old PIN dies at once and nothing already rung up under it changes). `role` is `staff` or `manager` (M15-T7) — `owner` is refused with 422, and the owner's own row cannot be re-roled (400). A manager approves voids, refunds and discounts at the till and gets no more than a cashier anywhere else: POS login issues `scope="pos"`, and owner scope comes only from the OTP flow |
+| GET/POST | `/auth/staff` · PATCH `/auth/staff/{id}` · POST `/auth/staff/{id}/pin` | list / create (name + 4-digit PIN + `role`) / promote-demote / reset a forgotten PIN (M15-T8: owner-only, 4–6 digits, the old PIN dies at once and nothing already rung up under it changes). `role` is `staff` or `manager` (M15-T7) — `owner` is refused with 422, and the owner's own row cannot be re-roled (400). A manager approves voids, refunds and discounts at the till and gets no more than a cashier anywhere else: POS login issues `scope="pos"`, and owner scope comes only from the OTP flow or `/auth/login-pin`, which accepts the `owner` row alone |
 | POST | `/auth/staff/{id}/deactivate` | owner row protected |
 | POST | `/auth/pos-pairing` · `/auth/pos-pairing/reset` | long-lived kiosk pairing token → `/pos/{token}`. Both are owner-only. The plain one mints a link under the current `businesses.pairing_generation` and cuts nobody off; `/reset` (M15-T8) raises that counter, which retires every older pairing link **and** every live `pos` token — both then answer 401 “Perangkat ini sudah tidak dipasangkan…”. Every issued token carries its `gen`; `pos` requests check it against the business row |
 | GET | `/api/overview` | today, month P&L, alert + low-stock counts |

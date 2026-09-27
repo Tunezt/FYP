@@ -23,6 +23,12 @@ class OtpVerifyIn(PhoneIn):
     code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 
+class PinLoginIn(PhoneIn):
+    """The owner's own PIN — the same one they use at the till."""
+
+    pin: str = Field(min_length=4, max_length=12, pattern=r"^\d+$")
+
+
 class BusinessOut(BaseModel):
     id: uuid.UUID
     name: str

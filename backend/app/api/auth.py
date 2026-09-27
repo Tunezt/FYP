@@ -18,6 +18,7 @@ from app.core.db import plain_session, tenant_session
 from app.core.db_errors import raise_if_db_unreachable
 from app.schemas.menu import MenuLinkOut
 from app.core.deps import OwnerCtx
+from app.services import pin_guard
 from app.core.security import (
     create_menu_token,
     create_pairing_token,
@@ -27,12 +28,14 @@ from app.core.security import (
     generate_otp,
     hash_otp,
     hash_pin,
+    verify_pin,
 )
 from app.models import Business, LoginOtp, Staff
 from app.schemas.auth import (
     BusinessOut,
     OtpVerifyIn,
     OtpVerifyOut,
+    PinLoginIn,
     PairingOut,
     PhoneIn,
     RegisterIn,
@@ -137,6 +140,82 @@ async def verify_otp(payload: OtpVerifyIn):
         registered=True,
         token=create_token(business_id=str(business.id), scope="owner"),
         business=BusinessOut.model_validate(business),
+    )
+
+
+def _cooldown_message(cooling) -> str:
+    seconds = cooling.seconds
+    if seconds >= 60:
+        return f"Terlalu banyak PIN salah — tunggu {max(1, round(seconds / 60))} menit lalu coba lagi"
+    return f"Terlalu banyak PIN salah — tunggu {seconds} detik lalu coba lagi"
+
+
+@router.post("/login-pin", response_model=OtpVerifyOut)
+async def login_with_pin(payload: PinLoginIn):
+    """Owner login with the phone and the owner's PIN.
+
+    The WhatsApp code is the front door, but it only works once Meta has
+    verified the business — Authentication templates are gated behind that, and
+    a cafe cannot wait on a review queue to reach its own books. This is the
+    second door, and it is deliberately narrow:
+
+      * only the `owner` staff row whose phone matches; a cashier's PIN opens
+        the till, never the dashboard;
+      * one message for every failure — wrong number, wrong PIN, no business —
+        so the endpoint is not an oracle for which phone numbers are registered;
+      * throttled by the same escalating cooldown as the till (M15-T12), on its
+        own stricter ladder, because this door faces the open internet.
+
+    Anyone who can watch the owner type the till PIN can use this, which is why
+    the ladder is strict and every attempt is logged. Remove this route once
+    WhatsApp OTP works (docs/whatsapp-templates.md)."""
+    phone = payload.phone
+    who = pin_guard.phone_subject(phone)
+    generic = HTTPException(status_code=401, detail="Nomor atau PIN salah — coba lagi")
+
+    try:
+        async with plain_session() as session:
+            business = (
+                await session.execute(select(Business).where(Business.owner_phone == phone))
+            ).scalar_one_or_none()
+    except Exception as exc:
+        raise_if_db_unreachable(exc)
+
+    if business is None:
+        # No business: nothing to throttle against (the counter is per tenant),
+        # and nothing to tell the caller either.
+        raise generic
+
+    async with tenant_session(business.id) as session:
+        cooling = await pin_guard.check(
+            session, business.id, "owner_login", who, path="/auth/login-pin"
+        )
+        if cooling is not None:
+            raise HTTPException(status_code=429, detail=_cooldown_message(cooling))
+
+        owner = (
+            await session.execute(
+                select(Staff).where(
+                    Staff.role == "owner", Staff.phone == phone, Staff.is_active.is_(True)
+                )
+            )
+        ).scalars().first()
+
+        if owner is None or not verify_pin(payload.pin, owner.pin_hash):
+            earned = await pin_guard.record_failure(
+                business.id, "owner_login", who, path="/auth/login-pin"
+            )
+            if earned is not None:
+                raise HTTPException(status_code=429, detail=_cooldown_message(earned))
+            raise generic
+
+        await pin_guard.clear(session, business.id, "owner_login", who)
+        business_out = BusinessOut.model_validate(business)
+
+    return OtpVerifyOut(
+        registered=True,
+        token=create_token(business_id=str(business.id), scope="owner"),
+        business=business_out,
     )
 
 

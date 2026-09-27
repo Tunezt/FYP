@@ -1690,6 +1690,11 @@ async def _lockout_who(ctx: OwnerCtx, row) -> str:
             staff = None
         name = staff.name if staff is not None else "staf yang sudah dihapus"
         return name if kind == "staff" else f"diminta oleh {name}"
+    if kind == "phone":
+        # A dashboard PIN attempt (0043). The number is masked: the owner needs
+        # to recognise their own, not to read a stranger's off the screen.
+        tail = value[-4:] if len(value) > 4 else value
+        return f"masuk dashboard dari nomor ••••{tail}"
     return "perangkat kasir ini"
 
 
