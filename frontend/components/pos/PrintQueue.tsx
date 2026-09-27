@@ -7,10 +7,15 @@ import { clockTime } from "@/lib/pos";
 import { PrintDocument, type PrintDoc } from "@/components/pos/PrintDocument";
 
 // The print queue at the till (prt-4). It says only what is known: a job is
-// waiting, being sent, failed, uncertain (a device took it and never answered)
-// or printed (a device said so, or a person confirmed it). Recovery is
-// deliberate: a failed job can be retried; an uncertain one needs a marked
-// reprint or a person's confirmation, because paper may already exist.
+// waiting, being sent, failed, uncertain (a device took it and never answered,
+// or said the paper may or may not exist), delivered (the printer accepted it
+// but could not confirm), or printed (the printer confirmed it, or a person
+// did). Recovery is deliberate: a failed job can be retried; an uncertain one
+// needs a marked reprint or a person's confirmation, because paper may already
+// exist. A job waiting too long is held (prt-8): no printer takes it until a
+// person lets it through (marked TERLAMBAT) or says it is not needed.
+
+export type PrintStatus = "pending" | "held" | "sending" | "uncertain" | "delivered" | "printed" | "failed" | "cancelled";
 
 export type PrintJob = {
   id: string;
@@ -19,13 +24,16 @@ export type PrintJob = {
   kind: string;
   kind_label: string;
   copy_kind: "original" | "reprint";
-  status: "pending" | "sending" | "uncertain" | "printed" | "failed" | "cancelled";
+  status: PrintStatus;
   order_label: string;
   table_label: string | null;
   attempts: number;
   claimed_by: string | null;
   error: string | null;
   confirmed_by_person: boolean;
+  evidence: "printer_status" | "bytes_delivered" | null;
+  released: boolean;
+  withdrawn_by_person: boolean;
   created_at: string;
   claimed_at: string | null;
   printed_at: string | null;
@@ -34,21 +42,81 @@ export type PrintJob = {
 
 export const PRINTER_LABEL = { front: "Printer depan", kitchen: "Printer dapur" } as const;
 
-export const PRINT_STATUS: Record<PrintJob["status"], { text: string; cls: string }> = {
+export const PRINT_STATUS: Record<PrintStatus, { text: string; cls: string }> = {
   pending: { text: "Menunggu printer", cls: "pill-quiet" },
+  held: { text: "Tertahan", cls: "pill-warn" },
   sending: { text: "Sedang dikirim", cls: "pill-quiet" },
   uncertain: { text: "Belum pasti tercetak", cls: "pill-warn" },
+  delivered: { text: "Terkirim ke printer", cls: "pill-quiet" },
   printed: { text: "Tercetak", cls: "pill-good" },
   failed: { text: "Gagal cetak", cls: "pill-bad" },
   cancelled: { text: "Ditarik", cls: "pill-quiet" },
 };
 
+// What a print bridge last said about its printer (prt-8).
+export type PrintDevice = {
+  printer: "front" | "kitchen";
+  device: string;
+  state: "ready" | "reachable" | "paper_low" | "paper_out" | "cover_open" | "offline" | "error" | "unknown";
+  detail: string | null;
+  version: string | null;
+  last_seen_at: string;
+  silent: boolean;
+};
+
+const DEVICE_STATE: Record<PrintDevice["state"], { text: string; tone: "good" | "warn" | "bad" | "quiet" }> = {
+  ready: { text: "Siap", tone: "good" },
+  reachable: { text: "Tersambung (status tidak dibaca)", tone: "quiet" },
+  paper_low: { text: "Kertas hampir habis", tone: "warn" },
+  paper_out: { text: "Kertas habis", tone: "bad" },
+  cover_open: { text: "Tutup printer terbuka", tone: "bad" },
+  offline: { text: "Tidak terjangkau", tone: "bad" },
+  error: { text: "Error", tone: "bad" },
+  unknown: { text: "Tidak diketahui", tone: "warn" },
+};
+
+export function deviceTrouble(d: PrintDevice): boolean {
+  return d.silent || DEVICE_STATE[d.state].tone === "bad";
+}
+
+/** What to say about a printer whose bridge has stopped reporting, or whose
+ *  printer it cannot reach. `silent` is decided by the server from the last
+ *  heartbeat it received: a bridge that has been killed, frozen or unplugged
+ *  cannot tell us itself, so nothing here depends on it doing so. */
+export function bridgeAlert(d: PrintDevice): string | null {
+  if (d.silent) {
+    return `${PRINTER_LABEL[d.printer]}: bridge di tablet tidak melapor sejak ${clockTime(d.last_seen_at)}. Slip tidak akan keluar sampai bridge dijalankan lagi.`;
+  }
+  if (DEVICE_STATE[d.state].tone === "bad") {
+    return `${PRINTER_LABEL[d.printer]}: ${DEVICE_STATE[d.state].text.toLowerCase()}${d.detail ? ` (${d.detail})` : ""}.`;
+  }
+  return null;
+}
+
+/** Per printer: the bridges still reporting; if none is, only the one heard
+ *  from last, so a bridge that was replaced or renamed does not nag forever. */
+function currentDevices(devices: PrintDevice[]): PrintDevice[] {
+  return (["front", "kitchen"] as const).flatMap((printer) => {
+    const mine = devices.filter((d) => d.printer === printer);
+    const live = mine.filter((d) => !d.silent);
+    if (live.length) return live;
+    const last = [...mine].sort((a, b) => b.last_seen_at.localeCompare(a.last_seen_at))[0];
+    return last ? [last] : [];
+  });
+}
+
 export function usePrintQueue(token: string | null) {
   const [open, setOpen] = useState<PrintJob[] | null>(null);
+  const [devices, setDevices] = useState<PrintDevice[]>([]);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
     try {
-      setOpen(await api<PrintJob[]>("/pos/print-jobs?scope=open", { token }));
+      const [jobs, seen] = await Promise.all([
+        api<PrintJob[]>("/pos/print-jobs?scope=open", { token }),
+        api<PrintDevice[]>("/pos/printers", { token }).catch(() => null),
+      ]);
+      setOpen(jobs);
+      if (seen) setDevices(currentDevices(seen));
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.detail : "Antrean cetak tidak bisa dimuat");
@@ -59,9 +127,12 @@ export function usePrintQueue(token: string | null) {
     const id = setInterval(() => document.visibilityState === "visible" && void load(), 6000);
     return () => clearInterval(id);
   }, [load]);
-  const attention = (open ?? []).filter((j) => j.status === "failed" || j.status === "uncertain").length;
+  const attention =
+    (open ?? []).filter((j) => j.status === "failed" || j.status === "uncertain" || j.status === "held").length +
+    devices.filter(deviceTrouble).length;
   const waiting = (open ?? []).filter((j) => j.status === "pending" || j.status === "sending").length;
-  return { open, error, load, attention, waiting };
+  const alerts = devices.map(bridgeAlert).filter((a): a is string => a !== null);
+  return { open, devices, error, load, attention, waiting, alerts };
 }
 
 /** One job's recovery buttons, shared by the queue and an order's detail. */
@@ -96,12 +167,17 @@ export function PrintJobActions({
   const btn = `btn-quiet ${compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"}`;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      {job.status === "held" && (
+        <button onClick={() => act("release")} disabled={busy} className={btn} title="Dicetak dengan tanda TERLAMBAT">
+          Cetak sekarang (terlambat)
+        </button>
+      )}
       {job.status === "failed" && (
         <button onClick={() => act("retry")} disabled={busy} className={btn}>
           Coba lagi
         </button>
       )}
-      {(job.status === "pending" || job.status === "failed") && job.printer === "front" && (
+      {(job.status === "pending" || job.status === "held" || job.status === "failed") && job.printer === "front" && (
         <button onClick={() => onBrowserPrint(job.id)} disabled={busy} className={btn} title="Cadangan manual: dialog cetak browser">
           Cetak manual
         </button>
@@ -111,9 +187,14 @@ export function PrintJobActions({
           Kertas sudah ada
         </button>
       )}
-      {(job.status === "uncertain" || job.status === "printed" || job.status === "failed") && (
+      {(job.status === "uncertain" || job.status === "printed" || job.status === "delivered" || job.status === "failed") && (
         <button onClick={() => act("reprint")} disabled={busy} className={btn}>
           Cetak ulang
+        </button>
+      )}
+      {(job.status === "held" || job.status === "failed") && (
+        <button onClick={() => act("withdraw")} disabled={busy} className={btn}>
+          Tidak perlu dicetak
         </button>
       )}
       {error && <span className="text-xs text-[color:var(--bad)]">{error}</span>}
@@ -164,6 +245,7 @@ export function PrintQueueSheet({
             </button>
           </div>
           {queue.error && <p className="notice notice-warn mt-2 text-sm">{queue.error} — status di bawah mungkin tidak terbaru.</p>}
+          <PrinterDevices devices={queue.devices} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-3">
           {rows === null ? (
@@ -185,8 +267,21 @@ export function PrintQueueSheet({
                         {j.copy_kind === "reprint" ? " · cetak ulang" : ""} · {PRINTER_LABEL[j.printer]} · {clockTime(j.created_at)}
                         {j.attempts > 1 ? ` · percobaan ke-${j.attempts}` : ""}
                       </p>
-                      {j.error && <p className="text-[13px] text-[color:var(--bad)]">{j.error}</p>}
-                      {j.status === "uncertain" && (
+                      {j.error && (
+                        <p className="text-[13px]" style={{ color: j.status === "pending" ? "var(--ink-soft)" : "var(--bad)" }}>
+                          {j.error}
+                        </p>
+                      )}
+                      {j.status === "held" && (
+                        <p className="text-[13px]" style={{ color: "var(--warn)" }}>
+                          Menunggu lebih dari 15 menit. Printer tidak mencetaknya sendiri supaya pesanan lama tidak keluar seperti pesanan baru.
+                        </p>
+                      )}
+                      {j.status === "delivered" && (
+                        <p className="ink-soft text-[13px]">Printer menerima slip ini, tapi tidak bisa memastikan kertasnya keluar.</p>
+                      )}
+                      {j.released && j.status !== "printed" && <p className="ink-soft text-[13px]">Akan dicetak dengan tanda TERLAMBAT.</p>}
+                      {j.status === "uncertain" && !j.error && (
                         <p className="text-[13px]" style={{ color: "var(--warn)" }}>
                           Printer mengambil slip ini tapi tidak melapor. Cek kertasnya dulu sebelum mencetak ulang.
                         </p>
@@ -207,6 +302,32 @@ export function PrintQueueSheet({
         </div>
       </div>
     </div>
+  );
+}
+
+/** One line per printer from what its bridge last reported. Nothing is shown
+ *  until a bridge has reported at all, so a till without one looks as before. */
+function PrinterDevices({ devices }: { devices: PrintDevice[] }) {
+  if (devices.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-1">
+      {devices.map((d) => {
+        const st = DEVICE_STATE[d.state];
+        const color = d.silent ? "var(--warn)" : { good: "var(--good)", warn: "var(--warn)", bad: "var(--bad)", quiet: "var(--ink-soft)" }[st.tone];
+        return (
+          <li key={`${d.printer}:${d.device}`} className="flex flex-wrap items-baseline justify-between gap-x-3 text-[13px]">
+            <span>
+              <span className="font-semibold">{PRINTER_LABEL[d.printer]}</span>
+              <span className="ink-faint"> · {d.device}</span>
+            </span>
+            <span style={{ color }}>
+              {d.silent ? `Tidak melapor sejak ${clockTime(d.last_seen_at)}` : st.text}
+              {!d.silent && d.detail && st.tone !== "good" && st.text !== d.detail ? ` — ${d.detail}` : ""}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

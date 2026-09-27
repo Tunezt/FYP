@@ -1057,6 +1057,36 @@ class PrintJob(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
+    # prt-8, migration 0042: how a device knew it printed; a device's "maybe";
+    # a held job let through or withdrawn by a person.
+    evidence: Mapped[str | None] = mapped_column(Text)                   # printer_status | bytes_delivered
+    uncertain_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    released_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+    withdrawn_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id"))
+
+
+class PrintDevice(Base):
+    """The last word from one print bridge worker about its printer (prt-8,
+    migration 0042): ready, out of paper, cover open, unreachable."""
+
+    __tablename__ = "print_devices"
+
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True
+    )
+    printer: Mapped[str] = mapped_column(Text, primary_key=True)         # front | kitchen
+    device: Mapped[str] = mapped_column(Text, primary_key=True)
+    state: Mapped[str] = mapped_column(Text, nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[str | None] = mapped_column(Text)
+    last_seen_at: Mapped[datetime] = _now()
+    # The owner's setup test: asked for from the dashboard, answered by the bridge.
+    test_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    test_result: Mapped[str | None] = mapped_column(Text)       # printed | delivered | uncertain | failed
+    test_detail: Mapped[str | None] = mapped_column(Text)
+    test_result_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _now()
 
 
 class ServiceNumberCounter(Base):

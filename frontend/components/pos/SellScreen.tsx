@@ -1016,6 +1016,19 @@ export function SellScreen({
         </div>
       </header>
 
+      {/* A bridge that has stopped cannot say so itself, so this comes from the
+          server's own view of when it last heard from the tablet. */}
+      {printQueue.alerts.length > 0 && (
+        <div className="mx-auto max-w-[1440px] px-4 pt-3">
+          <div className="notice notice-warn flex flex-wrap items-center justify-between gap-2 text-sm" role="alert">
+            <span>{printQueue.alerts.join(" ")}</span>
+            <button onClick={() => setPrintSheet(true)} className="underline underline-offset-2">
+              Lihat antrean cetak
+            </button>
+          </div>
+        </div>
+      )}
+
       <main className="mx-auto max-w-[1440px] px-4">
         {view === "new" && (
           <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_390px] lg:gap-5">

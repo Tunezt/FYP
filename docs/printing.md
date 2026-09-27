@@ -1,17 +1,32 @@
 # Printing and open bills: two printers, one queue, and what is still a hardware decision
 
-Written 18 September 2026 with the `prt-*` and `bill-*` tasks. It separates what the software
+**Status: PILOT** (21 September 2026). The software is finished and tested against simulated
+printers; nothing has printed on a physical IW-J300H, and the bridge has not yet run on the
+cashier tablet. `docs/printing-test-log.md` is the record of what has been tested where.
+
+Written 18 September 2026 with the `prt-*` and `bill-*` tasks; updated 19 September 2026 with
+prt-8 (the print bridge, held jobs, results bound to the claim) and 21 September 2026 with prt-9
+(the hardware is chosen: two Iware IW-J300H over Wi-Fi, with the bridge on the cashier tablet). It separates what the software
 does and has been tested to do from what depends on hardware that has not been bought or
 tested.
+
+**Internet and Wi-Fi, in one place.** The till, the API and the bridge all need the internet:
+jobs are created in the cloud and the bridge fetches them over HTTPS. The bridge and **both**
+printers must be on the same local network (the café's main Wi-Fi or Ethernet, not a guest
+network that isolates devices). The printers themselves never need the internet. If the café's
+internet drops, sales stop at the till (no offline mode yet); if only the bridge loses it, jobs
+wait on the server and print when it reconnects, or are held for a person's decision if that took
+more than 15 minutes.
 
 ## The room
 
 | Where | Who | Paper |
 |---|---|---|
-| Front counter | cashier and barista, side by side | **Front printer:** the customer's receipt, the table's nota, and a **separate** Bar slip |
-| Kitchen, 15–20 m behind | chef, no tablet | **Kitchen printer:** the Dapur slip |
+| Front counter | cashier and barista, side by side | **FRONT printer** (Iware IW-J300H, Wi-Fi): the customer's receipt, the table's nota, and a **separate** Bar slip |
+| Kitchen, 10–15 m behind through walls | chef, no tablet | **KITCHEN printer** (Iware IW-J300H, Wi-Fi): the Dapur slip |
 
-There is one tablet, the cashier's. Nobody needs a barista screen or a chef screen. Nobody
+There is one tablet, the cashier's: an Android Samsung Galaxy Tab A9/A9+ running Chrome. It also
+runs the print bridge (below), so no other computer is needed. Nobody needs a barista screen or a chef screen. Nobody
 carries the tablet to the tables. The kitchen screen still exists (`/kitchen/{token}`) but is
 no longer linked from the till or the dashboard (owner's decision, 18 Sept 2026).
 
@@ -43,12 +58,16 @@ as *Belum dikirim · QR · name* until the cashier sends them. The guest's page 
 *Menunggu konfirmasi kasir*, then *Pesanan dikirim ke dapur/bar*, then *Lunas*. The guest can
 order another round from the same page while the bill is open.
 
-## What gets printed, and when
+## Which product goes to which printer
 
-An item's station is set by the owner per product (Stok → edit → *Disiapkan di*): Bar, Dapur,
-or *Tanpa persiapan* (no slip). It is never guessed from the name. An item with no station yet
-prints on the Bar slip, flagged `[TUJUAN BELUM DIATUR]`, because the person reading that slip
-is at the front and can walk it back.
+Set by the owner **per product** (Stok → edit → *Disiapkan di*: Bar, Dapur, or *Tanpa
+persiapan*), never guessed from the product's name. Pengaturan → Printer lists how many products
+go to each station and names every product that has not been assigned, with one-tap buttons to
+assign it. An unassigned product is not dropped: its line prints on the Bar slip at the front,
+flagged `[TUJUAN BELUM DIATUR]`, where someone can walk it back. Ingredients (anything with no
+selling price) are not asked about, because they never reach a ticket.
+
+## What gets printed, and when
 
 Preparation slips carry the table in large type for dine-in ("MEJA 7") or the order number
 ("PESANAN 042"), then "Pesanan 042", service type, time, a slip reference (`042-D0`: number,
@@ -76,21 +95,43 @@ the Bar slip.
 
 | Stored | Shown | Meaning |
 |---|---|---|
-| `pending` | Menunggu printer | nobody has taken it |
+| `pending`, < 15 min | Menunggu printer | nobody has taken it (or a bridge took it and put it back unsent: the reason is shown) |
+| `pending`, ≥ 15 min, not let through | **Tertahan** | waited so long that no printer may take it until a person decides (prt-8) |
 | `claimed`, < 90 s | Sedang dikirim | a device took it |
-| `claimed`, ≥ 90 s | **Belum pasti tercetak** | a device took it and never reported back: paper may or may not exist |
-| `printed` | Tercetak | a device reported success, **or** a person confirmed they are holding it |
-| `failed` | Gagal cetak | a device reported it could not print |
-| `cancelled` | Ditarik | withdrawn before anything took it |
+| `claimed`, ≥ 90 s, or reported uncertain | **Belum pasti tercetak** | a device took it and never reported back, **or** said paper may or may not exist (connection cut mid-job, no confirmation): shown at once, with the reason |
+| `printed`, evidence `bytes_delivered` | Terkirim ke printer | the printer accepted the bytes; it could not be asked whether it finished |
+| `printed` | Tercetak | the printer confirmed it processed the job through the cut (evidence `printer_status`), **or** a person confirmed they are holding it, or an older device said so |
+| `failed` | Gagal cetak | a device reported it could not print (nothing reached the printer) |
+| `cancelled` | Ditarik | withdrawn before anything took it, by a cancellation or by a person |
+
+Unresolved jobs stay on *Perlu perhatian* **however old they are**. Until prt-8 the 12-hour
+history window also hid them, so a 13-hour-old slip vanished from the till while a printer could
+still take it. *12 jam terakhir* is still limited to 12 hours.
 
 Recovery at the till (header printer icon → *Antrean cetak*, or in the order's detail, where
 each send's slips and nota are listed separately):
 
-- **Coba lagi**: failed jobs only; back to the queue.
+- **Coba lagi**: failed jobs only; back to the queue. Retrying a job older than 15 minutes
+  counts as letting it through (it prints marked TERLAMBAT).
 - **Cetak ulang**: marked reprint. This is the answer to *uncertain*; the job is never silently
   re-queued, because that could print the same work twice without the label.
 - **Kertas sudah ada**: a person confirms an uncertain job; recorded with their staff id.
+- **Cetak sekarang (terlambat)**: a *held* job may print after all. It keeps its identity (a later
+  cancellation still finds it), and the device prints it with a **TERLAMBAT** label and "Dibuat
+  dd/mm hh.mm · dicetak hh.mm · name". The stored document is not changed.
+- **Tidak perlu dicetak**: a held or failed job is withdrawn (`cancelled`, recorded with the staff
+  id). Not offered for a job a printer may have printed.
 - **Cetak manual** (front printer only): the browser fallback below.
+
+**When the bridge stops, the till says so.** A bridge that has been killed, frozen by Android or
+unplugged cannot report its own failure, so the server decides: no heartbeat for 90 seconds and
+that printer counts as silent. The kasir screen then carries a warning across the top —
+*Printer dapur: bridge di tablet tidak melapor sejak 18.20. Slip tidak akan keluar sampai bridge
+dijalankan lagi* — not only inside the queue sheet.
+
+Above the list, each printer's last report from its print bridge: *Siap*, *Kertas habis*,
+*Tutup printer terbuka*, *Tidak terjangkau*, or *Tidak melapor sejak hh.mm* when the bridge
+itself has gone quiet for 90 seconds. These count towards the header's "perlu dicek".
 
 **Exactly-once physical printing is not possible without device support.** A printer that
 prints and then loses its connection before reporting looks identical to one that never
@@ -123,18 +164,39 @@ POST /print/agent/claim
 Authorization: Bearer <printer token>
 {"device": "dapur-1"}
 → 200 {"job": null}                                  nothing to print
-→ 200 {"job": {"id": "...", "kind": "kitchen_ticket", "copy_kind": "original",
+→ 200 {"job": {"id": "...", "attempts": 1, "kind": "kitchen_ticket", "copy_kind": "original",
               "order_label": "Pesanan 042", "document": {"v": 1, "blocks": [...]}, ...}}
 
 POST /print/agent/jobs/{id}/result
-Authorization: Bearer <printer token>
-{"device": "dapur-1", "ok": true}                    or {"ok": false, "error": "kertas habis"}
+{"device": "dapur-1", "attempt": 1, "outcome": "printed", "evidence": "printer_status"}
+{"device": "dapur-1", "attempt": 1, "outcome": "uncertain", "error": "koneksi putus setelah 312 byte"}
+{"device": "dapur-1", "attempt": 1, "outcome": "failed", "error": "..."}
+{"device": "dapur-1", "ok": true}                    the prt-4 form, still accepted (see below)
+
+POST /print/agent/jobs/{id}/release                  took it, sent NOTHING to the printer
+{"device": "dapur-1", "attempt": 1, "error": "Belum terkirim: Kertas habis"}
+
+POST /print/agent/held                               what this device holds unanswered (after a restart)
+{"device": "dapur-1"}  → {"jobs": [{"id": "...", "attempt": 1, "claimed_at": "..."}]}
+
+POST /print/agent/heartbeat                          what the printer looks like, for the till
+{"device": "dapur-1", "state": "paper_out", "detail": "Kertas habis", "version": "1.0.0"}
 ```
 
 `kind` is one of `receipt`, `nota`, `bar_ticket`, `kitchen_ticket`, `bar_cancel`,
 `kitchen_cancel`. Claiming takes the oldest pending job for that printer with `FOR UPDATE SKIP
-LOCKED`, so two devices polling at once never take the same job. A device token cannot open
-the till, and a till token cannot claim jobs.
+LOCKED`, so two devices polling at once never take the same job. **Held jobs (pending ≥ 15
+minutes and not let through) are never claimed.** A device token cannot open the till, and a till
+token cannot claim jobs.
+
+**Answers are bound to the claim** (prt-8). Every claim adds one to `attempts`. A result or
+release must come from the device named in the claim, about the current attempt. Otherwise it is
+refused with 409 and changes nothing. That covers a late answer from an earlier attempt, including
+from the same device after it took the job again, and an answer from another device on the same
+token. An answer without `attempt` (the prt-4 form) is accepted only while the job has been
+claimed once, because after that it is ambiguous. An answer arriving twice is the same answer.
+`release` is refused once a device has called the job uncertain: paper may exist, so it cannot go
+back as if nothing happened. `held` leaves out jobs already called uncertain for the same reason.
 
 `document.blocks` is printer-neutral: `title`, `label` (inverse, e.g. `TAMBAHAN`/`BATAL`/`CETAK
 ULANG`/`BELUM DIBAYAR`), `banner` (large heading), `line`, `kv` (left/right), `rule`, `item`
@@ -152,29 +214,100 @@ on the device side maps these to its printer's commands.
 
 ## Required printer capabilities
 
-- 80 mm thermal paper (58 mm works; the slip is laid out in blocks, so long names wrap)
-- Auto-cutter (so the front printer's receipt or nota and the Bar slip come out **separately**)
-- ESC/POS command set, or a cloud-print protocol the café chooses (below)
-- **Kitchen printer:** Ethernet or Wi-Fi (not Bluetooth), heat- and grease-tolerant
-- **Front printer:** network, USB or Bluetooth, depending on the option chosen
+- 80 mm thermal paper (58 mm works; set `paper_mm: 58` in the bridge and long names wrap)
+- Auto-cutter accepting `GS V 66 n` (so the front printer's receipt or nota and the Bar slip come
+  out **separately**)
+- ESC/POS over a **raw TCP port** on the network (usually 9100) for the bridge, or a cloud-print
+  protocol if the café chooses option A instead
+- Strongly preferred: answers `DLE EOT 1/2/4` (paper/cover/offline status) and `GS r 1` over that
+  network port. Without them the till can say only *Terkirim ke printer*, not *Tercetak*, and
+  cannot say why a printer stopped
+- **Kitchen printer:** Ethernet or Wi-Fi (not Bluetooth), heat- and grease-tolerant, a fixed IP
+- **Front printer:** Wi-Fi or Ethernet with a fixed IP (USB/Bluetooth would need a different
+  bridge transport, not built)
 - Optional: buzzer or light for the kitchen printer, so a new slip is noticed
 
-## Connection options (a decision is needed)
+## Connection options
 
-| | How unattended printing would work | What must be added | Tested? |
-|---|---|---|---|
-| **A. Cloud-print printers** (e.g. Epson ePOS "Server Direct Print", Star "CloudPRNT") | the printer itself polls a URL over HTTPS and prints what it receives | a small adapter translating that vendor's polling format to `/print/agent/*` and `blocks` to its markup | **No.** Not written, because a protocol adapter cannot honestly be tested without the printer |
-| **B. Local print bridge** (an always-on Raspberry Pi or a spare Android phone on the café wifi) | the bridge polls `/print/agent/claim` with two tokens and sends ESC/POS to both LAN printers on port 9100, then reports | the bridge program (≈ one small script) and a way to keep it running | **No.** Needs the real printers to verify layout, cutting, and failure reporting |
-| **C. Android POS terminal with a built-in printer at the front** (Sunmi / iMin), plus a network printer in the kitchen driven by a bridge (B) | front printing through the terminal's print SDK in a wrapper app; kitchen via B | an Android wrapper app (outside the "no native apps" scope) or the vendor's web-print bridge | **No** |
-| **D. Browser print (built now)** | *Cetak manual*: the till shows the slip, opens Chrome's print dialog, then asks "Apakah kertasnya keluar?" | nothing | **Rendering and state flow tested in software; not tested on any physical printer.** A print dialog per slip is too slow for a queue, and it cannot reach the kitchen printer unless that printer is installed on the tablet. |
+| | How unattended printing works | Status |
+|---|---|---|
+| **B. Local print bridge** (`bridge/print_bridge.py`, prt-8/prt-9) — **chosen** | a small program on the cashier tablet polls `/print/agent/claim` with the two tokens and sends ESC/POS over TCP (port configurable) to both Wi-Fi printers, then reports | **Built.** Tested against simulated printers and the real API (37 tests, plus live end-to-end runs). **Not yet run on any physical printer, and not yet run on the tablet.** |
+| **A. Cloud-print printers** (e.g. Epson "Server Direct Print", Star "CloudPRNT") | the printer itself polls a URL over HTTPS | **Not built.** It needs an adapter for that vendor's protocol, and a protocol adapter cannot honestly be tested without the printer. Only relevant if the café buys such printers and wants no bridge device. |
+| **C. Android POS terminal with a built-in printer** (Sunmi / iMin) at the front | the terminal's print SDK in a wrapper app | **Not built** (native wrapper is out of scope). The kitchen would still use B. |
+| **D. Browser print** | *Cetak manual*: Chrome's print dialog, then "Apakah kertasnya keluar?" | Built (prt-4). Manual fallback for the front printer only. |
 
-**Recommendation:** B, or A if the café buys printers that support a cloud-print protocol.
-Both keep the pull model this API already implements, need no change to the till, and handle
-the kitchen distance by using the wired or wifi network. **Nothing here has been tested on
-real hardware, and no printer model is claimed to be compatible.**
+**Where the bridge runs (decided 21 September 2026).** The tablet's Chrome page cannot open a raw
+TCP connection, and the cloud cannot reach into the restaurant network, so the bridge runs **on
+the cashier tablet itself**, beside Chrome: it is already on, charging and on the right Wi-Fi, and
+the owner wants no extra hardware. It is plain Python 3.9+ with no packages.
 
-**What I need from the owner:** which printers are bought (model and connection), and
-whether a small always-on bridge device at the café is acceptable. With that, the next task is
-the adapter or bridge for that exact hardware, tested end to end: paper width, wrapping of
-long names and modifiers, the cut between nota/receipt and Bar slip, the kitchen buzzer, and a
-pulled network cable mid-print to see which state the till shows.
+Two ways to host it on Android, for two different stages:
+
+| | Termux | A dedicated Android companion app |
+|---|---|---|
+| Ready now | **Yes**, runs the exact tested code | **No**, must be written and built |
+| Chrome in front, screen off | usually, with wake lock and Samsung battery settings | yes, that is what a foreground service is for |
+| Android 12+ phantom-process killing | **not guaranteed**; switched off once from a PC over adb | not affected |
+| After a reboot | Termux:Boot, if set up | its own boot receiver |
+| After a force-stop | manual restart (Android allows nothing else) | manual restart |
+
+The plan: Termux for bring-up and for the tablet tests in `bridge/README.md`; if it does not
+survive a real service (screen off, Chrome in front, overnight), build the companion app. **Until
+those tests pass on the tablet, unattended background printing is not claimed.** The bridge now
+measures being frozen by Android and reports it to the till (*bridge sempat berhenti N menit*),
+so this is decided on evidence.
+
+Setup, Samsung battery settings, autostart, the probe and the acceptance checklist are in
+`bridge/README.md`.
+
+**How the bridge keeps its promises** (all tested with simulated printers):
+
+- One worker per printer, each with its own token and thread. A dead kitchen printer never
+  holds up the front printer. Jobs for one printer go one at a time, oldest first, one paper cut
+  per job, so receipt/nota and Bar slip are separate pieces of paper.
+- It checks the printer before taking work (`DLE EOT` status: offline, cover open, paper out,
+  error). If the printer is down, it takes nothing and reports the state; the till shows it.
+- **Confirmed failure vs uncertain.** If nothing reached the printer (it became unreachable, or
+  the cover opened, before the first byte), the job is **released** and prints unmarked when the
+  printer returns. If any byte may have reached it and the outcome is not confirmed (connection
+  cut mid-job, no `GS r` answer in time), it reports **uncertain** and never resends; the
+  cashier's marked reprint is the answer. A document that cannot be rendered is **failed**.
+- **Printed needs evidence.** With `status: gs_r` the bridge asks `GS r 1` after the cut. The
+  printer answers only after processing everything before it, and that answer is recorded as
+  `printer_status`. Printers that cannot answer run with `status: none`, and a job they accept
+  is shown as *Terkirim ke printer*, never *Tercetak*.
+- **Restarts and lost answers.** A journal on disk, fsynced before the first byte of a job goes
+  out, tells a restarted bridge "never sent" (release) from "may be on paper" (uncertain). If the
+  answer to a claim is lost, `held` finds the job and it is released, never printed twice. A lost
+  result is re-sent from the journal.
+- **Old work is held**, not printed as new, after an outage longer than 15 minutes (above).
+
+## The Iware IW-J300H: advertised, and what is actually verified
+
+Two of them, both 80 mm, over the restaurant Wi-Fi. The seller advertises 80 mm thermal printing,
+an automatic cutter, ESC/POS, Wi-Fi + LAN + USB + Bluetooth + serial, and a kitchen alarm. Iware
+publishes no command manual for this model, so **none of the protocol details are verified**:
+
+| What the bridge needs to know | Profile default (`"model": "iware-iw-j300h"`) | How it is verified |
+|---|---|---|
+| Which TCP port carries ESC/POS | 9100 | `bridge/probe_printer.py` reports the ports that answer |
+| Whether it answers `DLE EOT` (paper, cover, offline) | assumed yes | the probe |
+| Whether it answers `GS r` after a job (the only honest basis for *Tercetak*) | assumed yes | the probe |
+| Which cut command its cutter takes | `GS V 66` (partial) | the probe prints one labelled slip per candidate |
+| Which command sounds the alarm | **none; the buzzer stays off** | the probe prints one labelled slip per candidate, and the bridge refuses a buzzer command that is not marked verified |
+| Wi-Fi station mode and a fixed IP | assumed | the printer's self-test page and its own configuration tool |
+
+`--check` prints an UNVERIFIED line for these printers until the probe has run. If the printers
+turn out not to answer status requests, nothing breaks: jobs are then shown as *Terkirim ke
+printer* rather than *Tercetak*, which is the honest wording for "the bytes arrived and nobody
+can say more".
+
+**Also still unknown until the hardware is here:** whether the restaurant Wi-Fi reaches the
+kitchen printer through 10–15 m of walls (the IW-J300H has Ethernet as a fallback), and how many
+simultaneous connections the printer accepts. **No printer model is claimed to be compatible
+until it passes the checklist in `bridge/README.md`.**
+
+**Limits no software can remove.** Paper that came out faded, crooked or unread looks the same
+as a good slip. A printer that loses power after receiving a job cannot say whether it printed.
+Paper-low needs a near-end sensor that cheap models often lack. A cut has no confirmation of its
+own, and a jammed cutter shows up only as an error bit, if the model reports one.

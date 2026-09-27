@@ -67,7 +67,7 @@ export type ActiveOrder = {
     job_id: string;
     kind: string;
     printer: "front" | "kitchen";
-    status: "pending" | "sending" | "uncertain" | "printed" | "failed" | "cancelled";
+    status: "pending" | "held" | "sending" | "uncertain" | "delivered" | "printed" | "failed" | "cancelled";
     reprints: number;
     batch: number | null;
   }[];

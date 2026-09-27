@@ -15,6 +15,7 @@ from app.models.models import (  # noqa: F401
     KitchenLineEvent,
     ServiceNumberCounter,
     PrintJob,
+    PrintDevice,
     LoginOtp,
     MetricBaseline,
     Modifier,

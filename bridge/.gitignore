@@ -1,0 +1,6 @@
+# Secrets and machine state never go into git.
+*.token
+bridge-config.json
+state/
+*.log
+probe-report.json

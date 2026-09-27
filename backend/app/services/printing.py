@@ -40,10 +40,10 @@ from decimal import Decimal
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Business, Order, PrintJob, Staff
+from app.models import Business, Order, PrintDevice, PrintJob, Staff
 
 SERVICE_LABEL = {"dine_in": "Makan di sini", "takeaway": "Bawa pulang", "pickup": "Ambil sendiri", "delivery": "Antar"}
 STATION_TITLE = {"bar": "BAR", "kitchen": "DAPUR"}
@@ -53,10 +53,19 @@ CANCEL_KIND = {"bar": "bar_cancel", "kitchen": "kitchen_cancel"}
 # A device that took a job and has not reported back within this long leaves
 # the outcome unknown: the screen says so rather than guessing.
 UNCERTAIN_AFTER = timedelta(seconds=90)
+# A job nobody printed for this long is *held* (prt-8): no device may take it
+# until a person decides, so a printer that comes back after an outage does not
+# pour out old orders as if they were new work. The person either lets it
+# through (it prints marked TERLAMBAT) or withdraws it.
+HOLD_AFTER = timedelta(minutes=15)
+# A bridge reports its printer about every 30 seconds; after this long without
+# word the till stops trusting the last report.
+DEVICE_SILENT_AFTER = timedelta(seconds=90)
 
 
 class PrintInvalid(Exception):
-    """code: not_found · state (the job is not in a state that allows this)."""
+    """code: not_found · state (the job is not in a state that allows this) ·
+    stale (a device answered for a claim it no longer holds)."""
 
     def __init__(self, code: str, status: str | None = None):
         self.code, self.status = code, status
@@ -289,11 +298,30 @@ async def on_order_reversed(session: AsyncSession, order: Order, *, staff_id: uu
     return notices
 
 
+def is_held(job: PrintJob, now: datetime | None = None) -> bool:
+    """Waiting so long that it must not print as fresh work without a person's say."""
+    moment = now or datetime.now(timezone.utc)
+    return job.status == "pending" and job.released_at is None and job.created_at is not None \
+        and moment - job.created_at >= HOLD_AFTER
+
+
 def display_status(job: PrintJob, now: datetime | None = None) -> str:
-    """What the screen may honestly say: pending · uncertain · printed · failed · cancelled."""
+    """What the screen may honestly say: pending · held · sending · uncertain ·
+    delivered · printed · failed · cancelled.
+
+    *delivered*: a device handed the bytes to the printer but could not ask it
+    whether it finished (prt-8). *printed*: the printer confirmed it processed
+    the job through the cut, or a person holds the paper, or an older device
+    said so without evidence."""
     moment = now or datetime.now(timezone.utc)
     if job.status == "claimed":
+        if job.uncertain_at is not None:
+            return "uncertain"
         return "uncertain" if job.claimed_at is None or moment - job.claimed_at >= UNCERTAIN_AFTER else "sending"
+    if is_held(job, moment):
+        return "held"
+    if job.status == "printed" and job.evidence == "bytes_delivered" and job.confirmed_by is None:
+        return "delivered"
     return job.status
 
 
@@ -311,13 +339,17 @@ async def claim_next(session: AsyncSession, *, printer: str, device: str, now: d
     with `for update skip locked` so two devices never take the same job."""
     moment = now or datetime.now(timezone.utc)
     job = (await session.execute(
-        select(PrintJob).where(PrintJob.printer == printer, PrintJob.status == "pending")
+        select(PrintJob).where(
+            PrintJob.printer == printer, PrintJob.status == "pending",
+            or_(PrintJob.released_at.is_not(None), PrintJob.created_at > moment - HOLD_AFTER),
+        )
         .order_by(PrintJob.created_at, PAPER_ORDER, PrintJob.id).limit(1).with_for_update(skip_locked=True)
     )).scalar_one_or_none()
     if job is None:
         return None
     job.status, job.claimed_at, job.claimed_by = "claimed", moment, device[:60]
     job.attempts = (job.attempts or 0) + 1
+    job.error, job.uncertain_at, job.evidence = None, None, None
     job.updated_at = moment
     await session.flush()
     return job
@@ -331,19 +363,44 @@ async def _job(session: AsyncSession, job_id: uuid.UUID, lock: bool = True) -> P
     return job
 
 
-async def report_result(session: AsyncSession, *, job_id: uuid.UUID, ok: bool, device: str, error: str | None = None,
-                        now: datetime | None = None) -> PrintJob:
-    """The device says what happened. Only a job it holds can be answered, and
-    an answer arriving twice is the same answer."""
+def _holds(job: PrintJob, device: str, attempt: int | None) -> bool:
+    """Is this answer about the claim the job is on now? The device must be the
+    one that took it, and the attempt (every claim adds one) must be this one:
+    a late answer about an earlier try, even from the same device after it took
+    the job again, is not about this one. An answer that names no attempt (the
+    prt-4 form) is only unambiguous while the job has been taken once."""
+    if job.claimed_by != device[:60]:
+        return False
+    return attempt == job.attempts if attempt is not None else (job.attempts or 0) <= 1
+
+
+async def report_result(session: AsyncSession, *, job_id: uuid.UUID, ok: bool | None = None, device: str,
+                        error: str | None = None, attempt: int | None = None, outcome: str | None = None,
+                        evidence: str | None = None, now: datetime | None = None) -> PrintJob:
+    """The device says what happened: printed, failed, or *uncertain* (paper
+    may or may not exist; the job stays taken and the till offers a marked
+    reprint). Only the device holding the job, about its current attempt, can
+    answer, and an answer arriving twice is the same answer."""
     moment = now or datetime.now(timezone.utc)
+    outcome = outcome or ("printed" if ok else "failed")
     job = await _job(session, job_id)
-    target = "printed" if ok else "failed"
+    if not _holds(job, device, attempt):
+        raise PrintInvalid("stale", job.status)
+    if outcome == "uncertain":
+        if job.status != "claimed":
+            raise PrintInvalid("state", job.status)
+        if job.uncertain_at is None:
+            job.uncertain_at, job.error = moment, (error or "printer tidak memastikan slip tercetak")[:300]
+            job.updated_at = moment
+            await session.flush()
+        return job
+    target = "printed" if outcome == "printed" else "failed"
     if job.status == target:
         return job
     if job.status != "claimed":
         raise PrintInvalid("state", job.status)
-    if ok:
-        job.status, job.printed_at, job.error = "printed", moment, None
+    if target == "printed":
+        job.status, job.printed_at, job.error, job.evidence = "printed", moment, None, evidence
     else:
         job.status, job.failed_at, job.error = "failed", moment, (error or "printer melaporkan gagal")[:300]
     job.updated_at = moment
@@ -351,16 +408,182 @@ async def report_result(session: AsyncSession, *, job_id: uuid.UUID, ok: bool, d
     return job
 
 
-async def retry(session: AsyncSession, *, job_id: uuid.UUID, now: datetime | None = None) -> PrintJob:
+async def release(session: AsyncSession, *, job_id: uuid.UUID, device: str, attempt: int, error: str | None = None,
+                  now: datetime | None = None) -> PrintJob:
+    """The device took the job and sent **nothing** to the printer (unreachable,
+    out of paper, cover open before it started). No paper can exist, so the
+    job goes back in the queue unmarked, with the reason for the till to show.
+    A device that may have sent bytes reports *uncertain* instead."""
+    moment = now or datetime.now(timezone.utc)
+    job = await _job(session, job_id)
+    if job.status == "pending" and job.claimed_by is None:
+        return job                                    # already released: same answer twice
+    if not _holds(job, device, attempt):
+        raise PrintInvalid("stale", job.status)
+    if job.status != "claimed" or job.uncertain_at is not None:
+        raise PrintInvalid("state", job.status)
+    job.status, job.claimed_at, job.claimed_by = "pending", None, None
+    job.error = (error or "belum terkirim ke printer")[:300]
+    job.updated_at = moment
+    await session.flush()
+    return job
+
+
+async def held_by(session: AsyncSession, *, printer: str, device: str) -> list[PrintJob]:
+    """Jobs this device has taken and not answered for, so a restarted bridge
+    can release the ones it never sent. Jobs it already called uncertain are
+    not offered back: they may be on paper."""
+    return list((await session.execute(
+        select(PrintJob).where(PrintJob.printer == printer, PrintJob.status == "claimed",
+                               PrintJob.claimed_by == device[:60], PrintJob.uncertain_at.is_(None))
+        .order_by(PrintJob.claimed_at)
+    )).scalars().all())
+
+
+async def let_through(session: AsyncSession, *, job_id: uuid.UUID, staff_id: uuid.UUID | None,
+                      now: datetime | None = None) -> PrintJob:
+    """A person lets a held job print. It keeps its identity (so a later
+    cancellation still finds it) and prints marked TERLAMBAT."""
+    moment = now or datetime.now(timezone.utc)
+    job = await _job(session, job_id)
+    if job.status != "pending":
+        raise PrintInvalid("state", job.status)
+    if job.released_at is None:
+        job.released_at, job.released_by, job.updated_at = moment, staff_id, moment
+        await session.flush()
+    return job
+
+
+async def withdraw(session: AsyncSession, *, job_id: uuid.UUID, staff_id: uuid.UUID | None,
+                   now: datetime | None = None) -> PrintJob:
+    """A person decides a held or failed job is not needed any more. Neither can
+    be on paper (held: nothing took it; failed: the device said nothing came
+    out), so it is withdrawn like an untouched slip. Nothing is deleted."""
+    moment = now or datetime.now(timezone.utc)
+    job = await _job(session, job_id)
+    if job.status == "cancelled" and job.withdrawn_by is not None:
+        return job
+    if not (job.status == "failed" or is_held(job, moment)):
+        raise PrintInvalid("state", job.status)
+    job.status, job.withdrawn_by, job.updated_at = "cancelled", staff_id, moment
+    await session.flush()
+    return job
+
+
+async def device_document(session: AsyncSession, job: PrintJob) -> dict:
+    """The document as a device should print it now. A job a person let through
+    after it was held says so on paper, with when it was made, so nobody at the
+    pass mistakes a late slip for a new order. The stored document is untouched."""
+    doc = job.document
+    if job.released_at is None:
+        return doc
+    made = await _local(session, job.business_id, job.created_at)
+    let = await _local(session, job.business_id, job.released_at)
+    staff = await session.get(Staff, job.released_by) if job.released_by else None
+    blocks = list(doc.get("blocks", []))
+    insert_at = 1 if blocks and blocks[0].get("t") == "title" else 0
+    blocks[insert_at:insert_at] = [
+        {"t": "label", "text": "TERLAMBAT"},
+        {"t": "text", "text": f"Dibuat {made.strftime('%d/%m %H.%M')} · dicetak {let.strftime('%H.%M')}"
+                              f"{' · ' + staff.name if staff else ''}", "align": "center"},
+    ]
+    return {**doc, "blocks": blocks, "late": True}
+
+
+DEVICE_STATES = ("ready", "reachable", "paper_low", "paper_out", "cover_open", "offline", "error", "unknown")
+
+
+async def record_heartbeat(session: AsyncSession, *, business_id: uuid.UUID, printer: str, device: str, state: str,
+                           detail: str | None, version: str | None, test_result: str | None = None,
+                           test_detail: str | None = None) -> PrintDevice | None:
+    """What a bridge worker last saw. It also carries the answer to a test
+    ticket the owner asked for, which is the only way that answer comes back."""
+    from sqlalchemy.dialects.postgresql import insert
+
+    values = {"business_id": business_id, "printer": printer, "device": device[:60], "state": state,
+              "detail": detail, "version": version}
+    update = {"state": state, "detail": detail, "version": version, "last_seen_at": func.now()}
+    if test_result is not None:
+        if test_result not in TEST_RESULTS:
+            raise PrintInvalid("state", test_result)
+        values |= {"test_result": test_result, "test_detail": test_detail, "test_result_at": func.now()}
+        update |= {"test_result": test_result, "test_detail": test_detail, "test_result_at": func.now()}
+    stmt = insert(PrintDevice).values(**values)
+    await session.execute(stmt.on_conflict_do_update(
+        index_elements=[PrintDevice.business_id, PrintDevice.printer, PrintDevice.device], set_=update,
+    ))
+    await session.flush()
+    return await device_for(session, printer=printer, device=device)
+
+
+TEST_RESULTS = ("printed", "delivered", "uncertain", "failed")
+# A test ticket asked for and not picked up within this long is stale: the
+# bridge was not running, and the owner should be told that rather than left
+# waiting for paper that comes out an hour later.
+TEST_EXPIRES_AFTER = timedelta(minutes=10)
+
+
+async def request_test(session: AsyncSession, *, business_id: uuid.UUID, printer: str,
+                       now: datetime | None = None) -> list[PrintDevice]:
+    """The owner asks one printer for a test ticket. It goes to whichever
+    bridge workers are reporting for that printer; with none, there is nobody
+    to print it and the caller says so."""
+    moment = now or datetime.now(timezone.utc)
+    rows = [d for d in await devices(session) if d.printer == printer]
+    for row in rows:
+        row.test_requested_at, row.test_result, row.test_detail, row.test_result_at = moment, None, None, None
+    await session.flush()
+    return rows
+
+
+def test_pending(device: PrintDevice | None, now: datetime | None = None) -> bool:
+    """Is this device being asked for a test ticket right now?"""
+    if device is None or device.test_requested_at is None or device.test_result_at is not None:
+        return False
+    return (now or datetime.now(timezone.utc)) - device.test_requested_at < TEST_EXPIRES_AFTER
+
+
+def test_state(device: PrintDevice, now: datetime | None = None) -> str | None:
+    """waiting · printed · delivered · uncertain · failed · not_picked_up · None."""
+    if device.test_requested_at is None:
+        return None
+    if device.test_result is not None:
+        return device.test_result
+    return "waiting" if test_pending(device, now) else "not_picked_up"
+
+
+async def device_for(session: AsyncSession, *, printer: str, device: str) -> PrintDevice | None:
+    return (await session.execute(
+        select(PrintDevice).where(PrintDevice.printer == printer, PrintDevice.device == device[:60])
+    )).scalar_one_or_none()
+
+
+async def devices(session: AsyncSession) -> list[PrintDevice]:
+    """Bridges heard from in the last week (an old install's row stays in the
+    table; it just stops being shown)."""
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    return list((await session.execute(
+        select(PrintDevice).where(PrintDevice.last_seen_at >= since)
+        .order_by(PrintDevice.printer, PrintDevice.last_seen_at.desc())
+    )).scalars().all())
+
+
+async def retry(session: AsyncSession, *, job_id: uuid.UUID, staff_id: uuid.UUID | None = None,
+                now: datetime | None = None) -> PrintJob:
     """Put a job the printer said it could not print back in the queue. Only a
     *failed* job: an uncertain one may be on paper, so it takes a marked reprint
-    or a person's confirmation instead."""
+    or a person's confirmation instead. A person retrying an old job has
+    decided it should still print, so it is let through (marked TERLAMBAT)
+    rather than held again."""
+    moment = now or datetime.now(timezone.utc)
     job = await _job(session, job_id)
     if job.status == "pending":
         return job
     if job.status != "failed":
         raise PrintInvalid("state", job.status)
-    job.status, job.claimed_at, job.claimed_by, job.updated_at = "pending", None, None, now or datetime.now(timezone.utc)
+    job.status, job.claimed_at, job.claimed_by, job.updated_at = "pending", None, None, moment
+    if job.released_at is None and job.created_at is not None and moment - job.created_at >= HOLD_AFTER:
+        job.released_at, job.released_by = moment, staff_id
     await session.flush()
     return job
 

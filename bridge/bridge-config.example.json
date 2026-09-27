@@ -1,0 +1,31 @@
+{
+  "api_base": "https://YOUR-API.up.railway.app",
+  "device_name": "tablet-kasir",
+  "state_dir": "state",
+  "poll_seconds": 2,
+  "printers": {
+    "front": {
+      "model": "iware-iw-j300h",
+      "host": "192.168.1.50",
+      "port": 9100,
+      "token_file": "front.token",
+      "paper_mm": 80,
+      "status": "gs_r",
+      "cut": "partial",
+      "feed_lines": 3
+    },
+    "kitchen": {
+      "model": "iware-iw-j300h",
+      "host": "192.168.1.51",
+      "port": 9100,
+      "token_file": "kitchen.token",
+      "paper_mm": 80,
+      "status": "gs_r",
+      "cut": "partial",
+      "feed_lines": 3,
+      "banner_scale": 2,
+      "_beep": "Fill this in only after probe_printer.py --paper --buzzer has shown which command sounds:",
+      "_beep_example": {"command": "esc_b", "times": 2, "duration": 3, "verified": true}
+    }
+  }
+}

@@ -78,19 +78,33 @@ Deal with that first; receipts and notas can wait.
    - they have it → **Kertas sudah ada**
    - they do not → **Cetak ulang** (the new slip says CETAK ULANG, so it cannot be mistaken for a
      second order), or read the order out to them from *Pesanan aktif* while the printer is fixed
-3. Check the printer itself: paper roll the right way round, lid shut, power, network cable or
-   wifi. Then **Coba lagi** on anything *Gagal cetak*.
-4. **Nothing is lost while the printer is down.** Every slip waits in the queue and prints when
+3. **An orange bar on the kasir screen saying the bridge is not reporting** means the printing
+   program on the tablet has stopped — swiped away, or the tablet restarted. Open it again
+   (Termux, or the bridge app) and printing resumes on its own, including everything queued
+   while it was off. Both printers going quiet at once is the same thing.
+4. Check the printer itself: paper roll the right way round, lid shut, power, and that it is on
+   the restaurant wifi. The top of *Antrean cetak* shows what the print bridge last saw on each
+   printer (*Kertas habis*, *Tutup printer terbuka*, *Tidak terjangkau*). Then **Coba lagi** on
+   anything *Gagal cetak*.
+5. **Nothing is lost while the printer is down.** Every slip waits in the queue and prints when
    the printer is back. Sends and sales are already recorded and never undone by a printer.
-5. For the front printer only, **Cetak manual** prints through the tablet's print dialog. It
-   asks afterwards whether paper came out; answer truthfully.
-6. If a table's nota did not print, tell the table what was sent; the bill is on the till and on
+   A slip that has waited more than 15 minutes is **Tertahan**: it will not print by itself
+   when the printer comes back, so yesterday's order cannot come out as new work. Ask the
+   kitchen, then **Cetak sekarang (terlambat)** (it prints marked TERLAMBAT) or **Tidak perlu
+   dicetak**.
+   *Terkirim ke printer* means the printer took the slip but cannot report whether it came out
+   (the printer does not support status). Only check it if someone says it is missing.
+6. For the front printer only, **Cetak manual** prints through the tablet's print dialog. It
+   asks afterwards whether paper came out; answer truthfully. It needs a printer the tablet
+   itself can print to, which the kitchen printer is not.
+7. If a table's nota did not print, tell the table what was sent; the bill is on the till and on
    the guest's QR page. Never hold up the queue for a receipt.
 
 A cancelled item or order whose slip may already be printed sends a **BATAL** slip to the same
 printer, with the reason. Still walk over and tell the chef or barista: they may have started.
 
-How the printers connect, and what is still undecided, is in `docs/printing.md`.
+How the printers connect, and what is still undecided, is in `docs/printing.md`. Setting up and
+restarting the print bridge is in `bridge/README.md`.
 
 ### A table wants to add, change or cancel something
 

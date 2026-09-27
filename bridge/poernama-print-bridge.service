@@ -1,0 +1,21 @@
+# systemd unit for Linux / Raspberry Pi OS.
+#   sudo cp poernama-print-bridge.service /etc/systemd/system/
+#   (edit User= and the two paths below)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now poernama-print-bridge
+#   journalctl -u poernama-print-bridge -f        # watch it
+[Unit]
+Description=Poernama print bridge (API print jobs -> network ESC/POS printers)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/poernama-bridge
+ExecStart=/usr/bin/python3 /home/pi/poernama-bridge/print_bridge.py --config /home/pi/poernama-bridge/bridge-config.json
+Restart=always
+RestartSec=5
+# SIGTERM lets a job in progress finish before the bridge stops.
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target
