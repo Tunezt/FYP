@@ -71,8 +71,8 @@ async def _process_message(message: dict) -> None:
         logger.info("Message from unregistered number %s (type=%s)", sender, msg_type)
         await send_text(
             sender,
-            "Nomor ini belum terdaftar di Warung Pintar. "
-            "Daftar dulu lewat dashboard ya! / This number isn't registered yet.",
+            "Nomor ini belum terdaftar di Poernama. "
+            "Minta pemilik usaha mendaftarkan nomormu ya! / This number isn't registered yet.",
         )
         return
 

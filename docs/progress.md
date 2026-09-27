@@ -1972,3 +1972,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Test fixtures keep "Ibu Ratna" on purpose.** Those are fictional cafés built inside each test, not Poernama; renaming them would touch 29 test files for no behavioural reason.
 **Deviation:** owner-directed, not a roadmap task.
 **Next:** [wa-1].
+
+
+### [wa-1] An unregistered WhatsApp number hears "Poernama", and is not told to sign up on a dashboard that has no sign-up
+**Date:** 2026-09-27
+**Status:** done
+**Changed:** backend/app/whatsapp/processor.py
+**Gates:** pytest 656 passed 0 skipped - migrations round-trip ok (0043 -> 0042 -> 0043) - frontend build ok - seed ok
+**Notes:**
+- **Found on the live system.** Meta's dashboard test message (27 Sep) reached the production webhook with 200 and a correct signature, and the dry-run reply in the Railway log read *Nomor ini belum terdaftar di Warung Pintar. Daftar dulu lewat dashboard ya!* Two things were wrong with it: the legacy product name, and the instruction, because since [auth-1] the login page no longer starts a registration.
+- Now: *Nomor ini belum terdaftar di Poernama. Minta pemilik usaha mendaftarkan nomormu ya! / This number isn't registered yet.* The two tests that pin this reply check for "belum terdaftar", which is unchanged.
+- **Live Meta state recorded here** (the owner's steps, not code): webhook `https://fyp-production-b63c.up.railway.app/webhooks/whatsapp` verified with the verify token, `messages` subscribed at v26.0, `WHATSAPP_APP_SECRET` set in Railway, signature checking confirmed by the 200. Still dry-run: no access token in Railway until [auth-1] is deployed.
+**Deviation:** owner-directed, not a roadmap task.
+**Next:** [legal-1].
