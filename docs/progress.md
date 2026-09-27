@@ -2000,3 +2000,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Verified in the browser:** both pages render, link to each other and to /login, no horizontal scroll at 375 px, no console errors.
 **Deviation:** owner-directed, not a roadmap task.
 **Next:** push (owner's call), then in Meta: App settings → Basic → Privacy Policy URL `https://poernama-zeta.vercel.app/privasi`, User data deletion `https://poernama-zeta.vercel.app/hapus-data`, icon and category, then publish; permanent token into Railway once PIN login is live.
+
+
+### [wa-2] Meta's delivery receipts reach the log, so an accepted-but-undelivered reply is no longer invisible
+**Date:** 2026-09-27
+**Status:** done in software; the live delivery problem it was built to diagnose is still open
+**Changed:** backend/app/whatsapp/processor.py (`_log_status`), backend/tests/test_whatsapp_statuses.py (new, 4 tests)
+**Gates:** pytest 660 passed 0 skipped (656 + 4 new) - migrations round-trip ok (0043 -> 0042 -> 0043) - frontend build ok - seed ok
+**Notes:**
+- **Live finding (27 Sep, 22:21).** After the owner put the permanent token and the phone number ID into Railway, the unregistered-number reply to +62 811 5819 400 was *accepted* by Meta (`POST /v21.0/1420306994492662/messages` 200), yet nothing arrived on the phone; Meta's own dashboard "Hello World" to the same number also reported sent and never arrived. Meta reports the real outcome a second later as a `statuses` webhook, and two of those arrived (200 in the access log), but the processor only read `messages` and dropped the rest unread.
+- Now every receipt is logged: a failure as a WARNING `Delivery FAILED to <recipient> (<wamid>): <code> <title>: <details>`, anything else as one INFO line (`Delivery sent/delivered/read to ...`). A receipt is never processed as an incoming message (tested).
+- Earlier in the same session the log also showed the reply going to `/v21.0/CHANGE_ME/messages` (400) because `WHATSAPP_PHONE_NUMBER_ID` was still the placeholder in Railway; the owner fixed the variable. Not a code change.
+**Deviation:** owner-directed diagnostic, not a roadmap task.
+**Next:** push (owner's call), send `halo` again, read the `Delivery ...` lines in Railway, act on Meta's error code.

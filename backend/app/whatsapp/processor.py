@@ -37,12 +37,31 @@ async def process_webhook_payload(payload: dict) -> None:
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
-            # Delivery/read receipts arrive on the same webhook — not messages.
             for message in value.get("messages", []):
                 try:
                     await _process_message(message)
                 except Exception:
                     logger.exception("Failed processing message %s", message.get("id"))
+            # Delivery receipts arrive on the same webhook. Meta answers 200 when
+            # it *accepts* a reply; whether it reached the phone is only known
+            # here, so a failure must reach the log or it is invisible.
+            for status in value.get("statuses", []):
+                _log_status(status)
+
+
+def _log_status(status: dict) -> None:
+    state = status.get("status", "?")
+    recipient = status.get("recipient_id", "?")
+    message_id = status.get("id", "?")
+    if state == "failed":
+        reasons = "; ".join(
+            f"{e.get('code')} {e.get('title', '')}: "
+            f"{(e.get('error_data') or {}).get('details') or e.get('message', '')}".strip()
+            for e in status.get("errors", [])
+        )
+        logger.warning("Delivery FAILED to %s (%s): %s", recipient, message_id, reasons or "no reason given")
+    else:
+        logger.info("Delivery %s to %s (%s)", state, recipient, message_id)
 
 
 async def _resolve_business(sender: str) -> Business | None:
