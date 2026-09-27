@@ -122,7 +122,7 @@ const ITEM_SPECS: ItemSpec[] = [
 ];
 
 const STAFF: StaffMember[] = [
-  { id: "demo-staff-1", name: "Ibu Ratna", role: "owner", is_active: true, created_at: jktIso(120, 9) },
+  { id: "demo-staff-1", name: "Ibu Diah", role: "owner", is_active: true, created_at: jktIso(120, 9) },
   { id: "demo-staff-2", name: "Sari", role: "staff", is_active: true, created_at: jktIso(118, 10) },
   { id: "demo-staff-3", name: "Budi", role: "manager", is_active: true, created_at: jktIso(96, 11) },
 ];
@@ -178,7 +178,7 @@ const APPROVALS: ApprovalRow[] = [
     approver_name: "Budi", approver_role: "manager", requested_by: "demo-staff-2",
     requested_by_name: "Sari", amount: "5000.00", note: null, created_at: jktIso(1, 11) },
   { id: "demo-appr-3", order_id: "demo-order-3", action: "refund", approved_by: "demo-staff-1",
-    approver_name: "Ibu Ratna", approver_role: "owner", requested_by: "demo-staff-2",
+    approver_name: "Ibu Diah", approver_role: "owner", requested_by: "demo-staff-2",
     requested_by_name: "Sari", amount: "22000.00", note: "kopi tumpah", created_at: jktIso(2, 16) },
 ];
 
@@ -202,7 +202,7 @@ const SELLABLE = ITEM_SPECS.filter((s) => s.weight > 0);
 /** Sales for one Jakarta day, newest first. */
 function salesForDay(dayOffset: number, count: number): SaleRow[] {
   const rand = rng(1000 + dayOffset);
-  const staffNames = ["Sari", "Budi", "Ibu Ratna"];
+  const staffNames = ["Sari", "Budi", "Ibu Diah"];
   const rows: SaleRow[] = [];
   const openHour = 7;
   const closeHour = dayOffset === 0 ? Math.max(8, jktNowHour()) : 21;

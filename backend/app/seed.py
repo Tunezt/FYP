@@ -163,7 +163,7 @@ async def seed(confirm: bool = False) -> None:
 
     async with tenant_session(business_id) as session:
         owner = Staff(
-            business_id=business_id, name="Ibu Ratna", role="owner",
+            business_id=business_id, name="Ibu Diah", role="owner",
             phone=OWNER_PHONE, pin_hash=hash_pin("1234"),
         )
         sari = Staff(business_id=business_id, name="Sari", pin_hash=hash_pin("2345"))

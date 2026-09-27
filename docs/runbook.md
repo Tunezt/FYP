@@ -299,7 +299,7 @@ Honest list, so nobody discovers these at 8am. Each one is a task that exists an
 ## Setting up the real cafe, once
 
 ```bash
-cd backend && ./.venv/Scripts/python.exe -m app.bootstrap --name "Kopi Senja" --owner "Ibu Ratna" --phone 081200011112
+cd backend && ./.venv/Scripts/python.exe -m app.bootstrap --name "Kopi Senja" --owner "Ibu Diah" --phone 081200011112
 ```
 
 It asks for the owner's PIN twice rather than taking it on the command line, so

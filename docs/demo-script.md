@@ -15,7 +15,7 @@
 
 ## Act 1 — the problem & the POS (2 min)
 
-> "Ibu Ratna runs a café. Her staff aren't going to learn an ERP. So the till is one screen."
+> "Ibu Diah runs a café. Her staff aren't going to learn an ERP. So the till is one screen."
 
 1. Open the pairing link (Settings → Layar kasir → generate, or reuse the kiosk tab).
 2. Tap **Sari** → PIN `2345` → sale screen boots instantly.

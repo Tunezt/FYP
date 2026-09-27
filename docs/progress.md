@@ -1960,3 +1960,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Deploy order matters.** Deploy this (and run 0043 on Supabase) and log in with the PIN once *before* putting `WHATSAPP_ACCESS_TOKEN` into Railway; remove `OTP_LOG_FALLBACK` at the same time.
 **Deviation:** owner-directed, not a roadmap task. Adds a login path the roadmap did not plan; schema change is a widened check constraint (additive).
 **Next:** the owner's Meta steps (system-user token, app secret, webhook to Railway, allow-listed phone) for the assistant; business verification is optional now.
+
+
+### [name-1] Poernama's owner is Ibu Diah in the seed, demo data and examples
+**Date:** 2026-09-27
+**Status:** done
+**Changed:** backend/app/seed.py, backend/app/bootstrap.py (usage example), frontend/lib/demo.ts, frontend/app/register/page.tsx (placeholder), docs/runbook.md (bootstrap example), docs/demo-script.md
+**Gates:** pytest 656 passed 0 skipped - migrations round-trip ok (0043 -> 0042 -> 0043) - frontend build ok - seed ok
+**Notes:**
+- **Owner's correction (24 Sep):** the owner of Poernama is Ibu Diah, not "Ibu Ratna". The seeded business, the demo-mode staff list, the register form's example and the documentation now say so.
+- **Test fixtures keep "Ibu Ratna" on purpose.** Those are fictional cafés built inside each test, not Poernama; renaming them would touch 29 test files for no behavioural reason.
+**Deviation:** owner-directed, not a roadmap task.
+**Next:** [wa-1].

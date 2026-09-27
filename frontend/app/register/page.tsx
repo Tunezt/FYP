@@ -202,7 +202,7 @@ export default function RegisterPage() {
                   className="field"
                   value={ownerName}
                   onChange={(e) => setOwnerName(e.target.value)}
-                  placeholder="cth. Ibu Ratna"
+                  placeholder="cth. Ibu Diah"
                 />
               </label>
               <label className="block">
