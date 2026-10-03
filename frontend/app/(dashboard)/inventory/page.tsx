@@ -6,6 +6,7 @@ import { formatQty, formatRupiah } from "@/lib/format";
 import { PREP_STATION_LABEL, type InventoryItem, type PrepStation } from "@/lib/types";
 import { EmptyState, ErrorState, Glass, ItemIcon, RowChevron, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
+import { FormHint } from "@/components/FormHint";
 import { IconBox, IconPlus } from "@/components/icons";
 
 type Draft = {
@@ -113,6 +114,8 @@ export default function InventoryPage() {
   }
 
   const sheetOpen = adding || editing !== null;
+  const negative = [draft.current_stock, draft.cost_price, draft.sell_price, draft.reorder_threshold].some((v) => Number(v) < 0);
+  const itemMissing = !draft.name.trim() ? "Isi nama barang" : negative ? "Angka stok dan harga tidak boleh negatif" : null;
 
   return (
     <div className="animate-fade-up space-y-8">
@@ -265,11 +268,12 @@ export default function InventoryPage() {
           )}
           <button
             onClick={save}
-            disabled={busy || !draft.name.trim()}
+            disabled={busy || !!itemMissing}
             className="btn-accent w-full py-3.5"
           >
             {busy ? "Menyimpan…" : "Simpan"}
           </button>
+          <FormHint missing={itemMissing} />
         </div>
       </Sheet>
     </div>

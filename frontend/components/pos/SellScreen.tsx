@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, POS_TOKEN_KEY } from "@/lib/api";
 import { Select } from "@/components/Select";
+import { FormHint, missingText } from "@/components/FormHint";
 import { ProductPicker } from "@/components/ProductPicker";
 import { IconCheck, IconLock, IconPrinter, IconSearch, IconWallet } from "@/components/icons";
 import { formatQty, formatRupiah } from "@/lib/format";
@@ -632,6 +633,16 @@ export function SellScreen({
   const qrisAmount = moneyDue - cashAmount;
   const splitValid = payMode !== "split" || (cashAmount > 0 && cashAmount < moneyDue) || moneyDue === 0;
 
+  const payFill = missingText("Isi", [
+    orderType === "delivery" && !deliveryAddress.trim() && "alamat pengantaran",
+    orderType === "delivery" && !deliveryPhone.trim() && !customer?.phone && "nomor HP penerima",
+    needsPin && managerPin.length < 4 && "PIN pemilik/manajer untuk diskon",
+  ]);
+  const payMissing =
+    payFill ??
+    (!splitValid ? "Bagian tunai harus lebih dari 0 dan kurang dari total" : null) ??
+    (quote?.voucher_error && voucherCode.trim() ? "Kode voucher tidak berlaku — hapus atau ganti kodenya" : null);
+
   function openPay() {
     if (cart.length === 0 && sentLines.length === 0) return;
     const missing = cart.filter((l) => !itemById.has(l.item.id));
@@ -645,7 +656,7 @@ export function SellScreen({
   }
 
   async function confirmPay() {
-    if ((cart.length === 0 && sentLines.length === 0) || busy || !splitValid) return;
+    if ((cart.length === 0 && sentLines.length === 0) || busy || payMissing) return;
     if (orderType === "delivery" && !deliveryAddress.trim()) return setPayError("Pesanan antar perlu alamat pengantaran.");
     if (orderType === "delivery" && !deliveryPhone.trim() && !customer?.phone) return setPayError("Pesanan antar perlu nomor HP penerima.");
     if (needsPin && managerPin.length < 4) return setPayError("Diskon perlu PIN manajer — minta pemilik atau manajer memasukkan PIN-nya.");
@@ -801,7 +812,10 @@ export function SellScreen({
   }, [token]);
   useEffect(loadShift, [loadShift]);
 
+  const shiftMissing =
+    shiftAmount === "" ? (shiftSheet === "open" ? "Isi modal awal — tulis 0 kalau laci kosong" : "Isi uang yang dihitung di laci") : null;
   async function submitShift() {
+    if (shiftMissing) return;
     const amount = Number(shiftAmount || 0);
     if (!Number.isFinite(amount) || amount < 0) return setShiftError("Masukkan angka yang benar.");
     setBusy(true);
@@ -837,7 +851,11 @@ export function SellScreen({
     setCashSheet(true);
     if (suppliers.length === 0) api<SupplierLite[]>("/pos/suppliers", { token }).then(setSuppliers).catch(() => setSuppliers([]));
   }
+  const cashFill = missingText("Isi", [!(Number(cashInput || 0) > 0) && "jumlah", !cashReason.trim() && "alasan"]);
+  const cashNoSupplier = cashKind === "supplier_payment" && !cashSupplier;
+  const cashMissing = cashFill && cashNoSupplier ? `${cashFill}, lalu pilih supplier` : cashFill ?? (cashNoSupplier ? "Pilih supplier yang dibayar" : null);
   async function submitCash() {
+    if (cashMissing) return;
     const amount = Number(cashInput || 0);
     if (!Number.isFinite(amount) || amount <= 0) return setCashError("Masukkan jumlah lebih dari nol.");
     if (!cashReason.trim()) return setCashError("Tulis alasannya.");
@@ -1112,6 +1130,7 @@ export function SellScreen({
                 <button onClick={() => setDrawer(true)} className="min-w-0 flex-1 text-left" aria-label="Lihat pesanan">
                   <p className="ink-soft truncate text-[13px] font-medium">
                     {panelTitle} · {count > 0 ? `${count} item${sentLines.length ? " baru" : ""} · lihat` : sentLines.length ? "semua terkirim" : "kosong"}
+                    {tableBill && cart.length > 0 && !tableLabel.trim() && <span style={{ color: "var(--warn)" }}> · isi nomor meja</span>}
                   </p>
                   <p className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{formatRupiah(cartTotal)}</p>
                 </button>
@@ -1119,7 +1138,7 @@ export function SellScreen({
                   Pesanan
                 </button>
                 {tableBill && cart.length > 0 ? (
-                  <button onClick={() => void sendCurrent()} disabled={busy} className="btn-accent px-6 py-3">
+                  <button onClick={() => void sendCurrent()} disabled={busy || !tableLabel.trim()} className="btn-accent px-6 py-3">
                     Kirim
                   </button>
                 ) : (
@@ -1218,7 +1237,12 @@ export function SellScreen({
         />
       )}
 
-      {lineDiscountFor && (
+      {lineDiscountFor && (() => {
+        const target = cart.find((l) => l.uid === lineDiscountFor);
+        const gross = target ? linePrice(target) * target.qty : 0;
+        const value = Number(lineDiscountDraft || 0);
+        const discountMissing = !(value > 0) ? "Isi potongannya" : value > gross ? `Diskon tidak boleh lebih dari ${formatRupiah(gross)}` : null;
+        return (
         <div className="sheet-scrim z-[60]" onClick={() => setLineDiscountFor(null)}>
           <div className="sheet-panel block px-6 pb-8 pt-5 sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
             <p className="text-[19px] font-semibold tracking-[-0.015em]">Diskon baris</p>
@@ -1244,18 +1268,21 @@ export function SellScreen({
               </button>
               <button
                 onClick={() => {
-                  const amount = Math.max(0, Number(lineDiscountDraft || 0));
-                  setCart((c) => c.map((l) => (l.uid === lineDiscountFor ? { ...l, discount: amount } : l)));
+                  if (discountMissing) return;
+                  setCart((c) => c.map((l) => (l.uid === lineDiscountFor ? { ...l, discount: value } : l)));
                   setLineDiscountFor(null);
                 }}
+                disabled={!!discountMissing}
                 className="btn-accent flex-1 py-3"
               >
                 Simpan
               </button>
             </div>
+            <FormHint missing={discountMissing} />
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {paying && (
         <div className="sheet-scrim z-[55]" onClick={() => !busy && setPaying(false)}>
@@ -1312,12 +1339,13 @@ export function SellScreen({
                   <div className="mt-1 grid grid-cols-2 gap-2">
                     <input autoFocus value={customerNew.name} onChange={(e) => setCustomerNew({ ...customerNew, name: e.target.value })} className="field text-sm" placeholder="Nama" />
                     <input inputMode="tel" value={customerNew.phone} onChange={(e) => setCustomerNew({ ...customerNew, phone: e.target.value })} className="field text-sm tabular-nums" placeholder="Nomor HP" />
-                    <button onClick={quickAddCustomer} className="btn-accent py-2 text-sm">
+                    <button onClick={quickAddCustomer} disabled={!customerNew.name.trim()} className="btn-accent py-2 text-sm">
                       Simpan pelanggan
                     </button>
                     <button onClick={() => setCustomerNew(null)} className="btn-quiet py-2 text-sm">
                       Batal
                     </button>
+                    <FormHint className="col-span-2 !mt-0" missing={!customerNew.name.trim() ? "Isi nama pelanggan" : null} />
                     {customerError && <p className="col-span-2 text-xs text-[color:var(--bad)]">{customerError}</p>}
                   </div>
                 ) : (
@@ -1427,10 +1455,11 @@ export function SellScreen({
                 <button onClick={() => setPaying(false)} disabled={busy} className="btn-quiet px-5 py-3.5">
                   Kembali
                 </button>
-                <button onClick={confirmPay} disabled={busy || !splitValid} className="btn-accent flex-1 py-3.5 text-base">
+                <button onClick={confirmPay} disabled={busy || !!payMissing} className="btn-accent flex-1 py-3.5 text-base">
                   {busy ? "Memproses…" : `Terima ${formatRupiah(moneyDue)}`}
                 </button>
               </div>
+              <FormHint missing={payMissing} />
             </div>
           </div>
         </div>
@@ -1481,10 +1510,11 @@ export function SellScreen({
               <button onClick={() => setShiftSheet(null)} className="btn-quiet flex-1 py-3">
                 Batal
               </button>
-              <button onClick={submitShift} disabled={busy} className="btn-accent flex-1 py-3">
+              <button onClick={submitShift} disabled={busy || !!shiftMissing} className="btn-accent flex-1 py-3">
                 {shiftSheet === "open" ? "Buka shift" : openOrders.length > 0 ? "Tetap tutup shift" : "Tutup shift"}
               </button>
             </div>
+            <FormHint missing={shiftMissing} />
           </div>
         </div>
       )}
@@ -1560,10 +1590,11 @@ export function SellScreen({
               <button onClick={() => setCashSheet(false)} className="btn-quiet flex-1 py-3">
                 Batal
               </button>
-              <button onClick={submitCash} disabled={busy} className="btn-accent flex-1 py-3">
+              <button onClick={submitCash} disabled={busy || !!cashMissing} className="btn-accent flex-1 py-3">
                 Catat
               </button>
             </div>
+            <FormHint missing={cashMissing} />
           </div>
         </div>
       )}
@@ -1602,10 +1633,13 @@ export function SellScreen({
               <button onClick={() => setVoiding(null)} disabled={busy} className="btn-quiet flex-1 py-3">
                 Kembali
               </button>
-              <button onClick={() => void submitVoid()} disabled={busy || !voiding.reason.trim()} className="btn-danger flex-1 py-3">
+              <button onClick={() => void submitVoid()} disabled={busy || !voiding.reason.trim() || dirty} className="btn-danger flex-1 py-3">
                 Batalkan {voiding.qty} item
               </button>
             </div>
+            <FormHint
+              missing={!voiding.reason.trim() ? "Tulis alasannya" : dirty ? "Simpan atau kirim perubahan lain dulu" : null}
+            />
           </div>
         </div>
       )}

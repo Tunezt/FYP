@@ -44,6 +44,15 @@ app.add_middleware(
 )
 
 
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+
+from app.core.validation import validation_handler  # noqa: E402
+
+# till-2: a schema refusal names the fields in Indonesian instead of handing the
+# screen a list of English pydantic errors.
+app.add_exception_handler(RequestValidationError, validation_handler)
+
+
 @app.middleware("http")
 async def latency_header(request: Request, call_next):
     """Wall-clock latency header on every response, plus a persistent

@@ -8,6 +8,7 @@ import { dayLabel } from "@/lib/dates";
 import type { Business, CustomerRow, Page, PointsMovementRow } from "@/lib/types";
 import { EmptyState, ErrorState, Glass, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
+import { FormHint } from "@/components/FormHint";
 import { IconChevronLeft, IconChevronRight, IconPlus, IconSearch, IconUsers } from "@/components/icons";
 import { initials } from "@/lib/format";
 
@@ -285,6 +286,7 @@ export default function CustomersPage() {
                     Sesuaikan
                   </button>
                 </div>
+                <FormHint className="!text-left" missing={!Number(adjust.delta) ? "Isi jumlah poin, mis. +10 atau -5" : null} />
                 {history.data && history.data.length > 0 && (
                   <ul className="surface-inset mt-3 max-h-40 space-y-1 overflow-auto rounded-xl px-3 py-2 text-xs">
                     {history.data.map((m) => (
@@ -304,8 +306,9 @@ export default function CustomersPage() {
               </div>
             )}
             {error && <p className="notice notice-bad">{error}</p>}
+            <FormHint missing={!draft.name.trim() ? "Isi nama pelanggan" : null} />
             <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row">
-              <button onClick={save} disabled={busy} className="btn-accent flex-1 py-3">
+              <button onClick={save} disabled={busy || !draft.name.trim()} className="btn-accent flex-1 py-3">
                 {busy ? "Menyimpan…" : "Simpan"}
               </button>
               {editing !== "new" && (

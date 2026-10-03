@@ -9,6 +9,7 @@ import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { PinLockouts } from "@/components/PinLockouts";
 import { PrinterTokens } from "@/components/PrinterTokens";
+import { FormHint, missingText } from "@/components/FormHint";
 import { IconCheck, IconDownload, IconPlus, IconUpload } from "@/components/icons";
 import { initials } from "@/lib/format";
 
@@ -136,6 +137,18 @@ export default function SettingsPage() {
   };
   const pricingForm: PricingForm = pricingDraft ?? toForm(pricing.data);
   const loyaltyForm: LoyaltyForm = loyaltyDraft ?? toLoyaltyForm(loyalty.data);
+  // till-2: each save button says what it is waiting for.
+  const percentOk = (v: string) => v.trim() !== "" && Number(v) >= 0 && Number(v) < 100;
+  const pricingMissing = !percentOk(pricingForm.tax_percent) || !percentOk(pricingForm.service_percent)
+    ? "Persentase pajak dan service harus 0–99"
+    : null;
+  const loyaltyMissing = !(Number(loyaltyForm.rupiah_per_point) > 0)
+    ? "Isi belanja per 1 poin (lebih dari 0)"
+    : loyaltyForm.point_value === "" || loyaltyForm.min_redeem_points === ""
+      ? "Isi nilai poin dan minimal tukar (boleh 0)"
+      : null;
+  const profileMissing = !draft.name.trim() ? "Isi nama usaha" : null;
+  const staffMissing = missingText("Isi", [!staffDraft.name.trim() && "nama", staffDraft.pin.length !== 4 && "PIN 4 angka"]);
 
   async function saveLoyalty() {
     setLoyaltyBusy(true);
@@ -325,9 +338,12 @@ export default function SettingsPage() {
               <span>Zona waktu: {b?.timezone}</span>
             </div>
             {profileDraft && (
-              <button onClick={saveProfile} disabled={savingProfile} className="btn-accent px-5 py-2.5 text-sm">
-                {savingProfile ? "Menyimpan…" : "Simpan perubahan"}
-              </button>
+              <div>
+                <button onClick={saveProfile} disabled={savingProfile || !!profileMissing} className="btn-accent px-5 py-2.5 text-sm">
+                  {savingProfile ? "Menyimpan…" : "Simpan perubahan"}
+                </button>
+                <FormHint className="!text-left" missing={profileMissing} />
+              </div>
             )}
           </Plate>
         )}
@@ -499,9 +515,12 @@ export default function SettingsPage() {
             </label>
             {pricingError && <p className="notice notice-bad">{pricingError}</p>}
             {pricingDraft && (
-              <button onClick={savePricing} disabled={pricingBusy} className="btn-accent px-5 py-2.5 text-sm">
-                {pricingBusy ? "Menyimpan…" : "Simpan perubahan"}
-              </button>
+              <div>
+                <button onClick={savePricing} disabled={pricingBusy || !!pricingMissing} className="btn-accent px-5 py-2.5 text-sm">
+                  {pricingBusy ? "Menyimpan…" : "Simpan perubahan"}
+                </button>
+                <FormHint className="!text-left" missing={pricingMissing} />
+              </div>
             )}
           </Plate>
         )}
@@ -568,9 +587,12 @@ export default function SettingsPage() {
             </p>
             {loyaltyError && <p className="notice notice-bad">{loyaltyError}</p>}
             {loyaltyDraft && (
-              <button onClick={saveLoyalty} disabled={loyaltyBusy} className="btn-accent px-5 py-2.5 text-sm">
-                {loyaltyBusy ? "Menyimpan…" : "Simpan perubahan"}
-              </button>
+              <div>
+                <button onClick={saveLoyalty} disabled={loyaltyBusy || !!loyaltyMissing} className="btn-accent px-5 py-2.5 text-sm">
+                  {loyaltyBusy ? "Menyimpan…" : "Simpan perubahan"}
+                </button>
+                <FormHint className="!text-left" missing={loyaltyMissing} />
+              </div>
             )}
           </Plate>
         )}
@@ -879,6 +901,7 @@ export default function SettingsPage() {
           >
             {pinBusy ? "Menyimpan…" : "Simpan PIN baru"}
           </button>
+          <FormHint missing={pinDraft.length !== 4 ? "PIN baru harus 4 angka" : null} />
         </div>
       </Sheet>
 
@@ -932,6 +955,7 @@ export default function SettingsPage() {
           >
             {staffBusy ? "Menyimpan…" : "Tambah staf"}
           </button>
+          <FormHint missing={staffMissing} />
         </div>
       </Sheet>
     </div>

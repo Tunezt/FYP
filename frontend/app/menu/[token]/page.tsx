@@ -1,5 +1,6 @@
 "use client";
 
+import { FormHint } from "@/components/FormHint";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -248,6 +249,7 @@ export default function MenuPage() {
     };
   }, [checkout, body, orderType, token, loadMenu, rebuild, cart, adding]);
 
+  const needsTable = !adding && orderType === "dine_in" && !table.trim();
   async function send() {
     if (cart.length === 0 || busy || !quote) return;
     if (!adding && orderType === "dine_in" && !table.trim()) {
@@ -591,9 +593,10 @@ export default function MenuPage() {
                   {submitError ?? quoteError}
                 </p>
               )}
-              <button onClick={send} disabled={busy || cart.length === 0 || !quote} className="btn-accent mt-3 w-full py-3.5 text-base">
+              <button onClick={send} disabled={busy || cart.length === 0 || !quote || needsTable} className="btn-accent mt-3 w-full py-3.5 text-base">
                 {busy ? "Mengirim…" : !quote && !quoteError ? "Menghitung total…" : adding ? "Tambahkan ke pesanan" : "Kirim pesanan"}
               </button>
+              <FormHint missing={cart.length === 0 ? "Pilih menu dulu" : needsTable ? "Isi nomor meja dulu ya" : null} />
             </div>
           </div>
         </div>

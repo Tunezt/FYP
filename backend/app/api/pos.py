@@ -1321,6 +1321,9 @@ async def pos_record_cash(payload: CashMovementIn, ctx: PosCtx):
     and stamped with the cashier's open shift."""
     from app.services.cash import CashInvalid, cash_movement_view, record_cash_movement
 
+    if payload.kind == "supplier_payment" and payload.supplier_id is None:
+        # till-2: nothing chosen is a form left incomplete, not an unknown supplier.
+        raise HTTPException(status_code=422, detail="Supplier belum dipilih — pilih supplier yang dibayar dulu")
     try:
         row = await record_cash_movement(
             ctx.session, ctx.business_id, kind=payload.kind, amount=payload.amount, reason=payload.reason,

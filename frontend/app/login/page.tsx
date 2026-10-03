@@ -1,6 +1,7 @@
 "use client";
 
 import { BrandMark } from "@/components/ui";
+import { FormHint, missingText } from "@/components/FormHint";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError, OWNER_TOKEN_KEY } from "@/lib/api";
@@ -105,6 +106,11 @@ export default function LoginPage() {
           >
             {busy ? "Memeriksa…" : "Masuk"}
           </button>
+          {!busy && (
+            <FormHint
+              missing={missingText("Isi", [phone.replace(/\D/g, "").length < 8 && "nomor HP", pin.length < 4 && "PIN (4 angka)"])}
+            />
+          )}
 
           {error && <p className="notice notice-bad mt-4">{error}</p>}
 

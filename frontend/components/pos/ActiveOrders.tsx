@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { IconAlert, IconChevronRight, IconClose, IconLock, IconNote } from "@/components/icons";
 import { formatRupiah } from "@/lib/format";
+import { FormHint } from "@/components/FormHint";
 import {
   isTableBill,
   needsSending,
@@ -423,6 +424,7 @@ function OrderDetail({
                 Batalkan pesanan
               </button>
             </div>
+            <FormHint missing={reasonNeeded && !reason.trim() ? "Tulis alasannya — bar/dapur membacanya di slip BATAL" : null} />
           </div>
         ) : (
           <>

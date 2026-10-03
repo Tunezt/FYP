@@ -1,5 +1,6 @@
 "use client";
 
+import { FormHint, missingText } from "@/components/FormHint";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -249,6 +250,9 @@ export default function RegisterPage() {
             >
               {busy ? "Menyiapkan…" : "Buat usaha"}
             </button>
+            <FormHint
+              missing={missingText("Isi", [!businessName.trim() && "nama usaha", !ownerName.trim() && "nama pemilik", ownerPin.length !== 4 && "PIN 4 angka"])}
+            />
           </div>
         </div>
       )}

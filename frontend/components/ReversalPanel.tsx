@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
+import { FormHint, missingText } from "@/components/FormHint";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { dayLabel, timeLabel } from "@/lib/dates";
 import type { OrderRow, OrdersPage, Receipt, ReversalResult } from "@/lib/types";
@@ -261,7 +262,7 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                                   </div>
                                   <button
                                     onClick={submit}
-                                    disabled={busy || pin.length < 4}
+                                    disabled={busy || pin.length < 4 || !note.trim()}
                                     className="btn-accent px-5 py-2.5 text-sm"
                                   >
                                     {busy
@@ -270,6 +271,10 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                                         ? `Batalkan #${receipt.number}`
                                         : `Kembalikan ${formatRupiah(receipt.total)}`}
                                   </button>
+                                  <FormHint
+                                    className="!text-left"
+                                    missing={missingText("Isi", [!note.trim() && "alasan", pin.length < 4 && "PIN pemilik atau manajer"])}
+                                  />
                                 </>
                               )}
                             </div>

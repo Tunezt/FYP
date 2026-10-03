@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 import { orderHeading, orderLabel, serviceDateLabel } from "@/lib/pos";
+import { FormHint, missingText } from "@/components/FormHint";
 
 export type Receipt = {
   order_id: string;
@@ -299,7 +300,7 @@ export function TransactionsView({
                     </label>
                     <button
                       onClick={submit}
-                      disabled={busy || pin.length < 4}
+                      disabled={busy || pin.length < 4 || !note.trim()}
                       className="btn-accent w-full py-3.5 text-lg"
                     >
                       {busy
@@ -308,6 +309,7 @@ export function TransactionsView({
                           ? `Batalkan ${orderLabel(open)}`
                           : `Kembalikan ${formatRupiah(open.total)}`}
                     </button>
+                    <FormHint missing={missingText("Isi", [!note.trim() && "alasan", pin.length < 4 && "PIN pemilik atau manajer"])} />
                   </div>
                 )}
               </>

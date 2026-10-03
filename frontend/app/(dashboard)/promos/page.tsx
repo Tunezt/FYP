@@ -8,6 +8,7 @@ import { formatRupiah } from "@/lib/format";
 import type { InventoryItem, PromoCondition, PromoRow, VoucherRow } from "@/lib/types";
 import { EmptyState, ErrorState, Glass, Plate, Sheet, Skeleton, TimeField } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
+import { FormHint } from "@/components/FormHint";
 import { IconCheck, IconPlus, IconSearch, IconSpark, IconTicket } from "@/components/icons";
 
 const DAYS = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
@@ -451,9 +452,24 @@ export default function PromosPage() {
               </label>
             </div>
             {verror && <p className="notice notice-bad">{verror}</p>}
-            <button onClick={saveVoucher} disabled={vbusy} className="btn-accent w-full py-3.5">
-              {vbusy ? "Membuat…" : vdraft.mode === "batch" ? `Buat ${vdraft.count || 1} kode` : "Buat kode"}
-            </button>
+            {(() => {
+              const v = Number(vdraft.value);
+              const voucherMissing = !(v > 0)
+                ? vdraft.kind === "percent_off" ? "Isi persen potongan (1–100)" : "Isi potongan rupiah"
+                : vdraft.kind === "percent_off" && v > 100
+                  ? "Persen potongan paling banyak 100"
+                  : vdraft.mode === "single" && vdraft.code.trim().length < 3
+                    ? "Isi kode, minimal 3 karakter"
+                    : null;
+              return (
+                <div>
+                  <button onClick={saveVoucher} disabled={vbusy || !!voucherMissing} className="btn-accent w-full py-3.5">
+                    {vbusy ? "Membuat…" : vdraft.mode === "batch" ? `Buat ${vdraft.count || 1} kode` : "Buat kode"}
+                  </button>
+                  <FormHint missing={voucherMissing} />
+                </div>
+              );
+            })()}
           </div>
         </Sheet>
       )}
@@ -597,9 +613,26 @@ export default function PromosPage() {
               <input className="field" inputMode="numeric" value={draft.min_spend} onChange={(e) => setDraft({ ...draft, min_spend: e.target.value.replace(/[^0-9]/g, "") })} />
             </label>
             {error && <p className="notice notice-bad">{error}</p>}
-            <button onClick={save} disabled={busy} className="btn-accent w-full py-3.5">
-              {busy ? "Menyimpan…" : "Simpan"}
-            </button>
+            {(() => {
+              const v = Number(draft.value);
+              const promoMissing = !draft.name.trim()
+                ? "Isi nama promo"
+                : draft.kind !== "bonus_item" && !(v > 0)
+                  ? draft.kind === "percent_off" ? "Isi persen diskon (1–100)" : "Isi potongan rupiah"
+                  : draft.kind === "percent_off" && v > 100
+                    ? "Persen diskon paling banyak 100"
+                    : draft.kind === "bonus_item" && !draft.item_id
+                      ? "Pilih barang yang dibeli"
+                      : null;
+              return (
+                <div>
+                  <button onClick={save} disabled={busy || !!promoMissing} className="btn-accent w-full py-3.5">
+                    {busy ? "Menyimpan…" : "Simpan"}
+                  </button>
+                  <FormHint missing={promoMissing} />
+                </div>
+              );
+            })()}
           </div>
         </Sheet>
       )}

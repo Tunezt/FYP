@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import { Select } from "@/components/Select";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
+import { FormHint, missingText } from "@/components/FormHint";
 import { formatRupiah } from "@/lib/format";
 import { ApiError } from "@/lib/api";
 import type { InventoryItem, OrderRow, StaffMember } from "@/lib/types";
@@ -285,6 +286,13 @@ export function BackdatedSaleForm({ onRecorded }: { onRecorded?: () => void }) {
             <button onClick={save} disabled={busy || !ready} className="btn-accent w-full py-3.5">
               {busy ? "Menyimpan…" : "Catat penjualan ini"}
             </button>
+            <FormHint
+              missing={missingText("Isi", [
+                (when === "" || !timeValid) && "tanggal dan jam",
+                staffId === "" && "kasir",
+                !lines.some((l) => l.itemId && Number(l.quantity) > 0) && "minimal satu barang",
+              ])}
+            />
           </div>
         )}
       </Sheet>

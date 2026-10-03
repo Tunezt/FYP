@@ -3,6 +3,7 @@
 import { IconClose, IconLock, IconNote } from "@/components/icons";
 import { formatRupiah } from "@/lib/format";
 import { SERVICE_LABEL } from "@/lib/pos";
+import { FormHint } from "@/components/FormHint";
 
 export type PanelLine = {
   uid: string;
@@ -109,6 +110,9 @@ export function OrderPanel({
   const empty = lines.length === 0 && sentLines.length === 0;
   const bill = orderType === "dine_in";
   const sendFirst = onSend !== null && lines.length > 0;
+  // till-2: the main button says what it is still waiting for.
+  const sendMissing = sendFirst && !tableLabel.trim() ? "Isi nomor meja dulu" : null;
+  const payMissing = empty ? "Ketuk menu untuk menambahkan item" : null;
 
   const title = context.kind === "new" ? "Pesanan baru" : context.title;
   const subtitle =
@@ -311,15 +315,22 @@ export function OrderPanel({
         )}
         {sendFirst ? (
           <>
-            <button onClick={onSend!} disabled={busy} className="btn-accent mt-3 w-full py-3.5 text-base">
+            <button onClick={onSend!} disabled={busy || !!sendMissing} className="btn-accent mt-3 w-full py-3.5 text-base">
               Kirim ke dapur/bar · {unsentCount} item
             </button>
-            <p className="ink-faint mt-1.5 text-center text-xs">Slip bar/dapur dan nota meja dicetak. Dibayar nanti, saat meja selesai.</p>
+            {sendMissing ? (
+              <FormHint missing={sendMissing} />
+            ) : (
+              <p className="ink-faint mt-1.5 text-center text-xs">Slip bar/dapur dan nota meja dicetak. Dibayar nanti, saat meja selesai.</p>
+            )}
           </>
         ) : (
-          <button onClick={onPay} disabled={empty || busy} className="btn-accent mt-3 w-full py-3.5 text-base">
-            Bayar {formatRupiah(total)}
-          </button>
+          <>
+            <button onClick={onPay} disabled={empty || busy} className="btn-accent mt-3 w-full py-3.5 text-base">
+              Bayar {formatRupiah(total)}
+            </button>
+            <FormHint missing={payMissing} />
+          </>
         )}
         <div className="mt-2 flex gap-2">
           {sendFirst && (

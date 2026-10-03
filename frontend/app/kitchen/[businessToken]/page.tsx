@@ -1,5 +1,6 @@
 "use client";
 
+import { FormHint } from "@/components/FormHint";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -131,6 +132,7 @@ export default function KitchenPage() {
           </button>
         </div>
       )}
+      {staff ? <FormHint missing={pin.length < 4 ? "Masukkan PIN 4 angka" : null} /> : <FormHint missing="Pilih nama dulu" />}
       {loginError && <p className="notice notice-bad mt-4">{loginError}</p>}
     </main>
   );
