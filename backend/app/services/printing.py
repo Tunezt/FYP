@@ -237,15 +237,7 @@ async def render_receipt(session: AsyncSession, order: Order) -> dict:
         })
     blocks.append({"t": "rule"})
     blocks.append({"t": "kv", "left": "Total item", "right": _qty(count)})
-    tax_label = tax_line_label(config.tax_label, config.tax_rate, config.tax_inclusive)
-    for label, value, sign in (
-        ("Subtotal", order.subtotal, ""), ("Diskon", order.discount_total, "-"), ("Promo", order.promo_total, "-"),
-        ("Voucher", order.voucher_total, "-"), ("Service", order.service_charge, ""),
-        ("Ongkos kirim", order.delivery_fee, ""), (tax_label, order.tax_total, ""),
-        ("Pembulatan", order.rounding, ""),
-    ):
-        if Decimal(value or 0) != 0 and (label != "Subtotal" or Decimal(order.subtotal) != Decimal(order.total)):
-            blocks.append({"t": "kv", "left": label, "right": f"{sign}{_rp(value)}"})
+    blocks += charge_blocks(order, tax_line_label(config.tax_label, config.tax_rate, config.tax_inclusive))
     blocks += [
         {"t": "rule", "style": "double"},
         {"t": "total", "left": "TOTAL", "right": _rp(order.total)},
@@ -271,6 +263,21 @@ async def render_receipt(session: AsyncSession, order: Order) -> dict:
         ]
     blocks.append({"t": "text", "text": f"Ref {order_number(order.id)}", "align": "center"})
     return {"v": 1, "kind": "receipt", "blocks": blocks}
+
+
+def charge_blocks(order: Order, tax_label: str) -> list[dict]:
+    """Subtotal, what came off, what was added, the tax by its name — each only
+    when it is not zero; Subtotal only when it differs from the total."""
+    out: list[dict] = []
+    for label, value, sign in (
+        ("Subtotal", order.subtotal, ""), ("Diskon", order.discount_total, "-"), ("Promo", order.promo_total, "-"),
+        ("Voucher", order.voucher_total, "-"), ("Service", order.service_charge, ""),
+        ("Ongkos kirim", order.delivery_fee, ""), (tax_label, order.tax_total, ""),
+        ("Pembulatan", order.rounding, ""),
+    ):
+        if Decimal(value or 0) != 0 and (label != "Subtotal" or Decimal(order.subtotal) != Decimal(order.total)):
+            out.append({"t": "kv", "left": label, "right": f"{sign}{_rp(value)}"})
+    return out
 
 
 def _num(amount) -> str:
@@ -772,30 +779,61 @@ def _cart_view(line: dict, quantity: Decimal | None = None) -> SimpleNamespace:
 async def render_nota(session: AsyncSession, order: Order, lines: list[dict], *, batch: int, when: datetime,
                       staff_name: str | None) -> dict:
     """What the staff put on the table after a send: the new items with their
-    prices and the bill so far. Not a receipt: nothing has been paid."""
+    prices and the bill so far. Not a receipt: nothing has been paid.
+
+    till-14 (owner's feedback): laid out like the receipt — the café's top,
+    the table and number between double rules, the details as label and
+    value, each item named with "qty x @price", what this send adds, the
+    bill's subtotal and tax, TOTAL SEMENTARA between double rules, then
+    BELUM DIBAYAR."""
+    from app.services.business_profile import tax_line_label
+    from app.services.pricing import pricing_config
+
     business = await session.get(Business, order.business_id)
+    config = await pricing_config(session, order.business_id)
     blocks: list[dict] = brand_blocks(business)   # till-12: the same top as the receipt
     blocks.append({"t": "rule", "style": "double"})
     if batch:
         blocks.append({"t": "label", "text": "TAMBAHAN"})
     blocks += heading_blocks(order, batch)
-    blocks.append({"t": "kv", "left": SERVICE_LABEL.get(order.order_type, order.order_type), "right": when.strftime("%d/%m/%Y %H.%M")})
-    blocks.append({"t": "kv", "left": f"Nota {ticket_ref(order, 'nota', batch)}", "right": staff_name or ""})
+    blocks.append({"t": "rule", "style": "double"})
+    blocks.append({"t": "kv", "left": "Tanggal", "right": when.strftime("%d/%m/%Y %H.%M")})
+    blocks.append({"t": "kv", "left": "Jenis", "right": SERVICE_LABEL.get(order.order_type, order.order_type)})
+    if staff_name:
+        blocks.append({"t": "kv", "left": "Kasir", "right": staff_name})
+    blocks.append({"t": "kv", "left": "Nota", "right": ticket_ref(order, "nota", batch)})
     blocks.append({"t": "rule"})
+    count = Decimal(0)
     for l in lines:
         names = list(l.get("modifier_names", []))
         prices = list(l.get("modifier_prices", []) or ["0"] * len(names))
-        blocks.append({
+        count += Decimal(l["quantity"])
+        block = {
             "t": "item_priced", "qty": _qty(l["quantity"]), "name": l["item_name"], "size": l.get("variant_name"),
             "modifiers": [n + (f" +{_rp(p)}" if Decimal(p) else "") for n, p in zip(names, prices)],
-            "notes": l.get("notes"), "amount": _rp(l["line_total"]),
-        })
+            "notes": l.get("notes"), "amount": _num(l["line_total"]),
+        }
+        if l.get("unit_price") is not None:
+            block["unit_price"] = _num(l["unit_price"])
+        else:   # an older cart line without its unit price keeps the one-line form, with Rp
+            block["amount"] = _rp(l["line_total"])
+        blocks.append(block)
     blocks.append({"t": "rule"})
-    blocks.append({"t": "kv", "left": "Pesanan ini", "right": _rp(sum((Decimal(l["line_total"]) for l in lines), Decimal(0)))})
-    blocks.append({"t": "total", "left": "TOTAL SEMENTARA", "right": _rp(order.total)})
+    blocks.append({"t": "kv", "left": "Total item", "right": _qty(count)})
+    this_send = _rp(sum((Decimal(l["line_total"]) for l in lines), Decimal(0)))
+    charges = charge_blocks(order, tax_line_label(config.tax_label, config.tax_rate, config.tax_inclusive))
+    # "Pesanan ini" says what this send adds; on a first send it would only
+    # repeat a Subtotal line of the same amount, so it is left out then.
+    if batch or not any(b["left"] == "Subtotal" and b["right"] == this_send for b in charges):
+        blocks.append({"t": "kv", "left": "Pesanan ini", "right": this_send})
+    blocks += charges
     blocks += [
+        {"t": "rule", "style": "double"},
+        {"t": "total", "left": "TOTAL SEMENTARA", "right": _rp(order.total)},
+        {"t": "rule", "style": "double"},
         {"t": "label", "text": "BELUM DIBAYAR"},
-        {"t": "text", "text": "Bayar di kasir sebelum pulang. Terima kasih!", "align": "center"},
+        {"t": "text", "text": "Bayar di kasir sebelum pulang.", "align": "center"},
+        {"t": "text", "text": "Terima kasih!", "align": "center", "style": "bold"},
     ]
     return {"v": 1, "kind": "nota", "blocks": blocks}
 

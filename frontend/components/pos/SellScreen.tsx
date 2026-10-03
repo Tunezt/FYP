@@ -1214,7 +1214,6 @@ export function SellScreen({
                         <h2 id={`cat-${g.name}`} className="mb-2 flex items-center gap-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-[color:var(--ink-soft)]">
                           {g.name}
                           <span className="h-px flex-1 bg-[color:var(--border)]" aria-hidden />
-                          <span className="ink-faint font-medium normal-case tracking-normal tabular-nums">{g.items.length}</span>
                         </h2>
                         <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2.5">{g.items.map(productTile)}</div>
                       </section>

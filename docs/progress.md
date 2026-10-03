@@ -2236,3 +2236,25 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Verified in the browser: table 7's Nasi Goreng sent to the kitchen; *Lihat slip* on the Dapur job shows DAPUR · MEJA 7 · Pesanan 001 · 1× Nasi Goreng Spesial; *Cetak manual* on it shows the walk-it-to-the-kitchen note; *Lihat slip* on the table's nota shows the logo header from till-12.
 **Deviation:** none. Not committed, per instruction; snapshot `refs/wip/till-13`.
 **Next:** daytime full pytest re-run (clock window), then the owner's review.
+
+
+### [till-9..13 re-run] Daytime full pytest on the finished tree (clock window cleared)
+**Date:** 2026-10-02, 07:05 WIB
+**Status:** done
+**Gates:** pytest 706 passed, 1 failed — only `test_vouchers.py::test_pos_quote_and_owner_endpoints` (pre-existing: its fixture voucher expired 2026-10-01; fails on HEAD too; not edited). The 4 failures seen in the till-11/12/13 gates (run at 02:00–04:00 WIB: test_alert_quality stable week, test_eval_harness ×2, test_new_tools recipe/promo) all pass in daytime, confirming they were the known clock window. Tree = `refs/wip/till-13`.
+**Notes:** the voucher test still needs the owner's decision (refresh the fixture's expiry, which is a test edit, so a stop-condition question rather than a judgement call).
+
+
+### [till-14] The table's nota reads like the receipt; the till's section headings lose their count
+**Date:** 2026-10-02
+**Status:** done in software; **uncommitted at the owner's request**
+**Changed:** backend/app/services/printing.py, frontend/components/pos/SellScreen.tsx, backend/tests/test_nota_layout.py (new, 1 test)
+**Gates:** pytest 707 passed, 1 failed (test_vouchers::test_pos_quote_and_owner_endpoints — pre-existing, expired fixture voucher, fails on HEAD too); next build OK; alembic round trip OK at 0048; seed OK (the run finished in daytime WIB after the machine slept)
+**Notes:**
+- Owner's feedback (2 Oct, evening): "design the nota meja nicely, just like the final receipt — the clean separation makes it much more organised"; and "what is the number at the end of each category line supposed to mean — it makes it messy".
+- **Nota meja:** the receipt's top (logo or name, address, contacts); MEJA / Pesanan between double rules; Tanggal, Jenis, Kasir, Nota as label and value; each item named, then "1 x @35.000 … 35.000"; Total item; "Pesanan ini" (what this send adds — left out on a first send when it would only repeat a Subtotal of the same amount); Subtotal and the tax ("PB1 10%"), the same lines as the receipt through one shared `charge_blocks`; TOTAL SEMENTARA between double rules; BELUM DIBAYAR; "Bayar di kasir sebelum pulang." and "Terima kasih!". The committed open-bill tests (this send and the bill so far both printed) still pass untouched.
+- **Section headings at the till:** the product count after each line (Kopi 3, Non-kopi 2…) is gone; the heading and its hairline remain.
+- **Owner's question "where is the Dapur slip?"** — answered, no change: the order in the screenshot was one Americano, a *bar* item; a Dapur slip is printed only for items prepared in the kitchen (Nasi Goreng, Roti Bakar in the demo). Checked: table 21 with Nasi Goreng + Teh Tarik produced Nota meja, Slip bar (front) and Slip dapur (kitchen printer).
+- Verified in the browser: the nota preview for table 21 (layout as above, PB1 10% Rp 5.000, TOTAL SEMENTARA Rp 55.000); section headings without numbers.
+**Deviation:** none. Not committed, per instruction; snapshot `refs/wip/till-14`.
+**Next:** till-15 the logo prints and previews smoothly.
