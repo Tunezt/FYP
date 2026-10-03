@@ -38,8 +38,10 @@ import base64
 import json
 import logging
 import os
+import re
 import signal
 import socket
+import struct
 import sys
 import threading
 import time
@@ -526,6 +528,179 @@ class PrinterConnection:
             # anything else (e.g. an automatic status byte) is skipped
 
 
+# ── Finding a printer by its own name (prt-10) ──────────────────────────────
+#
+# A café router hands out addresses and may hand out a different one after a
+# power cut. A printer's own network name does not change: it is on its
+# self-test page ("Hostname: IW-J300H-41CC"), and the IW-J300H answers when the
+# local network is asked for that name (LLMNR, RFC 4795: a DNS-shaped question
+# sent to 224.0.0.252:5355, answered straight back to the asker). Measured on
+# the café's two printers, 3 Oct 2026. They do not answer mDNS or NetBIOS.
+
+LLMNR_GROUP = ("224.0.0.252", 5355)
+_NAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+_txid = [int.from_bytes(os.urandom(2), "big")]
+
+
+class PrinterNotFound(OSError):
+    """No address to try for this printer right now. Nothing was sent."""
+
+
+def _name_question(name: str, txid: int) -> bytes:
+    label = name.encode("ascii")
+    return struct.pack("!HHHHHH", txid, 0, 1, 0, 0, 0) + bytes([len(label)]) + label + b"\x00" + struct.pack("!HH", 1, 1)
+
+
+def _skip_name(data: bytes, i: int) -> int:
+    while True:
+        n = data[i]
+        if n == 0:
+            return i + 1
+        if n & 0xC0 == 0xC0:        # a pointer back into the packet ends the name
+            return i + 2
+        i += 1 + n
+
+
+def _name_answer(data: bytes, txid: int) -> str | None:
+    """The IPv4 address in an answer to our question, or None for anything else
+    (somebody else's answer, a refusal, a truncated or malformed packet)."""
+    try:
+        rid, flags, questions, answers = struct.unpack("!HHHH", data[:8])
+        if rid != txid or not flags & 0x8000 or flags & 0x000F or not answers:
+            return None
+        i = 12
+        for _ in range(questions):
+            i = _skip_name(data, i) + 4
+        for _ in range(answers):
+            i = _skip_name(data, i)
+            rtype, rclass, _ttl, size = struct.unpack("!HHIH", data[i:i + 10])
+            i += 10
+            if rtype == 1 and rclass & 0x7FFF == 1 and size == 4 and len(data) >= i + 4:
+                return socket.inet_ntoa(data[i:i + 4])
+            i += size
+    except (IndexError, struct.error):
+        pass
+    return None
+
+
+def _lan_address(near: str | None) -> str | None:
+    """This machine's own address on the network the printers are on: the one
+    it would use to reach `near` (the printer's last address), else its default
+    route. No packet is sent."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect((near or "192.0.2.1", 9))
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def _ask(name: str, targets: list[tuple[str, int]], own: str | None, timeout: float) -> str | None:
+    """Put one question to each target and wait for the first real answer."""
+    _txid[0] = (_txid[0] + 1) & 0xFFFF
+    txid = _txid[0]
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    except OSError:
+        return None
+    try:
+        if own and not own.startswith("127."):
+            try:
+                s.bind((own, 0))
+            except OSError:
+                pass
+        try:
+            s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+        except OSError:
+            pass
+        question = _name_question(name, txid)
+        sent = 0
+        for target in targets:
+            try:
+                s.sendto(question, target)
+                sent += 1
+            except OSError:
+                pass
+        deadline = time.monotonic() + timeout
+        while sent:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                break
+            s.settimeout(left)
+            try:
+                data, _ = s.recvfrom(1500)
+            except socket.timeout:
+                break
+            except OSError:          # e.g. "port unreachable" from one of many targets: keep listening
+                continue
+            found = _name_answer(data, txid)
+            if found:
+                return found
+    finally:
+        s.close()
+    return None
+
+
+SWEEP_EVERY = 60.0
+_swept_at: dict[str, float] = {}
+
+
+def sweep_for_name(name: str, own: str, port: int = LLMNR_GROUP[1], timeout: float = 0.7) -> str | None:
+    """Ask every address next to ours (x.y.z.1–254) directly. Only the printer
+    with that name answers. This finds it on a network that does not pass a
+    question sent to everyone. Café routers hand out x.y.z.* addresses; a
+    larger network is not searched."""
+    prefix = own.rsplit(".", 1)[0]
+    return _ask(name, [(f"{prefix}.{i}", port) for i in range(1, 255) if f"{prefix}.{i}" != own], own, timeout)
+
+
+def find_by_name(name: str, near: str | None = None, *, attempts: int = 3, timeout: float = 0.7,
+                 dest: tuple[str, int] = LLMNR_GROUP, port: int | None = None) -> str | None:
+    """Which address `name` has right now, or None: the printer is off or not
+    on this network. Three ways, cheapest first:
+
+    1. ask everyone on the network, a few times (a question sent to everyone
+       on Wi-Fi is not retried by the radio the way ordinary traffic is);
+    2. ask the printer's last address directly — the IW-J300H confirms its own
+       name there and stays silent for any other name;
+    3. at most once a minute, ask every neighbouring address directly."""
+    port = port or dest[1]
+    own = _lan_address(near)
+    for _ in range(attempts):
+        found = _ask(name, [dest], own, timeout)
+        if found:
+            return found
+    if near:
+        found = _ask(name, [(near, port)], own, timeout)
+        if found:
+            return found
+    now = time.monotonic()
+    if own and not own.startswith("127.") and now - _swept_at.get(name, -SWEEP_EVERY) >= SWEEP_EVERY:
+        _swept_at[name] = now
+        return sweep_for_name(name, own, port, timeout)
+    return None
+
+
+class AddressBook:
+    """Which address each named printer was last found at. The workers share
+    it so that a printer's old address is never used once the *other* printer
+    has been found living there."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._found: dict[str, str] = {}
+
+    def note(self, slot: str, address: str) -> None:
+        with self._lock:
+            self._found[slot] = address
+
+    def holder(self, address: str, but: str) -> str | None:
+        with self._lock:
+            return next((slot for slot, found in self._found.items() if found == address and slot != but), None)
+
+
 # ── Talking to the API ──────────────────────────────────────────────────────
 
 
@@ -610,7 +785,7 @@ class Journal:
 @dataclass
 class PrinterConfig:
     slot: str                       # front · kitchen
-    host: str
+    host: str = ""                  # a fixed address; with `name`, only the first place to look
     port: int = 9100
     status: str = "gs_r"            # gs_r · dle_eot · none
     connect_timeout: float = 5.0
@@ -619,21 +794,27 @@ class PrinterConfig:
     confirm_timeout: float = 30.0
     profile: Profile = field(default_factory=Profile)
     model: str = ""
+    name: str = ""                  # the printer's own network name; found afresh, so its address may change
 
     @classmethod
     def from_config(cls, slot: str, cfg: dict) -> "PrinterConfig":
-        if not cfg.get("host"):
-            raise ConfigError(f"printers.{slot}.host is required (the printer's IP address on the café network)")
+        name = str(cfg.get("name") or "").strip()
+        if not cfg.get("host") and not name:
+            raise ConfigError(f"printers.{slot} needs name (the Hostname on the printer's self-test page, e.g. "
+                              "IW-J300H-41CC) or host (the printer's IP address on the café network)")
+        if name and not _NAME_RE.match(name):
+            raise ConfigError(f"printers.{slot}.name must be the printer's own network name exactly as its self-test "
+                              f"page prints it (letters, digits and hyphens, no dots), not {name!r}")
         if cfg.get("model") and cfg["model"] not in MODELS:
             raise ConfigError(f"printers.{slot}.model must be one of {', '.join(MODELS)}")
         model = MODELS.get(cfg.get("model", ""), {})
         status = cfg.get("status", model.get("status", "gs_r"))
         if status not in ("gs_r", "dle_eot", "none"):
             raise ConfigError(f"printers.{slot}.status must be gs_r, dle_eot or none")
-        pc = cls(slot=slot, host=str(cfg["host"]), port=int(cfg.get("port", model.get("port", 9100))), status=status,
+        pc = cls(slot=slot, host=str(cfg.get("host") or ""), port=int(cfg.get("port", model.get("port", 9100))), status=status,
                  connect_timeout=float(cfg.get("connect_timeout", 5)), status_timeout=float(cfg.get("status_timeout", 3)),
                  io_timeout=float(cfg.get("io_timeout", 10)), confirm_timeout=float(cfg.get("confirm_timeout", 30)),
-                 profile=Profile.from_config(cfg), model=str(cfg.get("model", "")))
+                 profile=Profile.from_config(cfg), model=str(cfg.get("model", "")), name=name)
         # The till calls a claimed job "uncertain" after 90 s without an answer;
         # a confirmation that can outlast that would show uncertain for a job
         # that is about to be confirmed.
@@ -646,11 +827,19 @@ class Worker:
     """Pulls one printer's jobs and prints them one at a time."""
 
     HEARTBEAT_EVERY = 30.0
+    NAME_RECHECK = 15.0             # how long an address the name gave is used before asking again
 
     def __init__(self, cfg: PrinterConfig, api, device: str, journal: Journal, *,
-                 clock: Callable[[], float] = time.monotonic):
+                 clock: Callable[[], float] = time.monotonic,
+                 resolve: Callable[[str, "str | None"], "str | None"] = find_by_name,
+                 book: AddressBook | None = None):
         self.cfg, self.api, self.device, self.journal, self.clock = cfg, api, device[:60], journal, clock
         self.log = logging.getLogger(f"print_bridge.{cfg.slot}")
+        # Where the printer is. With a name it is asked for afresh; the address
+        # in the config is then only the first place to look.
+        self.resolve, self.book = resolve, book or AddressBook()
+        self.address: str | None = cfg.host or None
+        self.address_asked_at: float | None = None
         self.need_reconcile = True
         self.printer_down = False
         self.next_probe_at = 0.0
@@ -762,9 +951,49 @@ class Worker:
 
     # Printer helpers ---------------------------------------------------------
 
+    def locate(self) -> str | None:
+        """The address to try now. A printer with a name is asked for by name,
+        so a new address from the router after a power cut is simply found. If
+        the name does not answer, its last address is still tried, as a fixed
+        address would be — unless the other printer has since been found
+        there, because then a slip would come out in the wrong room."""
+        if not self.cfg.name:
+            return self.cfg.host
+        now = self.clock()
+        if self.address and self.address_asked_at is not None and now - self.address_asked_at < self.NAME_RECHECK:
+            return self.address
+        found = self.resolve(self.cfg.name, self.address)
+        if found:
+            if found != self.address:
+                self.log.info("%s printer %s is at %s%s", self.cfg.slot, self.cfg.name, found,
+                              f" (was {self.address})" if self.address else "")
+            self.address, self.address_asked_at = found, now
+            self.book.note(self.cfg.slot, found)
+            return found
+        self.address_asked_at = None
+        if self.address and self.book.holder(self.address, but=self.cfg.slot):
+            self.log.warning("%s printer %s did not answer, and its last address %s now belongs to the other printer",
+                             self.cfg.slot, self.cfg.name, self.address)
+            return None
+        return self.address
+
+    def _lost(self) -> None:
+        """A connection failed: ask for the name again before the next try."""
+        self.address_asked_at = None
+
     def _connection(self) -> PrinterConnection:
-        return PrinterConnection(self.cfg.host, self.cfg.port, connect_timeout=self.cfg.connect_timeout,
+        host = self.locate()
+        if host is None:
+            raise PrinterNotFound(f"Printer {self.cfg.name} tidak ditemukan di jaringan (mati, atau belum tersambung ke Wi-Fi)")
+        return PrinterConnection(host, self.cfg.port, connect_timeout=self.cfg.connect_timeout,
                                  io_timeout=self.cfg.io_timeout)
+
+    def _unreachable(self, e: OSError) -> PrinterState:
+        self._lost()
+        if isinstance(e, PrinterNotFound):
+            return PrinterState("offline", str(e))
+        where = f"{self.cfg.name} di {self.address}" if self.cfg.name else f"di {self.address}"
+        return PrinterState("offline", f"Printer tidak terjangkau {where}:{self.cfg.port} ({e.__class__.__name__})")
 
     def probe(self) -> PrinterState:
         try:
@@ -775,7 +1004,7 @@ class Worker:
         except StatusUnavailable as e:
             return PrinterState("error", f"{e} — kalau model ini tidak mendukung status, pakai \"status\": \"none\"")
         except OSError as e:
-            return PrinterState("offline", f"Printer tidak terjangkau di {self.cfg.host}:{self.cfg.port} ({e.__class__.__name__})")
+            return self._unreachable(e)
 
     def _down(self, state: PrinterState) -> None:
         if not self.printer_down:
@@ -847,7 +1076,9 @@ class Worker:
         try:
             conn = self._connection().__enter__()
         except OSError as e:
-            return Delivery("not_sent", state=PrinterState("offline", f"Printer tidak terjangkau ({e.__class__.__name__})"))
+            self._lost()
+            return Delivery("not_sent", state=PrinterState("offline", str(e) if isinstance(e, PrinterNotFound)
+                                                           else f"Printer tidak terjangkau ({e.__class__.__name__})"))
         try:
             if self.cfg.status != "none":
                 try:
@@ -972,6 +1203,7 @@ class Worker:
             return
         self.suspended_for, self.suspended_at = overshoot, self.clock()
         self.need_reconcile = True
+        self._lost()                    # the printers may have been restarted meanwhile
         self.log.warning("this worker was frozen for %.0f s (asked to wait %.0f s) — Android battery management, "
                          "sleep, or the host suspending. Reconciling.", overshoot, expected)
 
@@ -1086,15 +1318,16 @@ class BridgeConfig:
                    poll_seconds=max(1.0, float(raw.get("poll_seconds", 2))), printers=printers)
 
 
-def make_worker(config: BridgeConfig, slot: str, api=None) -> Worker:
+def make_worker(config: BridgeConfig, slot: str, api=None, book: AddressBook | None = None) -> Worker:
     pcfg, token = config.printers[slot]
     return Worker(pcfg, api or Api(config.api_base, token), f"{config.device_name}-{slot}",
-                  Journal(config.state_dir / f"journal-{slot}.json"))
+                  Journal(config.state_dir / f"journal-{slot}.json"), book=book)
 
 
 def run(config: BridgeConfig) -> int:
     stop = threading.Event()
-    workers = [make_worker(config, slot) for slot in config.printers]
+    book = AddressBook()
+    workers = [make_worker(config, slot, book=book) for slot in config.printers]
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
             signal.signal(sig, lambda *_: stop.set())
@@ -1161,19 +1394,30 @@ def protocol_warning(pcfg: "PrinterConfig", base_dir: Path) -> str | None:
                 "check that its port, status and cut match this config.")
     return (f"{pcfg.model}: port {pcfg.port}, status mode {pcfg.status} and the cut command are from the "
             "seller's specification and have NOT been verified on the printer. Run:  "
-            f"python probe_printer.py {pcfg.host} --label {pcfg.slot}")
+            f"python probe_printer.py {pcfg.host or '<the address --check found>'} --label {pcfg.slot}")
 
 
 def check(config: BridgeConfig, print_test: bool) -> int:
     """Setup check: every configured printer and the API, without taking a job."""
     ok = True
+    book = AddressBook()
     for slot, (pcfg, token) in config.printers.items():
         warning = protocol_warning(pcfg, config.state_dir.parent)
         if warning:
             print(f"[{slot}] UNVERIFIED  {warning}")
-        worker = make_worker(config, slot)
+        worker = make_worker(config, slot, book=book)
+        if pcfg.name:
+            found = worker.locate()
+            if worker.address_asked_at is not None:
+                print(f"[{slot}] name {pcfg.name}: found at {found}")
+            elif found:
+                print(f"[{slot}] name {pcfg.name}: DID NOT ANSWER — trying the address from the config, {found}. "
+                      "If this stays, the printer is off, on another Wi-Fi, or the name is not the one on its self-test page.")
+            else:
+                print(f"[{slot}] name {pcfg.name}: DID NOT ANSWER and the config has no host to fall back on. Is the "
+                      "printer on, on this Wi-Fi, and is the name the Hostname on its self-test page?")
         state = worker.probe()
-        print(f"[{slot}] printer {pcfg.host}:{pcfg.port} status-mode={pcfg.status}: {state.state} {state.detail}")
+        print(f"[{slot}] printer {worker.address or pcfg.name}:{pcfg.port} status-mode={pcfg.status}: {state.state} {state.detail}")
         ok &= not state.blocking
         try:
             status, data = worker.api.post("/print/agent/heartbeat", {"device": worker.device, "state": state.state,
@@ -1204,6 +1448,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Poernama print bridge: API print jobs to network ESC/POS printers")
     parser.add_argument("--config", default="bridge-config.json", type=Path)
     parser.add_argument("--probe", metavar="IP", help="ask a printer what it speaks (see probe_printer.py) and exit")
+    parser.add_argument("--find", metavar="NAME", help="ask the network which address a printer's name has, and exit")
     parser.add_argument("--check", action="store_true", help="check printers and API, take no jobs")
     parser.add_argument("--test-print", action="store_true", help="with --check: print a local test page on each printer")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -1214,6 +1459,10 @@ def main(argv: list[str] | None = None) -> int:
         import probe_printer
 
         return probe_printer.main([args.probe])
+    if args.find:
+        found = find_by_name(args.find)
+        print(f"{args.find}: {found}" if found else f"{args.find}: no answer (printer off, on another Wi-Fi, or a different name)")
+        return 0 if found else 1
     try:
         config = BridgeConfig.load(args.config)
         if args.check or args.test_print:

@@ -1,8 +1,10 @@
 # Printing and open bills: two printers, one queue, and what is still a hardware decision
 
-**Status: PILOT** (21 September 2026). The software is finished and tested against simulated
-printers; nothing has printed on a physical IW-J300H, and the bridge has not yet run on the
-cashier tablet. `docs/printing-test-log.md` is the record of what has been tested where.
+**Status: PILOT** (3 October 2026). Both IW-J300H printers have now printed real orders from this
+system — on the vendor's home Wi-Fi, with the bridge on a laptop and a local API. The bridge has
+**not** yet run on the cashier tablet, and nothing has run at the café. `docs/printing-test-log.md`
+is the record of what has been tested where, and it is the place to look before believing any
+sentence below that says "not verified".
 
 Written 18 September 2026 with the `prt-*` and `bill-*` tasks; updated 19 September 2026 with
 prt-8 (the print bridge, held jobs, results bound to the claim) and 21 September 2026 with prt-9
@@ -240,9 +242,11 @@ owner turns the logo on/off and writes the closing line in Pengaturan → Data d
 - Strongly preferred: answers `DLE EOT 1/2/4` (paper/cover/offline status) and `GS r 1` over that
   network port. Without them the till can say only *Terkirim ke printer*, not *Tercetak*, and
   cannot say why a printer stopped
-- **Kitchen printer:** Ethernet or Wi-Fi (not Bluetooth), heat- and grease-tolerant, a fixed IP
-- **Front printer:** Wi-Fi or Ethernet with a fixed IP (USB/Bluetooth would need a different
-  bridge transport, not built)
+- **Kitchen printer:** Ethernet or Wi-Fi (not Bluetooth), heat- and grease-tolerant
+- **Front printer:** Wi-Fi or Ethernet (USB/Bluetooth would need a different bridge transport,
+  not built)
+- Either a name the printer answers to on the local network (the IW-J300H does: prt-10, below)
+  or a fixed IP. Without one of the two, a new address after a power cut stops printing
 - Optional: buzzer or light for the kitchen printer, so a new slip is noticed
 
 ## Connection options
@@ -314,6 +318,30 @@ publishes no command manual for this model, so **none of the protocol details ar
 | Which cut command its cutter takes | `GS V 66` (partial) | the probe prints one labelled slip per candidate |
 | Which command sounds the alarm | **none; the buzzer stays off** | the probe prints one labelled slip per candidate, and the bridge refuses a buzzer command that is not marked verified |
 | Wi-Fi station mode and a fixed IP | assumed | the printer's self-test page and its own configuration tool |
+
+**What the two units answered on 3 October 2026** (firmware V1.050.r1; the table above is kept as
+the list of what had to be asked):
+
+| Question | Answer from the printers |
+|---|---|
+| Port | 9100 open on both (and 80: a settings page) |
+| `DLE EOT` and `GS r` | both answered on both units, so `status: gs_r` and *Tercetak* are honest |
+| Cut | all six commands tried cut the paper, and every one left the slip hanging by a centre tab, including the two "full cut" commands. The cutter is partial-only; `cut: partial` (`GS V 66`) stays |
+| Buzzer | `ESC B` sounds (the owner heard every command tried on the kitchen unit: `ESC B`, `ESC C`, `BEL`, both drawer kicks). `ESC ( A` printed the characters `(A0` instead: never use it. Kitchen runs `esc_b`, two beeps. Whether the alarm **light** comes on is not yet confirmed |
+| Print width | 576 dots (self-test page), so 48 columns in Font A |
+| Joining Wi-Fi | station mode, DHCP, **2.4 GHz only**; set from the printer's own hotspot page at `192.168.223.1`. The page also offers a fixed IP; it is not used (below) |
+| A name on the network | each answers LLMNR for its Hostname (`IW-J300H-41CC`, `IW-J300H-2894`), 20 of 20 times, whether everyone is asked or the printer's own address is. Capitals matter. Asked for the other printer's name it stays silent. Not mDNS, not NetBIOS, and the router's own DNS did not know them |
+
+**No fixed IP: the bridge finds each printer by name (prt-10).** A router may hand out a different
+address after a power cut, and a config that names an address then points at nothing — or at the
+other printer. The config names the printer instead; the bridge asks the network for that name
+before it connects (and again after any failure, after 15 seconds, and after the tablet was
+frozen): first everyone, then the printer's last address directly, then every neighbouring
+address. If the name answers nowhere, the printer's last address is still tried, but never once
+the other printer has been found at it: that job waits, unmarked. Details and limits in
+`bridge/README.md`. Run on the real printers on 3 October 2026 with **no address in the config**:
+both found and `ready`, each of the three ways finding each printer. What has not happened on
+real hardware is the thing it is for — a printer actually coming back with a different address.
 
 `--check` prints an UNVERIFIED line for these printers until the probe has run. If the printers
 turn out not to answer status requests, nothing breaks: jobs are then shown as *Terkirim ke

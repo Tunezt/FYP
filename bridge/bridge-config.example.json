@@ -6,7 +6,8 @@
   "printers": {
     "front": {
       "model": "iware-iw-j300h",
-      "host": "192.168.1.50",
+      "_name": "The Hostname on this printer's self-test page. The bridge asks the Wi-Fi for it, so the printer's address may change. Add \"host\": \"192.168.1.50\" only as a fallback, or instead of name for a printer that does not answer to one.",
+      "name": "IW-J300H-41CC",
       "port": 9100,
       "token_file": "front.token",
       "paper_mm": 80,
@@ -16,7 +17,7 @@
     },
     "kitchen": {
       "model": "iware-iw-j300h",
-      "host": "192.168.1.51",
+      "name": "IW-J300H-2894",
       "port": 9100,
       "token_file": "kitchen.token",
       "paper_mm": 80,

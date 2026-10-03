@@ -20,7 +20,9 @@ to fetch the jobs and hand them to the printers, and it has to stay powered on. 
 program, and for Poernama it runs on the cashier tablet itself.
 
 **Status: PILOT.** This is tested against simulated printers (`sim_printer.py`) and the real API
-code. **No physical printer has printed from it, and it has never run on the cashier tablet.** It
+code, and on 3 October 2026 it printed real orders on both of the café's IW-J300H printers from a
+laptop (what was and was not checked: `docs/printing-test-log.md`). **It has never run on the
+cashier tablet, and never at the café.** It
 stays a pilot — staff keep an eye on *Antrean cetak* — until the acceptance checklist at the end
 of this file has been worked through on both real IW-J300H printers and on the tablet, over a
 full service. `docs/printing-test-log.md` records what has been tested where; keep it up to date,
@@ -116,9 +118,13 @@ It needs the tablet's exact Android version to set the foreground-service type c
 
 1. **Printers on the network.** Connect both printers to the restaurant's **main** Wi-Fi (not a
    guest network, which usually blocks devices from reaching each other); the IW-J300H also has
-   Ethernet if a cable can reach. Give each printer a fixed IP: set it on the printer, or add a
-   DHCP reservation on the router, so the address in the config keeps working after a power cut.
-   Most printers print their IP on a self-test page (hold FEED while powering on).
+   Ethernet if a cable can reach. On the IW-J300H: hold FEED while switching on for the self-test
+   page, join the printer's own hotspot (`AP SSID` / `AP PSK` on that page) from a phone, open
+   `192.168.223.1`, and enter the Wi-Fi name and password under *WiFi*. **2.4 GHz only**: a
+   5 GHz-only network is invisible to it. The self-test page then shows the address it was given.
+   **No fixed IP is needed** (prt-10): put the printer's `Hostname` from that page in the config
+   as `name`, and the bridge asks the Wi-Fi for it each time, so a different address after a
+   power cut is simply found. See *Finding a printer by name* below.
 2. **Ask the printer what it speaks** — do not assume. From the tablet (Termux) or any machine on
    the same Wi-Fi:
    ```
@@ -139,7 +145,8 @@ It needs the tablet's exact Android version to set the foreground-service type c
      reports as `<device_name>-front` / `-kitchen`. The name is how the bridge recognises its own
      unfinished jobs after a restart: don't give two installations the same name, and don't reuse
      a name on a new host without copying its `state/` folder across.
-   - per printer: `model` (`iware-iw-j300h` fills in the defaults below), `host`, `port`,
+   - per printer: `model` (`iware-iw-j300h` fills in the defaults below), `name` (the printer's
+     Hostname, e.g. `IW-J300H-41CC`) and/or `host` (a fixed IP), `port`,
      `paper_mm` (80 → 48 columns, 58 → 32; or set `columns`), `cut` (`partial`, `full`, `none`),
      `feed_lines`, `status` (below), and optionally `beep`. Anything you set explicitly wins over
      the model's defaults.
@@ -152,6 +159,41 @@ It needs the tablet's exact Android version to set the foreground-service type c
    Add `--test-print` to print a layout test page on each printer (not a real order).
 6. **Run:** `python print_bridge.py --config bridge-config.json`. Stop with Ctrl+C. A job being
    printed finishes first.
+
+### Finding a printer by name (prt-10)
+
+A router gives each printer an address when it joins, and may give a different one after a power
+cut. A fixed address in the config then points at nothing — or, if the two printers come back
+with each other's addresses, at the wrong printer, and kitchen slips come out at the front.
+
+Each IW-J300H has a name that does not change, printed on its self-test page as `Hostname`
+(`IW-J300H-` plus the last four characters of its Wi-Fi address), and it answers when the local
+network is asked for that name (LLMNR). Asked directly at its own address it confirms its name,
+and it stays silent when asked for any other. With `"name"` in the config the bridge:
+
+- asks for the name before it connects, and again whenever an answer is more than 15 seconds old,
+  a connection fails, or the tablet was frozen;
+- asks three ways, cheapest first: everyone on the network (three times); then the printer's last
+  address directly; then, at most once a minute, every neighbouring address (`x.y.z.1–254`)
+  directly, which finds it on a network that does not pass a question sent to everyone;
+- uses whatever address the name answers with, and logs when it changed;
+- if the name answers nowhere, still tries the printer's last address (or `host` from the config),
+  exactly as a fixed address would be used, so a printer whose name service has stopped is not
+  stopped with it;
+- but never uses that last address once the **other** printer has been found at it. The job then
+  waits, unmarked, until its own printer answers.
+
+The name must be written **exactly as the self-test page prints it, capitals included**: the
+printers do not answer to `iw-j300h-41cc`.
+
+`python print_bridge.py --find IW-J300H-41CC` asks once and prints the address. `--check` says
+for each printer whether its name answered.
+
+What this does not cover: a printer that has not joined the Wi-Fi at all (wrong password, the
+Wi-Fi renamed, 5 GHz only, WPA3-only) cannot answer to any name. And it has been run on the two
+café printers on one home router only (3 Oct 2026: found by each of the three ways, 20 of 20
+answers); a router that blocks devices from seeing each other blocks this as it blocks printing
+itself.
 
 ### Keeping it running
 
@@ -270,7 +312,9 @@ down the model and firmware.
     keep the till on a hotspot), reconnect: the slip prints once, not twice.
 11. Restart each printer while a job is waiting: it prints once when the printer is back.
 12. Restart the router. Both printers and the tablet rejoin, and queued slips print once. This is
-    the test that catches a printer whose IP has moved, so check the DHCP reservations after it.
+    the test that catches a printer whose IP has moved: with `name` in the config the bridge log
+    says "is at … (was …)" and carries on; with only `host`, printing stops until the config is
+    edited.
 13. Restart the tablet mid-service: nothing prints twice, nothing is lost.
 14. Kitchen distance: 50 slips over a real service without a missed or duplicated slip. If the
     Wi-Fi signal at the kitchen printer is weak, use Ethernet or a closer access point.

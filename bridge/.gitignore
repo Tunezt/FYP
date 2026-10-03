@@ -3,4 +3,4 @@
 bridge-config.json
 state/
 *.log
-probe-report.json
+probe-report*.json
