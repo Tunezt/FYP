@@ -28,7 +28,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, select
 
-from app.core.config import ProductionRefusal, get_settings, refuse_in_production
+from app.core.config import DEMO_OWNER_PHONE, ProductionRefusal, get_settings, refuse_in_production
 from app.core.db import plain_session, tenant_session
 from app.core.security import hash_pin
 from app.models import Business, Item, Order, OrderLine, Payment, Shift, Staff
@@ -97,7 +97,7 @@ MENU_CATEGORIES = {
     "Nasi Goreng Spesial": "Makanan", "Croissant": "Camilan", "Roti Bakar Coklat": "Dessert",
 }
 
-OWNER_PHONE = "628120001111"
+OWNER_PHONE = DEMO_OWNER_PHONE
 
 ITEMS = [
     # (name, unit, stock, cost, sell, reorder_threshold, popularity weight)

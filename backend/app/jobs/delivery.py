@@ -16,7 +16,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.core.config import DEMO_OWNER_PHONE, get_settings
 from app.models import Alert, Business
 from app.whatsapp.client import send_template
 
@@ -35,6 +35,10 @@ async def deliver_unsent(session: AsyncSession, business: Business) -> int:
     """One template send carrying every alert not yet sent for this business.
     Marks them sent. Returns how many went out. The session must already be
     scoped to the business."""
+    if business.owner_phone == DEMO_OWNER_PHONE:
+        # demo-1: the demo café's number is made up, so it may belong to someone.
+        # Its alerts stay on its dashboard, unsent, and nobody is messaged.
+        return 0
     unsent = (
         (
             await session.execute(

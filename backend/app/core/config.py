@@ -92,6 +92,11 @@ class ProductionRefusal(RuntimeError):
     """
 
 
+# The demo café's owner number (`app.seed`). It is invented, which means it may
+# well be a stranger's real phone: nothing is ever sent to it (demo-1).
+DEMO_OWNER_PHONE = "628120001111"
+
+
 def refuse_in_production(entrypoint: str) -> None:
     if get_settings().environment == "production":
         raise ProductionRefusal(
