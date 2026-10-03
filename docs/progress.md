@@ -2444,3 +2444,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Also today, outside the repo: the owner ran a one-off script that filled the real live account (phone ending 500, empty since 3 Oct) with the demo cafe, keeping the owner's own PIN, name, timezone and WhatsApp number. That account now has a month of invented sales and must be wiped before the cafe really opens.
 **Deviation:** not a roadmap task; owner's instruction in chat.
 **Next:** push; on the tablet open /kasir and enter the owner's phone and PIN.
+
+
+### [kasir-3] A tablet holding a dead pairing can set itself up again
+**Date:** 2026-10-04
+**Status:** done; pushed at the owner's instruction (see Gates)
+**Changed:** frontend/components/pos/Till.tsx, frontend/app/kasir/page.tsx
+**Gates:** tsc OK; frontend only. Full pytest last run 733 passed, 4 failed (the clock-dependent set, 02.30 WIB); no backend change since.
+**Notes:**
+- Owner: "/kasir works on my laptop, on the A11+ it says Kasir belum terhubung".
+- Cause: the tablet had been paired earlier, and /kasir (kasir-1) trusts the pairing it finds stored. That pairing belongs to a cafe that no longer answers (the real account was rebuilt today, so its old id is gone), and the screen offered no way out.
+- "Kasir belum terhubung" now has two buttons: "Coba lagi", and "Siapkan ulang kasir di perangkat ini", which forgets the stored pairing and shows the phone-and-PIN setup. The device's own key is kept.
+- Checked in the browser with a deliberately broken pairing: error screen, then setup form, pairing cleared.
+**Deviation:** not a roadmap task.
+**Next:** on the tablet: reload /kasir, tap "Siapkan ulang", enter the owner's phone and PIN.

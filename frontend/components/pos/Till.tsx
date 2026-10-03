@@ -21,7 +21,7 @@ type Screen =
 
 /** The till: who is on shift, their PIN, then the selling screen. Shown at
  *  /kasir for the café's paired tablet (kasir-1). */
-export function Till({ pairingToken }: { pairingToken: string }) {
+export function Till({ pairingToken, onReset }: { pairingToken: string; onReset?: () => void }) {
   const [screen, setScreen] = useState<Screen>({ kind: "loading" });
   const [posToken, setPosToken] = useState<string | null>(null);
 
@@ -87,6 +87,18 @@ export function Till({ pairingToken }: { pairingToken: string }) {
           </span>
           <h1 className="mt-4 text-xl font-semibold tracking-[-0.015em]">Kasir belum terhubung</h1>
           <p className="ink-soft mt-2">{screen.message}</p>
+          {/* kasir-3: a tablet set up for a café that has since been re-paired or
+              rebuilt must not be stuck here: it can try again, or be set up anew. */}
+          <div className="mt-6 flex flex-col gap-2">
+            <button onClick={() => window.location.reload()} className="btn-quiet w-full py-3">
+              Coba lagi
+            </button>
+            {onReset && (
+              <button onClick={onReset} className="btn-accent w-full py-3">
+                Siapkan ulang kasir di perangkat ini
+              </button>
+            )}
+          </div>
         </div>
       </Center>
     );

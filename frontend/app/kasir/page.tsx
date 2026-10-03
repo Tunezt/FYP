@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, ApiError, POS_PAIRING_KEY } from "@/lib/api";
+import { api, ApiError, POS_PAIRING_KEY, POS_TOKEN_KEY } from "@/lib/api";
 import { FormHint, missingText } from "@/components/FormHint";
 import { Till } from "@/components/pos/Till";
 import { Wordmark } from "@/components/Wordmark";
@@ -23,7 +23,21 @@ export default function KasirPage() {
   }, []);
 
   if (pairing === undefined) return null;
-  if (pairing) return <Till pairingToken={pairing} />;
+  if (pairing)
+    return (
+      <Till
+        pairingToken={pairing}
+        onReset={() => {
+          // Forget the old pairing and the cashier session that went with it;
+          // the device's own key is kept.
+          try {
+            localStorage.removeItem(POS_PAIRING_KEY);
+            localStorage.removeItem(POS_TOKEN_KEY);
+          } catch {}
+          setPairing(null);
+        }}
+      />
+    );
   return <SetUpTill onPaired={setPairing} />;
 }
 
