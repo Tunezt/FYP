@@ -6,13 +6,16 @@ Three access levels, escalating:
 3. pos JWT → item list + sale recording. Nothing else — owner analytics,
    staff management, and WhatsApp flows all require scope="owner".
 """
+import hashlib
+import hmac
 import time
+from datetime import datetime, timezone
 from decimal import Decimal
 import uuid
 
 import jwt as pyjwt
-from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import select
+from fastapi import APIRouter, Header, HTTPException, Query
+from sqlalchemy import select, update
 
 from app.core.db import tenant_session
 from app.ai.periods import period_range
@@ -120,12 +123,60 @@ async def _live_business(session, business_id: uuid.UUID, generation: int) -> Bu
     return business
 
 
+# kasir-1 — the till on one tablet only. Off unless the owner has switched it
+# on (`businesses.till_device_lock`). Each browser that opens the till makes a
+# random key for itself once and sends it in this header; the café keeps only
+# its SHA-256. This is a web page, not hardware: it stops a cashier opening the
+# till on their own phone with the link and a PIN, which is the point. It does
+# not stop someone who can copy the tablet's browser storage.
+DEVICE_HEADER = "X-Till-Device"
+WRONG_DEVICE = "Kasir ini hanya bisa dibuka di tablet toko — hubungi pemilik kalau tabletnya diganti"
+NO_DEVICE_KEY = "Perangkat ini belum bisa dikenali — buka kasir lewat alamat /kasir di tablet toko ya"
+
+
+def _device_hash(key: str | None) -> str | None:
+    key = (key or "").strip()
+    if not (16 <= len(key) <= 128):
+        return None
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def _refuse_other_device(business: Business, key: str | None) -> None:
+    """Nothing to check while the switch is off or no tablet is bound yet."""
+    if not business.till_device_lock or business.till_device_hash is None:
+        return
+    given = _device_hash(key)
+    if given is None or not hmac.compare_digest(given, business.till_device_hash):
+        raise HTTPException(status_code=403, detail=WRONG_DEVICE)
+
+
+async def _bind_first_device(session, business: Business, key: str | None) -> None:
+    """With the switch on and nothing bound, the device that has just proved a
+    PIN becomes the till. One conditional UPDATE, so two devices racing cannot
+    both win: the loser is told it is the wrong device."""
+    if not business.till_device_lock or business.till_device_hash is not None:
+        return
+    given = _device_hash(key)
+    if given is None:
+        raise HTTPException(status_code=403, detail=NO_DEVICE_KEY)
+    won = (await session.execute(
+        update(Business)
+        .where(Business.id == business.id, Business.till_device_hash.is_(None))
+        .values(till_device_hash=given, till_device_bound_at=datetime.now(timezone.utc))
+        .returning(Business.id)
+    )).scalar_one_or_none()
+    if won is None:
+        await session.refresh(business)
+        _refuse_other_device(business, key)
+
+
 @router.get("/business/{pairing_token}", response_model=PosBusinessOut)
-async def pos_business(pairing_token: str):
+async def pos_business(pairing_token: str, x_till_device: str | None = Header(default=None)):
     """Kiosk boot: business name + active staff names for the 'who are you' screen."""
     business_id, generation = _pairing_claims(pairing_token)
     async with tenant_session(business_id) as session:
         business = await _live_business(session, business_id, generation)
+        _refuse_other_device(business, x_till_device)
         staff = (
             (
                 await session.execute(
@@ -153,13 +204,16 @@ def _cooldown_message(cooldown) -> str:
 
 
 @router.post("/login", response_model=PosLoginOut)
-async def pos_login(payload: PosLoginIn):
+async def pos_login(payload: PosLoginIn, x_till_device: str | None = Header(default=None)):
     """PIN entry is throttled per staff member and per device (M15-T12): an
     escalating cooldown, never a lock, because a till that stops trading mid-rush
     gets switched off and then nothing is protected."""
     business_id, generation = _pairing_claims(payload.pairing_token)
     async with tenant_session(business_id) as session:
         business = await _live_business(session, business_id, generation)
+        # Before the PIN is even looked at: the wrong device learns nothing
+        # about which PINs are right, and earns nobody a cooldown.
+        _refuse_other_device(business, x_till_device)
         who = pin_guard.staff_subject(payload.staff_id)
         device = pin_guard.device_subject(business.pairing_generation)
         for scope, subject in (("pos_login", who), ("pos_device", device)):
@@ -183,6 +237,7 @@ async def pos_login(payload: PosLoginIn):
         # Right first time or right in the end: either way it is forgiven.
         await pin_guard.clear(session, business_id, "pos_login", who)
         await pin_guard.clear(session, business_id, "pos_device", device)
+        await _bind_first_device(session, business, x_till_device)
         token = create_token(
             business_id=str(business_id), scope="pos", staff_id=str(staff.id),
             generation=business.pairing_generation,

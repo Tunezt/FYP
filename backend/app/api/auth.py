@@ -388,6 +388,10 @@ async def reset_pos_pairing(ctx: OwnerCtx):
     and anything short of "everything before now is void" is not a cut-off."""
     business = await _current_business(ctx)
     business.pairing_generation = int(business.pairing_generation) + 1
+    # kasir-1: the tablet that was the till is the one being cut off, so the
+    # next device to log in through the new link becomes the till.
+    business.till_device_hash = None
+    business.till_device_bound_at = None
     await ctx.session.flush()
     token = create_pairing_token(str(ctx.business_id), business.pairing_generation)
     return PairingOut(pairing_token=token, pos_path=f"/pos/{token}")

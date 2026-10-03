@@ -90,6 +90,8 @@ export type Business = {
   /** M15-T4: the hour the business day starts (0..23). 0 = calendar day. */
   day_start_hour: number;
   require_shift?: boolean; // till-4: no sale at the till without an open shift
+  till_device_lock?: boolean; // kasir-1: the till opens on one tablet only
+  till_device_bound_at?: string | null; // when a tablet was bound; null = none yet
   // till-5a: printed on receipts; `placeholders` lists the fields still at their placeholder.
   address?: string | null;
   contact_phone?: string | null;

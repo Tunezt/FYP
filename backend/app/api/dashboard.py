@@ -1370,6 +1370,11 @@ async def update_business(payload: BusinessUpdateIn, ctx: OwnerCtx):
         business.receipt_logo = wordmark_logo() if changes.pop("receipt_logo") else None
     if "receipt_footer" in changes:
         business.receipt_footer = " ".join(changes.pop("receipt_footer").split()) or None
+    if "till_device_lock" in changes and bool(changes["till_device_lock"]) != bool(business.till_device_lock):
+        # kasir-1: switching it on or off starts clean. Off forgets the tablet;
+        # on waits for the next correct PIN to say which tablet is the till.
+        business.till_device_hash = None
+        business.till_device_bound_at = None
     for field, value in changes.items():
         setattr(business, field, value)
     await ctx.session.flush()

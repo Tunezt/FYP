@@ -1,0 +1,14 @@
+{
+  "name": "Kasir Poernama",
+  "short_name": "Kasir",
+  "start_url": "/kasir",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f0f0ed",
+  "theme_color": "#f0f0ed",
+  "lang": "id",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

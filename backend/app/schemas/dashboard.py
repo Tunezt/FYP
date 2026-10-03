@@ -592,6 +592,7 @@ class BusinessUpdateIn(BaseModel):
     receipt_mode: Literal["always", "ask"] | None = None                  # till-5b
     receipt_logo: bool | None = None                                      # till-12: wordmark on / off
     receipt_footer: str | None = Field(default=None, max_length=200)     # till-12; "" removes it
+    till_device_lock: bool | None = None                                  # kasir-1: the till on one tablet only
 
 
 # ── Pricing settings (M7-T4b): tax, service charge, rounding, discount gate ──

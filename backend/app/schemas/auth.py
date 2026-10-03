@@ -45,6 +45,10 @@ class BusinessOut(BaseModel):
     receipt_mode: str = "always"     # till-5b
     receipt_logo: bool = False       # till-12: the wordmark prints at the top of receipts
     receipt_footer: str | None = None
+    # kasir-1: the till opens on one tablet only (off until the owner turns it
+    # on), and since when a tablet has been bound. The key's hash is never sent.
+    till_device_lock: bool = False
+    till_device_bound_at: datetime | None = None
 
     @field_validator("receipt_logo", mode="before")
     @classmethod

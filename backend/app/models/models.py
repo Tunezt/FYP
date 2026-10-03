@@ -112,6 +112,12 @@ class Business(Base):
     # line of the café's own (Wi-Fi, thanks), up to 200 characters.
     receipt_logo: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))   # None is SQL NULL, not JSON null
     receipt_footer: Mapped[str | None] = mapped_column(Text)
+    # kasir-1 (migration 0049): the till on one tablet only. The switch is off
+    # until the owner turns it on; the hash is SHA-256 of the bound tablet's
+    # own key, NULL while nothing is bound.
+    till_device_lock: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    till_device_hash: Mapped[str | None] = mapped_column(Text)
+    till_device_bound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
 

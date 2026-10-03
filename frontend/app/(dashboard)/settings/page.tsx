@@ -5,6 +5,7 @@ import { useState } from "react";
 import QRCode from "qrcode";
 import { Select } from "@/components/Select";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
+import { ApiError } from "@/lib/api";
 import { ORDER_TYPE_LABEL, type Business, type LoyaltySettings, type OrderType, type PricingSettings, type StaffMember } from "@/lib/types";
 import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
@@ -83,6 +84,8 @@ export default function SettingsPage() {
   const [staffError, setStaffError] = useState<string | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
   const [pairingBusy, setPairingBusy] = useState(false);
+  const [lockBusy, setLockBusy] = useState(false);
+  const [lockError, setLockError] = useState<string | null>(null);
   // M15-T8: lockout recovery - cut a lost tablet off, reset a forgotten PIN.
   const [confirmRepair, setConfirmRepair] = useState(false);
   const [pinFor, setPinFor] = useState<StaffMember | null>(null);
@@ -252,6 +255,21 @@ export default function SettingsPage() {
       setMenuQr(await QRCode.toDataURL(url, { width: 640, margin: 1, errorCorrectionLevel: "M" }));
     } finally {
       setMenuBusy(false);
+    }
+  }
+
+  /** kasir-1: the till on one tablet only. Saved at once, like a light switch;
+   *  demo mode changes nothing, so the box simply does not move there. */
+  async function setTillLock(on: boolean) {
+    setLockBusy(true);
+    setLockError(null);
+    try {
+      await mutate("/api/business", { till_device_lock: on }, "PATCH");
+      business.reload();
+    } catch (e) {
+      setLockError(e instanceof ApiError ? e.detail : "Tidak tersimpan — periksa koneksi lalu coba lagi.");
+    } finally {
+      setLockBusy(false);
     }
   }
 
@@ -742,14 +760,16 @@ export default function SettingsPage() {
         <h2 className="mb-2 flex items-center gap-2 section-title">
           Layar kasir (POS)
           <HelpTip title="Layar kasir">
-            Buka tautan ini sekali di browser tablet/HP kasir. Setelah itu perangkat selalu
-            langsung masuk ke layar kasir usaha ini — staf tinggal pilih nama dan masukkan PIN.
+            Buka tautan ini sekali di browser tablet kasir. Setelah itu kasir selalu ada di alamat
+            pendek <b>/kasir</b> di tablet itu (bisa ditambahkan ke layar utama) — staf tinggal pilih
+            nama dan masukkan PIN.
           </HelpTip>
         </h2>
         <Plate className="space-y-3 px-6 py-5">
           <p className="ink-soft text-sm">
-            Hubungkan perangkat kasir dengan tautan berpasangan. Tautan berlaku terus (sampai kamu memutuskannya) dan hanya
-            membuka layar kasir — bukan dashboard ini.
+            Di tablet kasir, buka alamat <span className="font-medium text-[color:var(--ink)]">/kasir</span> lalu isi nomor HP
+            dan PIN pemilik, sekali saja. Tidak perlu tautan. Kalau lebih suka mengirim tautan, buat di bawah: tautan berlaku
+            terus (sampai kamu memutuskannya) dan hanya membuka layar kasir — bukan dashboard ini.
           </p>
           {pairing ? (
             <div className="space-y-2">
@@ -761,6 +781,35 @@ export default function SettingsPage() {
             <button onClick={generatePairing} disabled={pairingBusy} className="btn-accent px-5 py-2.5 text-sm">
               {pairingBusy ? "Membuat…" : "Buat tautan kasir"}
             </button>
+          )}
+
+          {/* kasir-1 — the till on one tablet only. Off until the owner turns it on. */}
+          {b && (
+            <div className="hairline-t pt-3">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={!!b.till_device_lock}
+                  disabled={lockBusy}
+                  onChange={(e) => void setTillLock(e.target.checked)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">Kasir hanya di satu perangkat</span>
+                  <span className="ink-soft mt-0.5 block text-xs leading-relaxed">
+                    {b.till_device_lock
+                      ? b.till_device_bound_at
+                        ? `Terkunci ke tablet yang masuk pada ${new Date(b.till_device_bound_at).toLocaleString("id-ID", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: b.timezone })}. Perangkat lain ditolak, walaupun tahu tautan dan PIN.`
+                        : "Aktif. Perangkat pertama yang masuk dengan PIN yang benar menjadi kasir; setelah itu perangkat lain ditolak."
+                      : "Kalau dinyalakan, kasir hanya bisa dibuka di satu tablet. Staf yang tahu tautan dan PIN tidak bisa membukanya di HP sendiri."}
+                  </span>
+                  {b.till_device_lock && (
+                    <span className="ink-faint mt-0.5 block text-xs">Ganti tablet? Pakai “Tablet hilang?” di bawah, lalu buka tautan baru di tablet pengganti.</span>
+                  )}
+                </span>
+              </label>
+              {lockError && <p className="mt-2 text-xs text-[color:var(--bad)]" role="alert">{lockError}</p>}
+            </div>
           )}
 
           {/* M15-T8 — the tablet is lost, stolen, or wiped */}

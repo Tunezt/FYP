@@ -2338,3 +2338,109 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - The IW-J300H model's `confidence` stays `"advertised"` and `--check` still prints its UNVERIFIED notice: `test_the_iware_model_profile_is_a_starting_point_not_a_claim` asserts it, and changing that is the owner's call, not mine (roadmap §1.8).
 **Deviation:** not a roadmap task; done at the owner's instruction in chat ("go build what u planned"). `bridge/.gitignore` widened to `probe-report*.json`. Not committed, per the standing instruction; snapshot `refs/wip/prt-10`.
 **Next:** the bridge on the tablet (Termux) against the deployed API; the café Wi-Fi (`Oscar`) loaded into both printers as the last step before they ship — its saved profile lists WPA3 and WPA2, and a WPA3-only or 5 GHz-only network would keep the printers off it; an Indonesian one-page guide for the person plugging them in.
+
+
+### [fix-1] The voucher endpoint test no longer depends on the month it was written; till-1..18 and prt-10 committed and pushed
+**Date:** 2026-10-03
+**Status:** done; pushed to `main` (97bf569..096b3df) at the owner's instruction, deployed on Railway
+**Changed:** backend/tests/test_vouchers.py
+**Gates:** pytest 729 passed, 0 failed; next build OK; alembic round trip OK at 0048; seed OK
+**Notes:**
+- `test_pos_quote_and_owner_endpoints` had failed since 1 Oct 2026: its fixture voucher was valid for September 2026 only and the till's endpoints read the real clock. The owner was asked (roadmap §1.8) and chose to fix the dates: the owner in the test now extends the voucher before the till quotes it. Every assertion is unchanged.
+- The owner then said to commit and push. One commit per task was built from the `refs/wip/*` snapshots with a private index, without touching the working tree: `[fix-1]`, `[till-1]` … `[till-18]`, `[prt-10]` (21 commits). The result differs from the tested tree only by the files the owner chose to leave out: `AGENTS.md`, `CLAUDE.md`, `docs/hardware.md`, `docs/plan-2026-10-01-till-feedback.md`, their own edit to `docs/printing.md`, and `.claude/launch.json`. So the committed docs refer to a `docs/hardware.md` that is not in the repository yet.
+- Earlier entries that say "uncommitted" and "snapshot `refs/wip/…`" describe the state when they were written.
+- **A flaky test, not fixed:** `test_the_probe_is_honest_about_a_printer_that_answers_nothing` takes `sim.port + 7` as a port nobody listens on. On Windows that port can be the probe's own outgoing port, and the connection then succeeds against itself. It failed 3 runs in 4 while a real bridge was polling in the background on this machine and passed 4 in 4 with it stopped. The gate above was run with nothing else running. It needs a port that is known to be closed.
+- Live after the push: `/health` ok and the new `/public/struk/{code}` route present at 23.59, so migrations 0044–0048 ran. The Vercel side was not checked.
+**Deviation:** the gates were run once on the final tree, not once per commit: each task's gates were run when it was built (its own entry above).
+**Next:** the tablet (Termux) against the live API with tokens made on the new version; `bridge/make_tablet_setup.py` (built, not yet run on the tablet, uncommitted) becomes its own task once it has.
+
+
+### [polish-1] Till and dashboard polish: the sign on every screen, real controls on a cart line, a dark till
+**Date:** 2026-10-04
+**Status:** done in software; **uncommitted** (gates run in the after-midnight window, see Gates)
+**Changed:** frontend/app/(dashboard)/layout.tsx, frontend/app/pos/layout.tsx, frontend/app/pos/[businessToken]/page.tsx, frontend/app/globals.css, frontend/components/ThemeToggle.tsx, frontend/components/StatCard.tsx, frontend/components/icons.tsx, frontend/components/pos/OrderPanel.tsx, frontend/components/pos/SellScreen.tsx
+**Gates:** next build OK; tsc OK; pytest 718 passed, 11 failed, all in the clock-dependent set (eval_harness x2, exception_rules x6, new_tools, thesis_agreement, tools_use_registry), run at 00.25-00.30 WIB; none touch the files changed here. alembic and seed not run: no migration, no seed change.
+**Notes:**
+- Owner's six notes, 3 Oct. (1) On a phone the dashboard had no logo: the sidebar is hidden there. The wordmark now heads the page, ink on porcelain, with the theme switch beside it. (4) "diskon" on a cart line was a bare grey word and nothing said a note could be added: each line now carries two outlined controls, Catatan (note icon) and Diskon (tag icon), next to the quantity stepper; a set note is shown in full on the line and its control fills amber, a set discount shows its amount and the struck-through price. The note has its own small sheet (Enter saves) instead of reopening the whole product sheet. (5) The till's top-left is the wordmark; the cashier is a chip on the right (initials, name, lock) and tapping it locks the till. The staff picker opens under the wordmark too. (6) The till has a sun/moon switch. Its choice is saved on the tablet under its own key (`pos-theme`), separate from the owner's dashboard; light stays the default.
+- The till header now goes to one row from 1024 px instead of 768 px: at 800 px (tablet upright) the old row could not hold its contents.
+- Dashboard figures: a trend line with no movement in it is not drawn, and a figure with nothing to compare against says "Belum ada pembanding" instead of leaving a gap.
+- Checked in the browser at 1280x800, 800x1280 and 375x812, light and dark; no console errors; design detector clean.
+- Found, not changed: a line discount entered on a dine-in order before "Kirim ke dapur/bar" is dropped when the bill is sent (SellScreen resets `discount: 0` on the returned lines). The control is still offered there. Owner's call whether to hide it for table bills or carry it.
+**Deviation:** not a roadmap task; done at the owner's instruction in chat.
+**Next:** owner's review; commit after a daytime gate run.
+
+
+### [polish-2] Bar and Dapur slips are read at arm's length; room under the black bar
+**Date:** 2026-10-04
+**Status:** done in software; **uncommitted**; not yet printed on the real printers
+**Changed:** bridge/print_bridge.py, frontend/components/pos/PrintDocument.tsx, backend/tests/test_print_bridge.py
+**Gates:** as polish-1; the print tests (test_print_bridge, test_nota_layout, test_receipt_content, test_receipt_brand, test_printer_by_name, test_prep_routing) all pass.
+**Notes:**
+- Owner's photos of the first real slips: the item rows were double height only, which gives tall thin letters that have to be studied. Item name, modifiers and note are now doubled both ways (the same size as MEJA 61), 24 to a line on 80 mm, long names wrapping under themselves, one clear line between items.
+- A label bar (BELUM DIBAYAR, TAMBAHAN, BATAL, CETAK ULANG, TERLAMBAT) is followed by one clear line; on the nota "Bayar di kasir sebelum pulang." printed against the bar's edge.
+- The receipt itself is otherwise untouched (the owner likes it). "Pesanan 003" under the banner is still double height only, on slips as on the receipt, because the two share that block.
+- The on-screen slip preview follows: items at the banner's size, wrapping where the paper wraps.
+- **Tests changed, on purpose, and this needs the owner's eye (hard rule 1):** two assertions in test_print_bridge.py described the old size. `height == 2` on the item row became `width == 2 and height == 2` for the name, the modifier and the note; the "split, not lost" check for a 70-character word now expects pieces of 13 (16 double-width columns on 32-column paper) and an exact count (70, plus the x in "12x" and "1x"), where it expected a run of 20 and at least 70. No test removed, none skipped; count unchanged at 729.
+- Both changes live in the bridge, so the tablet's copy of print_bridge.py has to be replaced before the café sees them.
+**Deviation:** not a roadmap task; owner's instruction in chat.
+**Next:** print a table order on the two IW-J300H units and look at it.
+
+
+### [polish-3] The order panel shows the order: three lines on the cafe's tablet where there was one
+**Date:** 2026-10-04
+**Status:** done in software; **uncommitted until a daytime gate run**
+**Changed:** frontend/components/pos/OrderPanel.tsx, frontend/components/pos/SellScreen.tsx
+**Gates:** tsc OK; next build OK; pytest see kasir-1 below.
+**Notes:**
+- Owner's screenshot from the Tab A11+: with the browser's own bars the page is about 690 px tall and the order list had room for one item.
+- Measured at 1280x690 before: about 130 px for the list. After: 280 px, lines of 93-109 px, so nearly three. Installed to the home screen (kasir-1) the bars go and it is about four.
+- Where the room came from: title and count on one line; "Kosongkan" moved up beside the title; order types one line each, the chosen one's explanation in the group's heading ("Jenis pesanan - diantar ke meja"); the breakdown (Subtotal, PB1...) as one quiet line above the total instead of a row each; "Simpan dulu" / "Bayar sekarang" beside the main button instead of in a row under it; the unit price only when the quantity is above one.
+- The owner's other idea, running the panel up to the top of the screen, was tried on paper and dropped: the header would lose 390 px and its tabs, shift, print and cashier controls no longer fit in one row at 1280.
+- Button labels shortened to fit beside the main button: "Simpan, bayar nanti" is "Simpan dulu"; "Kirim ke dapur/bar - 3 item" is "Kirim ke dapur/bar - 3".
+**Deviation:** not a roadmap task; owner's instruction in chat.
+**Next:** the owner's eye on the real tablet.
+
+
+### [kasir-1] The till lives at /kasir; "one tablet only" is built and switched off
+**Date:** 2026-10-04
+**Status:** done in software; **uncommitted until a daytime gate run**; the switch is OFF for every cafe
+**Changed:** backend/alembic/versions/0049_till_device_lock.py (new), backend/app/models/models.py, backend/app/api/pos.py, backend/app/api/auth.py, backend/app/api/dashboard.py, backend/app/schemas/auth.py, backend/app/schemas/dashboard.py, backend/tests/test_till_device_lock.py (new, 5 tests), frontend/lib/api.ts, frontend/lib/types.ts, frontend/components/pos/Till.tsx (new: the till, moved out of the page), frontend/app/kasir/page.tsx, frontend/app/kasir/layout.tsx, frontend/public/kasir.webmanifest (new), frontend/app/pos/[businessToken]/page.tsx, frontend/app/(dashboard)/settings/page.tsx, docs/api-contract.md
+**Gates:** alembic 0048 -> 0049 -> 0048 -> 0049 OK; tsc OK; next build OK; the new tests pass; full pytest in the after-midnight window (see the entry's last line once re-run).
+**Notes:**
+- Owner, 4 Oct: "make the till link to /kasir with only 1 device able to connect (for later, don't apply now, but build it so we can simply activate it later)".
+- **/kasir.** Opening the long pairing link once stores the pairing on that browser and goes to /kasir; the long link never stays in the address bar. /kasir on a browser that was never paired says so and how to get paired. It carries a web manifest ("Kasir Poernama", standalone), so "Tambahkan ke layar utama" on the tablet gives an icon and a till without the browser's bars.
+- **One tablet only.** Migration 0049 adds `businesses.till_device_lock` (default false), `till_device_hash`, `till_device_bound_at`. Every till browser makes a random key for itself once and sends it as `X-Till-Device` on /pos/* requests, already now, so switching the lock on later needs nothing done on the tablet. With the lock on: the first device to log in with a correct PIN becomes the till (one conditional UPDATE, so two cannot both win); after that any other key, or none, gets 403 "Kasir ini hanya bisa dibuka di tablet toko..." before a staff name is shown or a PIN is looked at. Only the key's SHA-256 is stored.
+- **To activate later:** Pengaturan -> Layar kasir -> tick "Kasir hanya di satu perangkat". To move to a new tablet: "Tablet hilang?" (re-pairing forgets the old tablet) or switch off and on.
+- **What it is not:** hardware. It stops a cashier opening the till on their own phone with the link and a PIN. Someone who copies the tablet's browser storage copies the key. A till session already open on another device when the lock is switched on runs until it ends (12 h) or the owner re-pairs.
+- The manifest's icon is the existing SVG mark. Whether Chrome on the Tab A11+ accepts an SVG-only icon for "install" is not checked; if it shows a generic icon, PNGs at 192 and 512 px are the fix.
+**Deviation:** not a roadmap task; owner's instruction in chat. Additive schema change on `businesses` (no business_id, RLS off by design).
+**Next:** on the tablet: open the link, add /kasir to the home screen; tick the switch when the owner says so.
+
+
+### [demo-1] The demo cafe never messages its invented number
+**Date:** 2026-10-04
+**Status:** done in software; **uncommitted until a daytime gate run**
+**Changed:** backend/app/core/config.py, backend/app/seed.py, backend/app/jobs/delivery.py, backend/tests/test_demo_cafe_is_quiet.py (new, 3 tests)
+**Gates:** as kasir-1.
+**Notes:**
+- Owner, 4 Oct: wants a demo account on the live system, the same as the local one.
+- Found before doing it: the nightly job sends each cafe's alerts by WhatsApp to `owner_phone`. The demo cafe's is 0812-000-1111, made up, so quite possibly a stranger's; the seed plants a sales spike and low stock, so it would be messaged the first night and every night after.
+- `deliver_unsent` now sends nothing for the demo number and leaves its alerts unsent (not marked as sent: nothing was). The number lives once, in `DEMO_OWNER_PHONE`, and the seed reads it from there. A real cafe is told as before (tested).
+- Not yet done: the live seed itself. It waits for this to be deployed, because seeding before the guard is live is exactly the problem above.
+**Deviation:** not a roadmap task.
+**Next:** deploy, then seed the demo cafe on live with the owner's go-ahead already given in chat.
+
+
+### [kasir-2] /kasir sets itself up: the owner's phone and PIN once, no link to make
+**Date:** 2026-10-04
+**Status:** done in software; **uncommitted until a daytime gate run**
+**Changed:** frontend/app/kasir/page.tsx, frontend/app/(dashboard)/settings/page.tsx
+**Gates:** tsc OK; as kasir-1 otherwise (no backend change).
+**Notes:**
+- Owner, on seeing "Buat tautan kasir" in the live dashboard: "why do I still need to generate the kasir page? I want a simple /kasir page, no need for generation."
+- A browser that is not yet a till now shows "Siapkan kasir" at /kasir: the owner's phone and PIN, once. It logs in, fetches the cafe's till link with that login, keeps only the till link, and opens "Siapa yang jaga?". The owner's session is not stored on the tablet. Uses the two endpoints that already exist (`/auth/login-pin`, `/auth/pos-pairing`), with their PIN cooldowns.
+- The long link still works for anyone who prefers to send one; Pengaturan now says /kasir first.
+- Checked in the browser against the local demo cafe: cleared the pairing, opened /kasir, entered the seed owner's phone and PIN, landed on the staff picker at /kasir.
+- Also today, outside the repo: the owner ran a one-off script that filled the real live account (phone ending 500, empty since 3 Oct) with the demo cafe, keeping the owner's own PIN, name, timezone and WhatsApp number. That account now has a month of invented sales and must be wiped before the cafe really opens.
+**Deviation:** not a roadmap task; owner's instruction in chat.
+**Next:** push; on the tablet open /kasir and enter the owner's phone and PIN.
