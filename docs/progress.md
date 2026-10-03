@@ -2258,3 +2258,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Verified in the browser: the nota preview for table 21 (layout as above, PB1 10% Rp 5.000, TOTAL SEMENTARA Rp 55.000); section headings without numbers.
 **Deviation:** none. Not committed, per instruction; snapshot `refs/wip/till-14`.
 **Next:** till-15 the logo prints and previews smoothly.
+
+
+### [till-15] The logo looks like ink, not a jammed printer
+**Date:** 2026-10-03
+**Status:** done in software; **uncommitted at the owner's request**
+**Changed:** scripts/receipt_logo.py, backend/app/assets/receipt_logo.json (regenerated), backend/app/services/business_profile.py, backend/app/services/printing.py, frontend/components/pos/PrintDocument.tsx, docs/printing.md, backend/tests/test_receipt_brand.py (dimensions updated; +2 tests)
+**Gates:** pytest 709 passed, 1 failed (test_vouchers::test_pos_quote_and_owner_endpoints — pre-existing, expired fixture voucher, fails on HEAD too); next build OK; alembic round trip OK at 0048; seed OK
+**Notes:**
+- Owner's feedback: "why is the Poernama logo pixelly, like the printer is jammed and the ink isn't smooth?"
+- **Cause, measured:** the till's slip preview drew the 384-dot bitmap at about half size with `image-rendering: pixelated`, which drops every other dot — that was the broken look. The bitmap itself was not broken: counted edge to edge it was already 8 solid pieces (one per letter shape), the same as now. On 80 mm paper a dot is 0.125 mm and neighbouring dots run together.
+- **Fix:** the preview now shrinks the bitmap smoothly, as dots look on paper. The bitmap is also 17% larger — 448 × 95 dots (56 mm, about three quarters of the line) — drawn 8x and inked wherever the lettering covers a quarter of a dot, so the P's swash and the R's tail are a little heavier (no single-dot runs left in the swash).
+- **A café now stores which logo, not a copy of its dots** (`{"name": "wordmark"}` in `businesses.receipt_logo`), resolved at print time by `logo_bitmap`; a whole stored bitmap still prints as itself. So the next improvement to the lettering reaches every receipt without the owner touching the setting. No migration: the column is jsonb and the feature was never deployed (only the demo seed had stored a copy, and it is reseeded).
+- Tests: the printed raster's header and bytes for 448 × 95; `test_the_hairlines_print_unbroken` (≤ 10 edge-joined pieces; a broken hairline would be dozens) — it guards the bitmap, it did not catch the old one, because the old one was not broken on paper; `test_a_cafe_that_stored_a_whole_bitmap_still_prints_it`; the committed asset still equals a fresh run of the script.
+- Verified in the browser: table 5's nota preview shows the larger, smooth wordmark (canvas 448 × 95, smooth scaling).
+**Deviation:** my own till-12 test numbers (384 × 81 → 448 × 95, the raster header bytes, and that a café stores `{"name": "wordmark"}` rather than the bitmap) were updated to the new design. Not committed, per instruction; snapshot `refs/wip/till-15`.
+**Next:** owner's review.

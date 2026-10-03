@@ -41,8 +41,9 @@ function QrBlock({ data }: { data: string }) {
   return src ? <img src={src} alt="Kode QR struk WhatsApp" className="mx-auto my-2 h-36 w-36" /> : null;
 }
 
-/** till-12: the logo bitmap exactly as the printer gets it, drawn dot for dot
- *  (576 dots = the slip's 302 px, so a 384-dot logo is two thirds across). */
+/** till-12: the logo bitmap exactly as the printer gets it (576 dots = the
+ *  slip's 302 px). till-15: shrunk smoothly, the way 0.125 mm dots run together
+ *  on paper; "pixelated" scaling dropped every other dot and looked broken. */
 function LogoBlock({ width, height, bits, text }: { width: number; height: number; bits: string; text?: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [ok, setOk] = useState(true);
@@ -76,7 +77,7 @@ function LogoBlock({ width, height, bits, text }: { width: number; height: numbe
       height={height}
       role="img"
       aria-label={text ? `Logo ${text}` : "Logo"}
-      className="mx-auto my-1 block [image-rendering:pixelated]"
+      className="mx-auto my-1 block"
       style={{ width: `${(width / 576) * 100}%`, height: "auto" }}
     />
   );

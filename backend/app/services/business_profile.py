@@ -67,8 +67,23 @@ def _wordmark() -> dict:
 
 
 def wordmark_logo() -> dict:
-    """A fresh copy of the wordmark bitmap, to store on a business."""
-    return dict(_wordmark())
+    """What a business stores when it turns the wordmark on (till-15): which
+    logo, not a copy of its dots, so a better bitmap reaches every receipt
+    without anyone touching the setting."""
+    return {"name": "wordmark"}
+
+
+def logo_bitmap(stored: dict | None) -> dict | None:
+    """The bitmap a stored logo prints as: the current wordmark for
+    `{"name": "wordmark"}`; a bitmap stored whole (`width`, `height`, `bits`)
+    as itself; nothing otherwise."""
+    if not isinstance(stored, dict):
+        return None
+    if stored.get("name") == "wordmark":
+        return dict(_wordmark())
+    if stored.get("bits") and stored.get("width") and stored.get("height"):
+        return {k: stored[k] for k in ("width", "height", "bits")}
+    return None
 
 
 def apply_tax_placeholder(pricing_row, rate: Decimal = TAX_RATE_PLACEHOLDER) -> None:

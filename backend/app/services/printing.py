@@ -289,9 +289,11 @@ def brand_blocks(business: Business | None) -> list[dict]:
     """The top of anything the customer takes away (till-12): the café's logo
     when it has one turned on — the name rides along for a printer that cannot
     draw it — else the name; then the address and contacts."""
+    from app.services.business_profile import logo_bitmap
+
     name = (business.name if business else "").upper()
-    logo = business.receipt_logo if business is not None else None
-    if isinstance(logo, dict) and logo.get("bits"):
+    logo = logo_bitmap(business.receipt_logo if business is not None else None)
+    if logo:
         blocks: list[dict] = [{"t": "logo", "text": name, "width": logo.get("width"), "height": logo.get("height"),
                                "bits": logo.get("bits")}]
     else:

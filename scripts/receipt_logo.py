@@ -9,9 +9,17 @@ and the till's browser preview draws the same bits on a canvas.
     python scripts/receipt_logo.py            # writes backend/app/assets/receipt_logo.json
     python scripts/receipt_logo.py --png x.png  # also a PNG to look at
 
-Width: 384 dots, two thirds of the 576-dot line of an 80 mm head at 203 dpi,
-centred. Height follows the master's proportions (2450 : 517.28). Needs Pillow
-(already in the backend's virtualenv); nothing at run time does.
+Width: 448 dots (56 mm), about three quarters of the 576-dot line of an 80 mm
+head at 203 dpi, centred. Height follows the master's proportions
+(2450 : 517.28). Needs Pillow (already in the backend's virtualenv); nothing at
+run time does.
+
+till-15 (owner: "why is the logo pixelly, like a jammed printer?"): mostly the
+till's preview, which shrank the bitmap with "pixelated" scaling and dropped
+every other dot (fixed in PrintDocument.tsx). The bitmap itself was unbroken;
+it is now 17% larger, drawn 8x larger and given ink wherever the lettering
+covers at least a quarter of a dot (an area average), so the P's swash and the
+R's tail are a little heavier and never a single dot wide.
 """
 from __future__ import annotations
 
@@ -27,8 +35,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "frontend" / "components" / "Wordmark.tsx"
 OUT = ROOT / "backend" / "app" / "assets" / "receipt_logo.json"
 
-WIDTH = 384          # dots; a multiple of 8
-SUPERSAMPLE = 4      # drawn larger, then reduced: smoother curves at the edge
+WIDTH = 448          # dots; a multiple of 8
+SUPERSAMPLE = 8      # drawn larger, then reduced: smoother curves at the edge
+INK_FROM = 64        # 0..255 coverage from which a dot is inked: a quarter, so hairlines stay heavy enough
 CURVE_STEPS = 24     # straight segments per cubic curve at the supersampled size
 
 
@@ -95,8 +104,8 @@ def render() -> Image.Image:
             ImageDraw.Draw(mask).polygon([(x * scale, y * scale) for x, y in contour], fill=1)
             canvas = ImageChops.logical_xor(canvas, mask)
     height = int(round(big_h / SUPERSAMPLE))
-    grey = canvas.convert("L").resize((WIDTH, height), Image.Resampling.LANCZOS)
-    return grey.point(lambda v: 255 if v >= 110 else 0).convert("1")   # 1 = ink
+    coverage = canvas.convert("L").resize((WIDTH, height), Image.Resampling.BOX)   # 255 = fully covered
+    return coverage.point(lambda v: 255 if v >= INK_FROM else 0).convert("1")      # 1 = ink
 
 
 def pack(img: Image.Image) -> dict:

@@ -17,7 +17,7 @@ import importlib.util
 import json
 from pathlib import Path
 
-from app.services.business_profile import WORDMARK_ASSET, wordmark_logo
+from app.services.business_profile import WORDMARK_ASSET, logo_bitmap, wordmark_logo
 from tests.test_receipt_content import (  # noqa: F401 (fixtures)
     _paper_lines, _receipt_doc, _sell, cafe, client, engine, pb, session_factory,
 )
@@ -71,14 +71,14 @@ async def test_the_owner_turns_on_the_logo_and_it_prints_as_a_bitmap(client, ses
     doc = await _receipt_doc(session_factory, c, sale["id"])
     logo = doc["blocks"][0]
     assert logo["t"] == "logo" and logo["text"] == "POERNAMA"   # the name rides along for an old bridge
-    assert (logo["width"], logo["height"]) == (384, 81)
-    assert len(base64.b64decode(logo["bits"])) == 384 // 8 * 81
+    assert (logo["width"], logo["height"]) == (448, 95)                # till-15: 56 mm across
+    assert len(base64.b64decode(logo["bits"])) == 448 // 8 * 95
 
     printed = pb.render(doc, pb.Profile(columns=48))
-    header = b"\x1dv0\x00" + bytes([48, 0, 81, 0])
+    header = b"\x1dv0\x00" + bytes([56, 0, 95, 0])
     assert header in printed
     start = printed.index(header) + len(header)
-    assert printed[start:start + 48 * 81] == base64.b64decode(logo["bits"])
+    assert printed[start:start + 56 * 95] == base64.b64decode(logo["bits"])
     # No text line repeats the name: the logo is the name.
     assert "POERNAMA" not in "\n".join(_paper_lines(doc))
 
@@ -125,7 +125,41 @@ def test_the_logo_is_the_wordmark_from_the_signage():
     fresh = module.pack(module.render())
     stored = json.loads(WORDMARK_ASSET.read_text(encoding="utf-8"))
     assert (fresh["width"], fresh["height"], fresh["bits"]) == (stored["width"], stored["height"], stored["bits"])
-    assert wordmark_logo() == {k: stored[k] for k in ("width", "height", "bits")}
+    assert wordmark_logo() == {"name": "wordmark"}                     # a café stores which logo
+    assert logo_bitmap(wordmark_logo()) == {k: stored[k] for k in ("width", "height", "bits")}
     bits = base64.b64decode(stored["bits"])
     ink = sum(bin(b).count("1") for b in bits) / (len(bits) * 8)
     assert 0.08 < ink < 0.5   # lettering, not a blank or a black box
+
+
+def test_the_hairlines_print_unbroken():
+    """till-15: the P's swash and the R's tail are the finest strokes. On paper
+    a run of dots that touch only at a corner reads as a gap, so the pieces are
+    counted joined edge to edge: one per letter shape, never dashes."""
+    stored = json.loads(WORDMARK_ASSET.read_text(encoding="utf-8"))
+    w, h = stored["width"], stored["height"]
+    raw = base64.b64decode(stored["bits"])
+    ink = {(x, y) for y in range(h) for x in range(w) if raw[y * (w // 8) + x // 8] & (0x80 >> (x % 8))}
+    seen, pieces = set(), 0
+    for start in ink:
+        if start in seen:
+            continue
+        pieces += 1
+        stack = [start]
+        seen.add(start)
+        while stack:
+            x, y = stack.pop()
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                n = (x + dx, y + dy)
+                if n in ink and n not in seen:
+                    seen.add(n)
+                    stack.append(n)
+    # P (swash and bowl), the moon O (two crescents), E, R with its tail, N, A, M, A, counters aside:
+    # a broken hairline shows up as dozens of fragments.
+    assert pieces <= 10, pieces   # 8 today
+
+
+def test_a_cafe_that_stored_a_whole_bitmap_still_prints_it():
+    own = {"width": 8, "height": 1, "bits": base64.b64encode(b"\xff").decode()}
+    assert logo_bitmap(own) == own
+    assert logo_bitmap(None) is None and logo_bitmap({"name": "unknown"}) is None

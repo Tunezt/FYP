@@ -207,7 +207,7 @@ till-12 additions, each of which an older bridge still prints sensibly:
 
 - `logo` `{text, width, height, bits}`: the café's logo as a 1-bit bitmap (`bits` = base64 rows of
   `width/8` bytes, MSB first, 1 = ink), sent with `GS v 0`, centred. Poernama's is its signage
-  wordmark, 384 × 81 dots, made by `scripts/receipt_logo.py` from `frontend/components/Wordmark.tsx`
+  wordmark, 448 × 95 dots (till-15; a café stores `{"name": "wordmark"}`, so a regenerated bitmap reaches every receipt), made by `scripts/receipt_logo.py` from `frontend/components/Wordmark.tsx`
   into `backend/app/assets/receipt_logo.json` (a test fails if the two drift). A bitmap that does
   not add up prints `text` (the name) instead; an older bridge prints `text` too. **`GS v 0` has
   not yet been seen on the café's IW-J300H** — check it on the first real receipt.
