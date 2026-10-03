@@ -31,7 +31,7 @@ because one good shift is evidence, not proof.
 It needs only Python 3.9 or newer, with no extra packages, on a device that stays on during
 service and is **on the same Wi-Fi as both printers**.
 
-For Poernama that device is **the cashier tablet itself** (a Samsung Galaxy Tab A9/A9+). It is
+For Poernama that device is **the cashier tablet itself** (a Samsung Galaxy Tab A11+, see `docs/hardware.md`). It is
 already on, already charging at the counter, and already on the restaurant Wi-Fi, so no extra
 hardware is needed. The tablet runs Chrome for the POS and the bridge beside it.
 

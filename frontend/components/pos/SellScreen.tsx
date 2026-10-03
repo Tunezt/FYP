@@ -1211,7 +1211,9 @@ export function SellScreen({
                     .filter((g) => activeCategory === null || g.name === activeCategory)
                     .map((g) => (
                       <section key={g.name} className="mt-4" aria-labelledby={`cat-${g.name}`}>
-                        <h2 id={`cat-${g.name}`} className="mb-2 flex items-center gap-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-[color:var(--ink-soft)]">
+                        {/* till-16: the name centred on the rule, like a section on a printed menu */}
+                        <h2 id={`cat-${g.name}`} className="mb-2.5 flex items-center gap-4 text-[12px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-soft)]">
+                          <span className="h-px flex-1 bg-[color:var(--border)]" aria-hidden />
                           {g.name}
                           <span className="h-px flex-1 bg-[color:var(--border)]" aria-hidden />
                         </h2>

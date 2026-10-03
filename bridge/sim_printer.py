@@ -64,6 +64,17 @@ def _command_length(buf: bytes, i: int) -> int | None:
             if i + 2 >= len(buf):
                 return None
             n = 4 if buf[i + 2] in (65, 66) else 3
+        elif op == ord("v"):
+            # GS v 0 m xL xH yL yH d…: a raster image (the receipt logo, till-12).
+            # Its bytes are pixels, never commands: one piece, however long.
+            if i + 8 > len(buf):
+                return None
+            n = 8 + (buf[i + 4] + 256 * buf[i + 5]) * (buf[i + 6] + 256 * buf[i + 7])
+        elif op == ord("("):
+            # GS ( k pL pH …: a 2D-code function (the WhatsApp QR, till-7).
+            if i + 5 > len(buf):
+                return None
+            n = 5 + buf[i + 3] + 256 * buf[i + 4]
         else:
             n = 3
     else:
@@ -117,6 +128,14 @@ def decode(data: bytes) -> list[Paper]:
                 style["width"], style["height"] = (cmd[2] >> 4) + 1, (cmd[2] & 0x0F) + 1
             elif op == ord("B"):
                 style["inverse"] = bool(cmd[2])
+            elif op == ord("v"):
+                if text:
+                    flush_line()
+                width, height = (cmd[4] + 256 * cmd[5]) * 8, cmd[6] + 256 * cmd[7]
+                lines.append(Line(f"[logo {width}x{height} dots]", align=style["align"]))
+            elif op == ord("(") and len(cmd) > 7 and cmd[6] == 0x50:
+                qr_data = cmd[8:].decode("ascii", "replace")
+                lines.append(Line(f"[QR {qr_data}]", align=style["align"]))
             elif op == ord("V"):
                 if text:
                     flush_line()

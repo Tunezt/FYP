@@ -939,3 +939,32 @@ async def test_products_without_a_station_are_listed_rather_than_quietly_routed(
     assert "kitchen_ticket" not in jobs
     assert (await client.patch(f"/api/items/{made.json()['id']}", headers=owner, json={"prep_station": "kitchen"})).status_code == 200
     assert (await client.get("/api/printers/routing", headers=owner)).json()["unmapped"] == []
+
+
+def test_the_simulator_reads_the_logo_and_qr_as_pictures_not_commands():
+    """The receipt's logo (GS v 0, till-12) and WhatsApp QR (GS ( k, till-7)
+    carry raw bytes. A raster whose pixels happen to spell a status request
+    (DLE EOT, GS r) or a cut must stay one picture: the simulator must not
+    answer it or cut the paper there, or a rehearsal would fail for a reason
+    no real printer has."""
+    import base64
+
+    tricky = (b"\x10\x04\x01" + b"\x1dr\x01" + b"\x1dV\x42\x00" + b"\x1b@") * 6   # status, confirm, cut and reset, as pixels
+    width_bytes, height = 12, 6                                                   # 96 dots x 6 rows
+    assert len(tricky) == width_bytes * height
+    doc = {"v": 1, "blocks": [
+        {"t": "logo", "text": "POERNAMA", "width": width_bytes * 8, "height": height, "bits": base64.b64encode(tricky).decode()},
+        {"t": "text", "text": "Jl. Merdeka 12", "align": "center"},
+        {"t": "qr", "data": "https://wa.me/628111?text=STRUK%20ab12"},
+        {"t": "text", "text": "Ref 1234ABCD", "align": "center"},
+    ]}
+    data = pb.render(doc, pb.Profile(columns=48))
+    papers = sp.decode(data)
+    assert len(papers) == 1 and papers[0].cut == "partial"          # the pixels did not cut the paper
+    texts = [l.text.strip() for l in papers[0].lines if l.text.strip()]
+    assert texts[0] == "[logo 96x6 dots]"
+    assert "Jl. Merdeka 12" in texts and "Ref 1234ABCD" in texts
+    assert any(t.startswith("[QR https://wa.me/628111") for t in texts)
+    # The live reader walks the same command lengths: the raster is one piece.
+    start = data.index(b"\x1dv0")
+    assert sp._command_length(data, start) == 8 + width_bytes * height

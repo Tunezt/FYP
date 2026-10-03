@@ -2274,3 +2274,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Verified in the browser: table 5's nota preview shows the larger, smooth wordmark (canvas 448 × 95, smooth scaling).
 **Deviation:** my own till-12 test numbers (384 × 81 → 448 × 95, the raster header bytes, and that a café stores `{"name": "wordmark"}` rather than the bitmap) were updated to the new design. Not committed, per instruction; snapshot `refs/wip/till-15`.
 **Next:** owner's review.
+
+
+### [till-16] Printer rehearsal end to end; the simulator understands the logo and QR; category titles centred on the line
+**Date:** 2026-10-03
+**Status:** done in software; **uncommitted at the owner's request**
+**Changed:** bridge/sim_printer.py, bridge/README.md (tablet model), frontend/components/pos/SellScreen.tsx, frontend/app/menu/[token]/page.tsx, backend/tests/test_print_bridge.py (+1 test)
+**Gates:** pytest 710 passed, 1 failed (test_vouchers::test_pos_quote_and_owner_endpoints — pre-existing, expired fixture voucher, fails on HEAD too); next build OK; alembic round trip OK at 0048; seed OK
+**Notes:**
+- Owner: "how do I check the printer connection? let's focus on the printer now"; "why is there still no kitchen slip?"; "put each category title in the centre of the line".
+- **Simulator gap fixed.** `sim_printer.py` did not know `GS v 0` (the till-12 logo raster) or `GS ( k` (the till-7 QR): it would have read the image's bytes as text, and pixel bytes that happen to spell `DLE EOT` / `GS r` could have been answered as status requests mid-image — a rehearsal failing for a reason no real printer has. It now reads both as one piece each and shows `[logo 448x95 dots]` / `[QR …]` on its paper. New test `test_the_simulator_reads_the_logo_and_qr_as_pictures_not_commands` feeds a raster whose pixels spell status, confirm, cut and reset commands: one paper, one cut at the end, the text around it intact.
+- **Rehearsal with the real bridge, local API and two simulated printers** (front 127.0.0.1:9100, kitchen :9101, tokens from `POST /api/printers/{front,kitchen}/token`): `print_bridge.py --check` → both `ready`, API `HTTP 200 ok` (and the expected UNVERIFIED notice for the IW-J300H profile until the probe runs on the real units). Running it printed the queue: table 15's nota (logo raster, double rules, totals) and Bar slip on the front, separately cut; then a new table 8 order (Nasi Goreng + Teh Tarik) gave the Dapur slip on the **kitchen** printer and the Bar slip on the front. Nothing printed twice.
+- **"No kitchen slip" — not a fault:** table 15 was one Es Kopi Susu, a bar item. Products marked *Dapur* in Stok → *Disiapkan di* (demo: Nasi Goreng Spesial, Roti Bakar Coklat) go to the kitchen printer; drinks and Croissant to the bar slip on the front printer.
+- **Paper:** already set to the café's paper (docs/hardware.md): 80 mm, 72 mm printable = 576 dots at 203 dpi, 48 characters (Font A); the preview slip is drawn at 80 mm (302 CSS px); the logo is 448 dots = 56 mm. Nothing to change.
+- **Category titles** at the till and on the QR menu: the name centred between two hairlines (── KOPI ──), letter-spaced; checked in the browser.
+**Deviation:** none. Not committed, per instruction; snapshot `refs/wip/till-16`.
+**Next:** at the café: probe and `--check` on the real IW-J300H printers (bridge/README.md checklist).

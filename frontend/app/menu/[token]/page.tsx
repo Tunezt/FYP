@@ -423,7 +423,8 @@ export default function MenuPage() {
         sections.map((sec) => (
         <section key={sec.name ?? "*"} id={sec.name ? `menu-${sec.name}` : undefined} className="scroll-mt-32">
         {sec.name && (
-          <h2 className="mb-2 mt-6 flex items-center gap-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-[color:var(--ink-soft)]">
+          <h2 className="mb-2.5 mt-6 flex items-center gap-4 text-[12px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-soft)]">
+            <span className="h-px flex-1 bg-[color:var(--border)]" aria-hidden />
             {sec.name}
             <span className="h-px flex-1 bg-[color:var(--border)]" aria-hidden />
           </h2>
