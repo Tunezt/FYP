@@ -42,6 +42,7 @@ class BusinessOut(BaseModel):
     address: str | None = None
     contact_phone: str | None = None
     instagram: str | None = None
+    receipt_mode: str = "always"     # till-5b
 
     @computed_field
     @property

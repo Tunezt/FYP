@@ -380,6 +380,20 @@ class PosConfigOut(BaseModel):
     """How this café's till works (till-4 onwards)."""
 
     require_shift: bool = False      # no payment without the cashier's open shift
+    receipt_mode: str = "always"     # till-5b: 'ask' = Kertas / QR / WhatsApp / Tidak perlu after payment
+    whatsapp_receipts: bool = False  # till-5b/7: the bot's number is live; until then "Belum aktif"
+
+
+class ReceiptChoiceIn(BaseModel):
+    choice: str = Field(pattern=r"^(paper|qr|whatsapp|none)$")
+
+
+class ReceiptChoiceOut(BaseModel):
+    choice: str
+    receipt_code: str | None = None
+    web_path: str | None = None       # "/struk/<code>", on the frontend's own origin
+    whatsapp_link: str | None = None  # "https://wa.me/<bot>?text=STRUK%20<code>"
+    print_job_id: uuid.UUID | None = None
 
 
 class ShiftOpenIn(BaseModel):

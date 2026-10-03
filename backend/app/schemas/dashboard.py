@@ -586,6 +586,7 @@ class BusinessUpdateIn(BaseModel):
     address: str | None = Field(default=None, max_length=120)          # till-5a, printed on receipts
     contact_phone: str | None = Field(default=None, max_length=40)
     instagram: str | None = Field(default=None, max_length=60)
+    receipt_mode: Literal["always", "ask"] | None = None                  # till-5b
 
 
 # ── Pricing settings (M7-T4b): tax, service charge, rounding, discount gate ──

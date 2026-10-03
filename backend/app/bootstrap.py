@@ -107,6 +107,7 @@ async def bootstrap(
             language_preference=language,
             timezone=timezone,
             require_shift=True,   # till-4: the owner's rule for every new café
+            receipt_mode="ask",   # till-5b: the customer's receipt only when asked
         )
         apply_placeholders(business)   # till-5a: marked placeholders until the owner types the real ones
         session.add(business)

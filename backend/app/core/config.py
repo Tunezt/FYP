@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     whatsapp_alert_template: str = "business_alert"
     whatsapp_otp_template: str = "login_otp"
     whatsapp_template_language: str = "id"
+    # till-5b/7: the bot's own number (digits, international), shown to customers
+    # as wa.me/<number> for a WhatsApp receipt. Empty until the Indonesian SIM is
+    # registered; while empty the till shows the WhatsApp choice as "Belum aktif".
+    whatsapp_receipt_number: str = ""
 
     # Auth
     jwt_secret: str = "dev-secret-do-not-use-in-production"

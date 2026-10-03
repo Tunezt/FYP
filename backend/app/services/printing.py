@@ -303,8 +303,11 @@ async def enqueue_for_paid_order(session: AsyncSession, order: Order, *, staff_i
     second copy. A backdated paper sale was served long ago and prints nothing."""
     if order.entry_source != "live":
         return []
-    jobs = [await _add_job(session, order, printer="front", kind="receipt", document=await render_receipt(session, order),
-                           key=f"{order.id}:receipt", staff_id=staff_id)]
+    # till-5b: a café that asks first prints the customer's receipt only when
+    # the cashier taps Kertas (enqueue_receipt); its slips always print.
+    business = await session.get(Business, order.business_id)
+    ask = business is not None and business.receipt_mode == "ask"
+    jobs = [] if ask else [await enqueue_receipt(session, order, staff_id=staff_id)]
     if (order.cart or {}).get("batches"):
         # An open bill (bill-1): every item already went out on its batch's
         # slips, the last of them just before payment. Only the receipt is new.
@@ -315,6 +318,12 @@ async def enqueue_for_paid_order(session: AsyncSession, order: Order, *, staff_i
             jobs.append(await _add_job(session, order, printer=STATION_PRINTER[station], kind=TICKET_KIND[station],
                                        document=doc, key=f"{order.id}:{TICKET_KIND[station]}", staff_id=staff_id))
     return jobs
+
+
+async def enqueue_receipt(session: AsyncSession, order: Order, *, staff_id: uuid.UUID | None = None) -> PrintJob:
+    """The customer's receipt, once per financial order whoever asks twice."""
+    return await _add_job(session, order, printer="front", kind="receipt", document=await render_receipt(session, order),
+                          key=f"{order.id}:receipt", staff_id=staff_id)
 
 
 async def on_order_reversed(session: AsyncSession, order: Order, *, staff_id: uuid.UUID | None = None) -> list[PrintJob]:

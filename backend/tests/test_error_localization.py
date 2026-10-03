@@ -20,6 +20,7 @@ SCANNED_FILES = [
     BACKEND_APP / "api" / "dashboard.py",
     BACKEND_APP / "api" / "menu.py",
     BACKEND_APP / "api" / "printing.py",
+    BACKEND_APP / "api" / "public.py",
     BACKEND_APP / "whatsapp" / "webhook.py",
     BACKEND_APP / "core" / "deps.py",
 ]

@@ -1083,6 +1083,33 @@ function ReceiptDetails({ business, loading, onSaved }: { business: Business | n
               {busy ? "Menyimpan…" : "Simpan data struk"}
             </button>
           )}
+          <label className="hairline-t flex items-start gap-3 pt-3">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={(business?.receipt_mode ?? "always") === "ask"}
+              disabled={busy}
+              onChange={async (e) => {
+                setBusy(true);
+                setError(null);
+                try {
+                  await mutate("/api/business", { receipt_mode: e.target.checked ? "ask" : "always" }, "PATCH");
+                  onSaved();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Gagal menyimpan — coba lagi.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
+            <span>
+              <span className="block text-sm font-medium">Tanya dulu sebelum mencetak struk pelanggan</span>
+              <span className="ink-faint block text-xs">
+                Setelah bayar, kasir memilih Kertas, QR, WhatsApp, atau Tidak perlu. Slip dapur dan bar tetap selalu
+                dicetak. Menghemat kertas struk; setiap pilihan tercatat.
+              </span>
+            </span>
+          </label>
         </Plate>
       )}
     </section>

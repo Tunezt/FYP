@@ -19,6 +19,7 @@ from app.ai.periods import period_range
 from app.services import pin_guard
 from app.core.deps import PosCtx
 from app.schemas.pos import CashMovementIn, CashMovementOut, PosConfigOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
+from app.schemas.pos import ReceiptChoiceIn, ReceiptChoiceOut
 from app.schemas.menu import (
     ActiveOrderOut, DraftIn, LineCancelIn, OpenOrderUpdateIn, PosTicketOut, RepriceIn, SendIn, TicketCancelIn, TicketSettleIn,
 )
@@ -246,8 +247,40 @@ async def require_open_shift(ctx) -> None:
 @router.get("/config", response_model=PosConfigOut)
 async def pos_config(ctx: PosCtx):
     """What the till needs to know about how this café works."""
+    from app.services.receipt_delivery import whatsapp_live
+
     business = await ctx.session.get(Business, ctx.business_id)
-    return PosConfigOut(require_shift=bool(business and business.require_shift))
+    return PosConfigOut(
+        require_shift=bool(business and business.require_shift),
+        receipt_mode=business.receipt_mode if business else "always",
+        whatsapp_receipts=whatsapp_live(),
+    )
+
+
+_RECEIPT_CHOICE_ERRORS = {
+    "choice": (422, "Pilihan struk tidak dikenali"),
+    "not_paid": (409, "Struk hanya untuk transaksi yang sudah dibayar"),
+    "whatsapp_off": (409, "Struk lewat WhatsApp belum aktif — pilih Kertas atau QR"),
+}
+
+
+@router.post("/orders/{order_id}/receipt-choice", response_model=ReceiptChoiceOut)
+async def pos_receipt_choice(order_id: uuid.UUID, payload: ReceiptChoiceIn, ctx: PosCtx):
+    """till-5b: what the customer asked for after paying. Kertas prints (once),
+    QR and WhatsApp hand back a code to show, Tidak perlu prints nothing. The
+    slips for the Bar/Dapur were never waiting on this."""
+    from app.models import Order
+    from app.services.receipt_delivery import ReceiptChoiceInvalid, choose_receipt
+
+    order = await ctx.session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
+    try:
+        out = await choose_receipt(ctx.session, order, payload.choice, staff_id=ctx.staff_id)
+    except ReceiptChoiceInvalid as exc:
+        status, detail = _RECEIPT_CHOICE_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    return ReceiptChoiceOut(**out)
 
 
 @router.post("/sales", response_model=SaleOut)

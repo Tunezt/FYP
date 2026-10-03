@@ -153,6 +153,7 @@ async def seed(confirm: bool = False) -> None:
             timezone="Asia/Jakarta",
             onboarding_completed_at=now - timedelta(days=31),
             require_shift=True,   # till-4
+            receipt_mode="ask",   # till-5b: the customer's receipt only when asked
         )
         apply_placeholders(business)   # till-5a
         # The demo café has 30 days of invented history, so its row has to be at

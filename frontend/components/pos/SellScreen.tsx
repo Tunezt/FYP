@@ -32,6 +32,7 @@ import {
 import { OrderPanel, type PanelContext, type SentPanelLine } from "@/components/pos/OrderPanel";
 import { ActiveOrders, type ActiveActions } from "@/components/pos/ActiveOrders";
 import { TransactionsView } from "@/components/pos/Receipts";
+import { ReceiptChoiceSheet } from "@/components/pos/ReceiptChoice";
 import {
   BrowserPrintSheet,
   PRINT_STATUS,
@@ -90,6 +91,7 @@ type Quote = {
 };
 
 type PayMode = "cash" | "qris" | "split";
+type PosConfig = { require_shift: boolean; receipt_mode: "always" | "ask"; whatsapp_receipts: boolean };
 type Shift = {
   id: string;
   staff_name: string;
@@ -597,6 +599,8 @@ export function SellScreen({
   const [usePoints, setUsePoints] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [flash, setFlash] = useState<(OrderResult & { paper: string }) | null>(null);
+  // till-5b: a café that asks first shows the receipt choice instead of the toast.
+  const [receiptAsk, setReceiptAsk] = useState<{ id: string; title: string; amount: string; change: number } | null>(null);
   const [lineDiscountFor, setLineDiscountFor] = useState<string | null>(null);
   const [lineDiscountDraft, setLineDiscountDraft] = useState("");
 
@@ -730,16 +734,21 @@ export function SellScreen({
           },
         });
       }
-      // A table's bill that was sent already has its slips; only the receipt is new.
-      setFlash({
-        ...res,
-        paper: !sentLines.length
-          ? "struk & slip masuk antrean cetak"
-          : cart.length
-            ? "slip item baru & struk masuk antrean cetak"
-            : "struk masuk antrean cetak",
-      });
-      window.setTimeout(() => setFlash((f) => (f?.id === res.id ? null : f)), 6000);
+      const change = res.payments.reduce((n, p) => n + (p.tendered && Number(p.tendered) > Number(p.amount) ? Number(p.tendered) - Number(p.amount) : 0), 0);
+      if (config?.receipt_mode === "ask") {
+        setReceiptAsk({ id: res.id, title: `Pesanan ${res.order_no}${res.batch_no ? ` · Tambahan ${res.batch_no}` : ""}`, amount: res.total, change });
+      } else {
+        // A table's bill that was sent already has its slips; only the receipt is new.
+        setFlash({
+          ...res,
+          paper: !sentLines.length
+            ? "struk & slip masuk antrean cetak"
+            : cart.length
+              ? "slip item baru & struk masuk antrean cetak"
+              : "struk masuk antrean cetak",
+        });
+        window.setTimeout(() => setFlash((f) => (f?.id === res.id ? null : f)), 6000);
+      }
       setPaying(false);
       setPayMode("cash");
       setCashPart("");
@@ -836,9 +845,9 @@ export function SellScreen({
   useEffect(loadShift, [loadShift]);
   // till-4 (decision 2): a café that requires it does not sell before the
   // cashier has counted the opening cash. The server refuses it too.
-  const [config, setConfig] = useState<{ require_shift: boolean } | null>(null);
+  const [config, setConfig] = useState<PosConfig | null>(null);
   useEffect(() => {
-    api<{ require_shift: boolean }>("/pos/config", { token }).then(setConfig).catch(() => setConfig(null));
+    api<PosConfig>("/pos/config", { token }).then(setConfig).catch(() => setConfig(null));
   }, [token]);
   const shiftGate = !!config?.require_shift && shift === null && !shiftResult;
   async function openShiftNow() {
@@ -1248,6 +1257,7 @@ export function SellScreen({
           <div className="mx-auto max-w-2xl pb-10 pt-4">
             <TransactionsView
               token={token}
+              whatsappLive={!!config?.whatsapp_receipts}
               onReversed={() => {
                 loadShift();
                 loadItems();
@@ -1802,6 +1812,22 @@ export function SellScreen({
             </button>
           </div>
         </div>
+      )}
+
+      {receiptAsk && (
+        <ReceiptChoiceSheet
+          orderId={receiptAsk.id}
+          token={token}
+          title={receiptAsk.title}
+          amount={receiptAsk.amount}
+          change={receiptAsk.change}
+          whatsappLive={!!config?.whatsapp_receipts}
+          onDone={(message) => {
+            setReceiptAsk(null);
+            if (message) showToast(message);
+            void printQueue.load();
+          }}
+        />
       )}
 
       {toast && (

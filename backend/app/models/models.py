@@ -104,6 +104,9 @@ class Business(Base):
     address: Mapped[str | None] = mapped_column(Text)
     contact_phone: Mapped[str | None] = mapped_column(Text)
     instagram: Mapped[str | None] = mapped_column(Text)
+    # till-5b, migration 0046: 'always' prints the customer's receipt at payment;
+    # 'ask' waits for the cashier's choice (Kertas / QR / WhatsApp / Tidak perlu).
+    receipt_mode: Mapped[str] = mapped_column(Text, nullable=False, server_default="always")
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
 
@@ -402,6 +405,11 @@ class Order(Base):
     service_number: Mapped[int | None] = mapped_column(Integer)
     batch_no: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
     external_ref: Mapped[str | None] = mapped_column(Text)
+    # till-5b, migration 0046: what the customer asked for, and the code a web or
+    # WhatsApp receipt is found by (unique across cafés, made only when needed).
+    receipt_choice: Mapped[str | None] = mapped_column(Text)
+    receipt_choice_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    receipt_code: Mapped[str | None] = mapped_column(Text)
 
 
 class OrderLine(Base):

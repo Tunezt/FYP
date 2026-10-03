@@ -94,6 +94,7 @@ export type Business = {
   contact_phone?: string | null;
   instagram?: string | null;
   placeholders?: string[];
+  receipt_mode?: "always" | "ask"; // till-5b: the customer's receipt only when asked
   onboarding_completed_at: string | null;
 };
 

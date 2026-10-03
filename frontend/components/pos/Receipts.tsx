@@ -6,6 +6,7 @@ import { formatQty, formatRupiah } from "@/lib/format";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 import { orderHeading, orderLabel, serviceDateLabel, taxLineLabel, withSize } from "@/lib/pos";
 import { FormHint, missingText } from "@/components/FormHint";
+import { ReceiptChoiceSheet } from "@/components/pos/ReceiptChoice";
 
 export type Receipt = {
   order_id: string;
@@ -94,10 +95,15 @@ type ReversalResult = {
 export function TransactionsView({
   token,
   onReversed,
+  whatsappLive = false,
 }: {
   token: string | null;
   onReversed: () => void;
+  whatsappLive?: boolean;
 }) {
+  // till-5b: a customer who comes back for a receipt, on paper or as a QR.
+  const [asking, setAsking] = useState<Receipt | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [rows, setRows] = useState<OrderRow[] | null>(null);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Receipt | null>(null);
@@ -241,6 +247,18 @@ export function TransactionsView({
               </ul>
             </div>
 
+            {open.status === "completed" && (
+              <button
+                onClick={() => {
+                  setNotice(null);
+                  setAsking(open);
+                }}
+                className="btn-quiet mt-3 w-full py-3 text-sm"
+              >
+                Struk pelanggan — kertas atau QR
+              </button>
+            )}
+            {notice && <p className="notice notice-good mt-3 text-sm">{notice}</p>}
             {open.status !== "completed" ? (
               <p className="surface-inset rounded-2xl mt-4 px-4 py-6 text-center text-sm">
                 Transaksi ini {open.status === "voided" ? "sudah dibatalkan" : "sudah dikembalikan"} —
@@ -369,6 +387,20 @@ export function TransactionsView({
         )}
       </div>
       {printing && <ReceiptSheet receipt={printing} onClose={() => setPrinting(null)} />}
+      {asking && (
+        <ReceiptChoiceSheet
+          orderId={asking.order_id}
+          token={token}
+          title={orderLabel(asking)}
+          amount={asking.total}
+          change={0}
+          whatsappLive={whatsappLive}
+          onDone={(message) => {
+            setAsking(null);
+            setNotice(message);
+          }}
+        />
+      )}
     </div>
   );
 }

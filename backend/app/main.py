@@ -115,6 +115,7 @@ def _include_routers() -> None:
     from app.api.printing import agent_router, owner_router as printer_owner_router, pos_router as print_pos_router
     from app.api.printing import printers_pos_router
     from app.whatsapp.webhook import router as webhook_router
+    from app.api.public import router as public_router
 
     app.include_router(auth_router)
     app.include_router(pos_router)
@@ -125,6 +126,7 @@ def _include_routers() -> None:
     app.include_router(printer_owner_router)
     app.include_router(printers_pos_router)
     app.include_router(webhook_router)
+    app.include_router(public_router)   # till-5b: the scanned web receipt
 
 
 _include_routers()
