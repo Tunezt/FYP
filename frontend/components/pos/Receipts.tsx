@@ -7,7 +7,7 @@ import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 import { orderHeading, orderLabel, serviceDateLabel, taxLineLabel, withSize } from "@/lib/pos";
 import { FormHint, missingText } from "@/components/FormHint";
 import { ReceiptChoiceSheet } from "@/components/pos/ReceiptChoice";
-import { IconChevronLeft } from "@/components/icons";
+import { IconChevronLeft, IconPrinter } from "@/components/icons";
 
 export type Receipt = {
   order_id: string;
@@ -228,7 +228,7 @@ export function TransactionsView({
             </div>
             <div className="mt-4 flex gap-3">
               <button onClick={() => setPrinting(done.receipt)} className="btn-quiet flex-1 py-3">
-                🖨 Cetak struk
+                <IconPrinter className="h-[18px] w-[18px]" /> Cetak struk
               </button>
               <button
                 onClick={() => {

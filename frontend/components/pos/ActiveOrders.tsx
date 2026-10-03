@@ -89,7 +89,7 @@ export function ActiveOrders({
                 role="tab"
                 aria-selected={filter === f.id}
                 onClick={() => setFilter(f.id)}
-                className="segmented-item flex min-h-[2.5rem] items-center gap-1.5 whitespace-nowrap"
+                className="segmented-item flex min-h-[2.75rem] items-center gap-1.5 whitespace-nowrap"
               >
                 {f.label}
                 <span
@@ -387,9 +387,11 @@ function OrderDetail({
       {o.note && <p className="ink-soft mt-2 text-sm">Catatan: {o.note}</p>}
       {printSlot && o.print_jobs.length > 0 && printSlot(o)}
       <div className="mt-3 flex items-baseline justify-between">
-        <span className="ink-soft text-sm">{table ? "Total tagihan sementara" : "Perkiraan total"}</span>
+        <span className="ink-soft text-sm">{table ? "Total tagihan sementara" : "Total sementara"}</span>
         <span className="text-[22px] font-semibold tabular-nums">{formatRupiah(o.total)}</span>
       </div>
+      {/* till-8: say plainly why it is not final — the price is taken at payment. */}
+      <p className="ink-faint text-right text-xs">Belum dibayar · dihitung ulang saat dibayar</p>
 
       <div className="mt-4 space-y-2">
         {cancelling ? (
@@ -443,12 +445,12 @@ function OrderDetail({
               </button>
             )}
             <div className="flex gap-2">
-              <button onClick={() => actions.resume(o)} disabled={busy} className="btn-quiet flex-1 py-2.5 text-sm">
+              <button onClick={() => actions.resume(o)} disabled={busy} className="btn-quiet min-h-[2.75rem] flex-1 py-2.5 text-sm">
                 {/* till-3: adding is the common case (a family orders more drinks), for a
                     table and for anything else not yet paid; removing is still possible. */}
                 Tambah / ubah
               </button>
-              <button onClick={() => setCancelling(true)} disabled={busy} className="btn-quiet flex-1 py-2.5 text-sm">
+              <button onClick={() => setCancelling(true)} disabled={busy} className="btn-quiet min-h-[2.75rem] flex-1 py-2.5 text-sm">
                 Batalkan
               </button>
             </div>

@@ -89,5 +89,10 @@ async def pos_ctx(request: Request) -> AsyncIterator[AuthContext]:
         yield ctx
 
 
-OwnerCtx = Annotated[AuthContext, Depends(owner_ctx)]
-PosCtx = Annotated[AuthContext, Depends(pos_ctx)]
+# scope="function" (till-8): the session commits when the endpoint returns and
+# BEFORE the response is sent. FastAPI's default ("request") commits after the
+# client has its 2xx, so the till could re-read and miss its own write, and a
+# commit that fails (the ledger's deferred debit = credit check runs at commit)
+# would already have been reported as success.
+OwnerCtx = Annotated[AuthContext, Depends(owner_ctx, scope="function")]
+PosCtx = Annotated[AuthContext, Depends(pos_ctx, scope="function")]

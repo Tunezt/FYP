@@ -241,7 +241,7 @@ async def printer_ctx(request: Request):
 
 
 @agent_router.post("/claim", response_model=AgentClaimOut)
-async def agent_claim(payload: AgentClaimIn, ctx: PrinterCtx = Depends(printer_ctx)):
+async def agent_claim(payload: AgentClaimIn, ctx: PrinterCtx = Depends(printer_ctx, scope="function")):
     """The oldest pending job for this token's printer, now held by this device.
     `job: null` when there is nothing to print."""
     device = await printing.device_for(ctx.session, printer=ctx.printer, device=payload.device)
@@ -261,7 +261,7 @@ async def _own_job(ctx: PrinterCtx, job_id: uuid.UUID) -> None:
 
 
 @agent_router.post("/jobs/{job_id}/result", response_model=PrintJobOut)
-async def agent_result(job_id: uuid.UUID, payload: AgentResultIn, ctx: PrinterCtx = Depends(printer_ctx)):
+async def agent_result(job_id: uuid.UUID, payload: AgentResultIn, ctx: PrinterCtx = Depends(printer_ctx, scope="function")):
     """Printed, failed, or uncertain — about the claim this device holds now
     (`attempt` from the claim). An answer about an earlier claim is refused."""
     await _own_job(ctx, job_id)
@@ -275,7 +275,7 @@ async def agent_result(job_id: uuid.UUID, payload: AgentResultIn, ctx: PrinterCt
 
 
 @agent_router.post("/jobs/{job_id}/release", response_model=PrintJobOut)
-async def agent_release(job_id: uuid.UUID, payload: AgentReleaseIn, ctx: PrinterCtx = Depends(printer_ctx)):
+async def agent_release(job_id: uuid.UUID, payload: AgentReleaseIn, ctx: PrinterCtx = Depends(printer_ctx, scope="function")):
     """The device took the job and sent nothing to the printer: back in the queue."""
     await _own_job(ctx, job_id)
     try:
@@ -286,7 +286,7 @@ async def agent_release(job_id: uuid.UUID, payload: AgentReleaseIn, ctx: Printer
 
 
 @agent_router.post("/held", response_model=AgentHeldOut)
-async def agent_held(payload: AgentClaimIn, ctx: PrinterCtx = Depends(printer_ctx)):
+async def agent_held(payload: AgentClaimIn, ctx: PrinterCtx = Depends(printer_ctx, scope="function")):
     """What this device has taken and not answered for, so a restarted bridge
     can release what it never sent."""
     jobs = await printing.held_by(ctx.session, printer=ctx.printer, device=payload.device)
@@ -294,7 +294,7 @@ async def agent_held(payload: AgentClaimIn, ctx: PrinterCtx = Depends(printer_ct
 
 
 @agent_router.post("/heartbeat", response_model=AgentHeartbeatOut)
-async def agent_heartbeat(payload: AgentHeartbeatIn, ctx: PrinterCtx = Depends(printer_ctx)):
+async def agent_heartbeat(payload: AgentHeartbeatIn, ctx: PrinterCtx = Depends(printer_ctx, scope="function")):
     """The bridge's last look at its printer, for the till to show — and the
     channel for the owner's setup test: the answer comes up, the request goes
     back down."""

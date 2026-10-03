@@ -5,7 +5,7 @@ import { api, ApiError, POS_TOKEN_KEY } from "@/lib/api";
 import { Select } from "@/components/Select";
 import { FormHint, missingText } from "@/components/FormHint";
 import { ProductPicker } from "@/components/ProductPicker";
-import { IconCheck, IconLock, IconPrinter, IconSearch, IconWallet } from "@/components/icons";
+import { IconCheck, IconClose, IconLock, IconPrinter, IconSearch, IconWallet } from "@/components/icons";
 import { formatQty, formatRupiah } from "@/lib/format";
 import {
   displayName,
@@ -333,19 +333,25 @@ export function SellScreen({
   const [activeError, setActiveError] = useState<string | null>(null);
   const [activeLoading, setActiveLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // till-8: a slow, older poll must not overwrite the list fetched right after
+  // a save (the held order would vanish until the next poll). Only the answer
+  // to the latest request is shown.
+  const activeSeq = useRef(0);
   const loadActive = useCallback(async () => {
+    const seq = ++activeSeq.current;
     setActiveLoading(true);
     try {
       const rows = await api<ActiveOrder[]>("/pos/active-orders", { token });
+      if (seq !== activeSeq.current) return rows;
       setActive(rows);
       setActiveError(null);
       return rows;
     } catch (e: unknown) {
       // Keep the last good list on screen, and say it may be old.
-      setActiveError(e instanceof ApiError ? e.detail : "Tidak bisa terhubung ke server");
+      if (seq === activeSeq.current) setActiveError(e instanceof ApiError ? e.detail : "Tidak bisa terhubung ke server");
       return null;
     } finally {
-      setActiveLoading(false);
+      if (seq === activeSeq.current) setActiveLoading(false);
     }
   }, [token]);
   useEffect(() => {
@@ -408,7 +414,7 @@ export function SellScreen({
             guest_name: guestName.trim() || null,
             table_label: orderType === "dine_in" ? tableLabel.trim() || null : null,
             client_ref: holdRef.current,
-            external_ref: orderType === "dine_in" ? null : externalRef.trim() || null,
+            external_ref: orderType === "delivery" ? externalRef.trim() || null : null,
           },
         });
       }
@@ -730,7 +736,7 @@ export function SellScreen({
             customer_id: customer?.id ?? null,
             voucher_code: quote?.voucher_code ?? null,
             client_ref: payRef.current,
-            external_ref: orderType === "dine_in" ? null : externalRef.trim() || null,
+            external_ref: orderType === "delivery" ? externalRef.trim() || null : null,
           },
         });
       }
@@ -1028,7 +1034,7 @@ export function SellScreen({
                   role="tab"
                   aria-selected={view === id}
                   onClick={() => setView(id)}
-                  className="segmented-item relative flex min-h-[2.5rem] flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-3 md:flex-none md:px-4"
+                  className="segmented-item relative flex min-h-[2.75rem] flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-3 md:flex-none md:px-4"
                 >
                   {label}
                   {n !== null && n > 0 && <span className={`tabular-nums ${view === id ? "font-semibold" : "ink-faint"}`}>{n}</span>}
@@ -1057,7 +1063,7 @@ export function SellScreen({
                   setShiftError(null);
                   setShiftSheet("close");
                 }}
-                className="rounded-xl px-3 py-1.5 text-left transition-colors hover:bg-[color:var(--row-hover)]"
+                className="min-h-[2.75rem] rounded-xl px-3 py-1.5 text-left transition-colors hover:bg-[color:var(--row-hover)]"
                 title="Tutup shift"
               >
                 <span className="ink-faint block text-[11px] font-medium leading-tight">Kas seharusnya</span>
@@ -1066,7 +1072,7 @@ export function SellScreen({
             )}
             <button
               onClick={() => setPrintSheet(true)}
-              className="icon-btn h-10 w-auto gap-1.5 rounded-xl px-2.5 text-sm"
+              className="icon-btn h-11 w-auto gap-1.5 rounded-xl px-2.5 text-sm"
               title="Antrean cetak"
               style={{ color: printQueue.attention > 0 ? "var(--bad)" : printQueue.error ? "var(--warn)" : "var(--ink-soft)" }}
             >
@@ -1076,10 +1082,10 @@ export function SellScreen({
               </span>
               <span className="hidden xl:inline">{printQueue.attention === 0 && printQueue.waiting === 0 ? "Cetak" : ""}</span>
             </button>
-            <button onClick={openCashSheet} className="icon-btn ink-soft h-10 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Kas masuk / keluar">
+            <button onClick={openCashSheet} className="icon-btn ink-soft h-11 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Kas masuk / keluar">
               <IconWallet className="h-[18px] w-[18px]" /> <span className="hidden xl:inline">Kas</span>
             </button>
-            <button onClick={onLock} className="icon-btn ink-soft h-10 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Kunci kasir">
+            <button onClick={onLock} className="icon-btn ink-soft h-11 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Kunci kasir">
               <IconLock className="h-[18px] w-[18px]" /> <span className="hidden xl:inline">Kunci</span>
             </button>
           </div>
@@ -1730,11 +1736,11 @@ export function SellScreen({
               <div className="mt-4 flex items-center justify-between">
                 <span className="text-sm font-medium">Jumlah dibatalkan</span>
                 <div className="surface-inset flex items-center rounded-xl p-0.5">
-                  <button onClick={() => setVoiding({ ...voiding, qty: Math.max(1, voiding.qty - 1) })} className="h-9 w-9 rounded-[10px] text-lg" aria-label="Kurangi">
+                  <button onClick={() => setVoiding({ ...voiding, qty: Math.max(1, voiding.qty - 1) })} className="h-11 w-11 rounded-[10px] text-lg" aria-label="Kurangi">
                     −
                   </button>
                   <span className="w-8 text-center text-sm font-semibold tabular-nums">{voiding.qty}</span>
-                  <button onClick={() => setVoiding({ ...voiding, qty: Math.min(voiding.max, voiding.qty + 1) })} className="h-9 w-9 rounded-[10px] text-lg" aria-label="Tambah">
+                  <button onClick={() => setVoiding({ ...voiding, qty: Math.min(voiding.max, voiding.qty + 1) })} className="h-11 w-11 rounded-[10px] text-lg" aria-label="Tambah">
                     +
                   </button>
                 </div>
@@ -1807,8 +1813,8 @@ export function SellScreen({
             <button onClick={() => void printReceiptOf(flash.id)} className="btn-quiet ml-1 shrink-0 px-3 py-2 text-sm">
               <IconPrinter className="h-4 w-4" /> Struk
             </button>
-            <button onClick={() => setFlash(null)} className="ink-soft shrink-0 rounded-lg px-2 py-2 text-sm" aria-label="Tutup">
-              ✕
+            <button onClick={() => setFlash(null)} className="icon-btn ink-soft h-11 w-11 shrink-0 rounded-full" aria-label="Tutup">
+              <IconClose className="h-5 w-5" />
             </button>
           </div>
         </div>

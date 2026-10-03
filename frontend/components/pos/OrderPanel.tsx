@@ -162,7 +162,7 @@ export function OrderPanel({
                 key={t}
                 onClick={() => onOrderType(t)}
                 aria-pressed={orderType === t}
-                className="segmented-item min-h-[2.5rem] whitespace-nowrap px-2 text-[13px]"
+                className="segmented-item min-h-[2.75rem] whitespace-nowrap px-2 text-[13px]"
               >
                 {SERVICE_LABEL[t] ?? t}
               </button>
@@ -174,7 +174,7 @@ export function OrderPanel({
             <input
               value={tableLabel}
               onChange={(e) => onTableLabel(e.target.value.slice(0, 20))}
-              className="field w-28 py-2 text-sm font-semibold"
+              className="field min-h-[2.75rem] w-28 py-2 text-sm font-semibold"
               placeholder="Meja"
               aria-label="Nomor meja"
             />
@@ -182,15 +182,16 @@ export function OrderPanel({
           <input
             value={guestName}
             onChange={(e) => onGuestName(e.target.value.slice(0, 60))}
-            className="field min-w-0 flex-1 py-2 text-sm"
+            className="field min-h-[2.75rem] min-w-0 flex-1 py-2 text-sm"
             placeholder="Nama pelanggan (opsional)"
             aria-label="Nama pelanggan"
           />
-          {!bill && (
+          {/* till-8: a delivery app's order code belongs to Antar only. */}
+          {orderType === "delivery" && (
             <input
               value={externalRef}
               onChange={(e) => onExternalRef(e.target.value.slice(0, 40))}
-              className="field w-32 py-2 text-sm"
+              className="field min-h-[2.75rem] w-32 py-2 text-sm"
               placeholder="Kode driver"
               aria-label="Kode driver (opsional)"
               title="Nomor pesanan dari aplikasi ojol, kalau ada"
@@ -228,7 +229,7 @@ export function OrderPanel({
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1">
                         <p className="text-sm tabular-nums">{formatRupiah(l.lineTotal)}</p>
-                        <button onClick={() => onCancelSent(l.uid)} disabled={busy} className="ink-soft rounded-lg px-1.5 py-1 text-xs underline-offset-2 hover:underline">
+                        <button onClick={() => onCancelSent(l.uid)} disabled={busy} className="ink-soft -mr-2 inline-flex min-h-[2.75rem] items-center rounded-lg px-2 text-xs underline-offset-2 hover:underline">
                           batalkan
                         </button>
                       </div>
@@ -269,7 +270,7 @@ export function OrderPanel({
                           <button
                             onClick={() => onQty(l.uid, -1)}
                             aria-label={l.qty === 1 ? `Hapus ${l.title}` : `Kurangi ${l.title}`}
-                            className="h-9 w-9 rounded-[10px] text-lg font-medium transition-colors hover:bg-[color:var(--surface)]"
+                            className="h-11 w-11 rounded-[10px] text-lg font-medium transition-colors hover:bg-[color:var(--surface)]"
                           >
                             −
                           </button>
@@ -278,13 +279,13 @@ export function OrderPanel({
                             onClick={() => onQty(l.uid, +1)}
                             disabled={l.qty >= l.maxQty}
                             aria-label={`Tambah ${l.title}`}
-                            className="h-9 w-9 rounded-[10px] text-lg font-medium transition-colors hover:bg-[color:var(--surface)] disabled:opacity-30"
+                            className="h-11 w-11 rounded-[10px] text-lg font-medium transition-colors hover:bg-[color:var(--surface)] disabled:opacity-30"
                           >
                             +
                           </button>
                         </div>
                         {onDiscount && (
-                          <button onClick={() => onDiscount(l.uid)} className="ink-faint text-xs underline-offset-2 hover:underline">
+                          <button onClick={() => onDiscount(l.uid)} className="ink-faint -my-2 -mr-2 inline-flex min-h-[2.75rem] items-center px-2 text-xs underline-offset-2 hover:underline">
                             {l.discount > 0 ? "ubah diskon" : "diskon"}
                           </button>
                         )}
@@ -301,8 +302,9 @@ export function OrderPanel({
       <footer className="hairline-t px-5 pb-5 pt-3">
         {!empty && quote && (
           <dl className="mb-2 space-y-0.5 text-[13px]">
-            {(Number(quote.discount_total) > 0 || Number(quote.promo_total) > 0 || Number(quote.service_charge) > 0 ||
-              Number(quote.tax_total) > 0 || Number(quote.rounding) !== 0 || Number(quote.delivery_fee) > 0) && (
+            {/* A subtotal equal to the total (e.g. tax included in the price) says
+                nothing; the printed receipt leaves it out too (till-8). */}
+            {Number(quote.subtotal) !== Number(quote.total) && (
               <Row label="Subtotal" value={formatRupiah(quote.subtotal)} />
             )}
             {Number(quote.discount_total) > 0 && <Row label="Diskon" value={`− ${formatRupiah(quote.discount_total)}`} />}
@@ -343,16 +345,16 @@ export function OrderPanel({
         )}
         <div className="mt-2 flex gap-2">
           {sendFirst && (
-            <button onClick={onPay} disabled={busy} className="btn-quiet flex-1 py-2.5 text-sm">
+            <button onClick={onPay} disabled={busy} className="btn-quiet min-h-[2.75rem] flex-1 py-2.5 text-sm">
               Bayar sekarang
             </button>
           )}
           {onHold && lines.length > 0 && (
-            <button onClick={onHold} disabled={busy || noType} className="btn-quiet flex-1 py-2.5 text-sm">
+            <button onClick={onHold} disabled={busy || noType} className="btn-quiet min-h-[2.75rem] flex-1 py-2.5 text-sm">
               {bill ? "Simpan, belum kirim" : context.kind === "open" ? "Simpan perubahan" : "Simpan, bayar nanti"}
             </button>
           )}
-          <button onClick={onClear} disabled={busy || (empty && context.kind === "new")} className="btn-quiet px-4 py-2.5 text-sm">
+          <button onClick={onClear} disabled={busy || (empty && context.kind === "new")} className="btn-quiet min-h-[2.75rem] px-4 py-2.5 text-sm">
             {context.kind === "new" ? "Kosongkan" : "Tutup"}
           </button>
         </div>
