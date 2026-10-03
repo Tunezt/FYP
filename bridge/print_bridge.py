@@ -309,6 +309,9 @@ def render_block(w: Writer, block: dict, profile: Profile) -> None:
         half = cols // 2
         for line in wrap(block.get("text", ""), half):
             w.row(line.center(half), bold=True, width=2, height=2, inverse=True)
+        # A clear line under the bar: the next row otherwise prints against
+        # its black edge and the two read as one smudge.
+        w.row("")
     elif t == "banner":
         s = profile.banner_scale
         w.rows(wrap(block.get("text", ""), cols // s), align="center", bold=True, width=s, height=s)
@@ -322,13 +325,19 @@ def render_block(w: Writer, block: dict, profile: Profile) -> None:
     elif t == "item":
         if block.get("flag"):
             w.rows(wrap(f"[{block['flag']}]", cols), bold=True)
+        # What the bar and the kitchen cook from, read at arm's length: every
+        # row doubled both ways. Double height alone gives tall, thin letters
+        # that have to be studied; doubled both ways they keep their shape. It
+        # costs half the columns, so long names wrap under themselves.
+        big = cols // 2
         head = _item_head(block)
         hang = " " * min(len(to_printer_text(block.get("qty") or "")) + 2, 6)
-        w.rows(wrap(head, cols, "", hang), bold=True, height=2)
+        w.rows(wrap(head, big, "", hang), bold=True, width=2, height=2)
         for m in block.get("modifiers") or []:
-            w.rows(wrap(f"- {m}", cols, "   ", "     "), height=2)
+            w.rows(wrap(f"- {m}", big, " ", "   "), width=2, height=2)
         if block.get("notes"):
-            w.rows(wrap(f"* {block['notes']}", cols, "   ", "     "), bold=True, height=2)
+            w.rows(wrap(f"* {block['notes']}", big, " ", "   "), bold=True, width=2, height=2)
+        w.row("")
     elif t == "item_priced" and block.get("unit_price"):
         # till-12: the name on its own line, then "2 x @15.000" and the amount
         # on the right, the way café receipts set an item.

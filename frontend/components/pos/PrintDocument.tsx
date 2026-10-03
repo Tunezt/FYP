@@ -104,13 +104,13 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
             );
           case "label":
             return (
-              <p key={i} className="my-1.5 bg-black py-1 text-center text-[17px] font-bold tracking-[0.2em] text-white">
+              <p key={i} className="mb-4 mt-1.5 bg-black py-1 text-center text-[17px] font-bold tracking-[0.2em] text-white">
                 {b.text}
               </p>
             );
           case "banner":
             return (
-              <p key={i} className="mt-1 text-center text-[30px] font-bold leading-tight">
+              <p key={i} className="mt-1 text-center text-[24px] font-bold leading-tight">
                 {b.text}
               </p>
             );
@@ -135,18 +135,18 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
             );
           case "item":
             return (
-              <div key={i} className="mb-2">
-                {b.flag && <p className="text-[11px] font-bold">[{b.flag}]</p>}
-                <p className="text-[17px] font-bold leading-tight">
+              <div key={i} className="mb-4 text-[19px] leading-[1.25]">
+                {b.flag && <p className="text-[13px] font-bold">[{b.flag}]</p>}
+                <p className="font-bold">
                   {b.qty}× {b.name}
                   {b.size ? ` (${b.size})` : ""}
                 </p>
                 {(b.modifiers ?? []).map((m, j) => (
-                  <p key={j} className="pl-5 text-[15px]">
+                  <p key={j} className="pl-3">
                     - {m}
                   </p>
                 ))}
-                {b.notes && <p className="pl-5 text-[15px] font-bold">* {b.notes}</p>}
+                {b.notes && <p className="pl-3 font-bold">* {b.notes}</p>}
               </div>
             );
           case "item_priced":

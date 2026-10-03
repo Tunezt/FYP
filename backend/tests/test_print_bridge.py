@@ -174,12 +174,19 @@ def test_every_block_the_app_produces_becomes_printer_commands(columns):
                   "2x Nasi Goreng Kampung (Besar)", "- Pedas level 3", "* tanpa bawang goreng", "1.5x Es Teh",
                   "+ Gula aren +Rp 2.000", "sedikit es", "Rp 9.000", "TOTAL SEMENTARA",
                   "Cetak ulang ke-1 - 14.10 - Sari", "Alasan: tamu ganti menu - maaf", "blok baru dari server"):
-        assert words in body or words in body.replace("\n", " "), (words, body)
+        # An item is set double size (polish-2), so its name wraps under itself:
+        # the words are compared with the wrapping taken out.
+        assert words in body or words in " ".join(body.split()), (words, body)
     by_text = {l.text.strip(): l for l in lines}
     for label in ("TAMBAHAN", "BATAL", "CETAK ULANG", "BELUM DIBAYAR"):
         assert by_text[label].inverse and by_text[label].bold and by_text[label].width == 2
     assert by_text["MEJA 7"].width == 2 and by_text["MEJA 7"].height == 2
-    assert by_text["2x Nasi Goreng Kampung (Besar)"].height == 2 and by_text["2x Nasi Goreng Kampung (Besar)"].bold
+    # polish-2: what the kitchen cooks from is doubled both ways, never only stretched tall.
+    name = [l for l in lines if l.text.startswith("2x Nasi Goreng")]
+    assert len(name) == 1 and name[0].width == 2 and name[0].height == 2 and name[0].bold
+    for part in ("- Pedas", "* tanpa"):
+        row = [l for l in lines if l.text.strip().startswith(part)]
+        assert len(row) == 1 and row[0].width == 2 and row[0].height == 2, part
     assert "-" * columns in body
 
 
@@ -196,7 +203,10 @@ def test_long_names_modifiers_and_notes_wrap_inside_the_paper():
     assert all(len(l.text) * l.width <= 32 for l in lines)
     words = " ".join(l.text.strip() for l in lines)
     assert "12x Nasi Goreng Kampung Spesial Dengan Telur Ceplok Dan Kerupuk Udang (Jumbo)" in words
-    assert "x" * 20 in words and sum(l.text.count("x") for l in lines) >= 70     # split, not lost
+    # polish-2: item rows are double width, so a 32-column paper holds 16 of them and a
+    # run of 70 is cut into pieces of 13 (was pieces of 27 at single width).
+    assert "x" * 13 in words and sum(l.text.count("x") for l in lines) == 70 + 2     # split, not lost (+ the x of "12x" and "1x")
+    assert all(l.width == 2 and l.height == 2 for l in lines if "xxxx" in l.text)
     assert "anak-anak ikut makan juga ya kak" in words and "Rp 1.250.000" in words
     # Continuation lines of an item hang under its name, not under the quantity.
     head = [l.text for l in lines if l.height == 2 and l.bold]
