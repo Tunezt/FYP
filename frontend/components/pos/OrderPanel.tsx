@@ -1,6 +1,6 @@
 "use client";
 
-import { IconClose, IconLock, IconNote } from "@/components/icons";
+import { IconClose, IconLock, IconNote, IconTag } from "@/components/icons";
 import { formatRupiah } from "@/lib/format";
 import { SERVICE_HINT, SERVICE_LABEL, taxLineLabel } from "@/lib/pos";
 import { FormHint } from "@/components/FormHint";
@@ -69,6 +69,7 @@ export function OrderPanel({
   onExternalRef,
   onQty,
   onEdit,
+  onNote,
   onDiscount,
   onCancelSent,
   onClear,
@@ -95,6 +96,7 @@ export function OrderPanel({
   onExternalRef: (v: string) => void;
   onQty: (uid: string, delta: number) => void;
   onEdit: (uid: string) => void;
+  onNote: (uid: string) => void;
   onDiscount: ((uid: string) => void) | null;
   onCancelSent: (uid: string) => void;
   onClear: () => void;
@@ -126,6 +128,20 @@ export function OrderPanel({
         ? "Isi kode pesanan ojol"
         : null;
 
+  // A subtotal equal to the total (e.g. tax included in the price) says
+  // nothing; the printed receipt leaves it out too (till-8).
+  const parts: [string, string][] = quote
+    ? ([
+        Number(quote.subtotal) !== Number(quote.total) ? ["Subtotal", formatRupiah(quote.subtotal)] : null,
+        Number(quote.discount_total) > 0 ? ["Diskon", `− ${formatRupiah(quote.discount_total)}`] : null,
+        Number(quote.promo_total) > 0 ? ["Promo", `− ${formatRupiah(quote.promo_total)}`] : null,
+        Number(quote.service_charge) > 0 ? ["Service", formatRupiah(quote.service_charge)] : null,
+        Number(quote.delivery_fee) > 0 ? ["Ongkos kirim", formatRupiah(quote.delivery_fee)] : null,
+        Number(quote.tax_total) > 0 ? [taxLineLabel(quote.tax_label, quote.tax_rate, quote.tax_inclusive), formatRupiah(quote.tax_total)] : null,
+        Number(quote.rounding) !== 0 ? ["Pembulatan", formatRupiah(quote.rounding)] : null,
+      ].filter(Boolean) as [string, string][])
+    : [];
+
   const title = context.kind === "new" ? "Pesanan baru" : context.title;
   const subtitle =
     context.kind === "new"
@@ -145,11 +161,20 @@ export function OrderPanel({
 
   return (
     <section aria-label="Ringkasan pesanan" className="flex h-full min-h-0 flex-col">
-      <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
-        <div className="min-w-0">
-          <h2 className="truncate text-[19px] font-semibold tracking-[-0.015em]">{title}</h2>
-          <p className="ink-soft mt-0.5 truncate text-[13px]">{subtitle}</p>
+      {/* polish-3: every row of chrome here is a row of the order the cashier
+          cannot see. On the café's tablet the panel is about 600 px tall, so the
+          title and its count share one line, the breakdown is one line, and the
+          actions sit beside the main button instead of under it. */}
+      <header className="flex items-center gap-2 px-5 pb-2 pt-3">
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <h2 className="shrink-0 truncate text-[18px] font-semibold tracking-[-0.015em]">{title}</h2>
+          <p className="ink-soft min-w-0 truncate text-[13px]">{subtitle}</p>
         </div>
+        {!(empty && context.kind === "new") && (
+          <button onClick={onClear} disabled={busy} className="ink-soft -mr-1.5 inline-flex h-9 shrink-0 items-center rounded-lg px-2.5 text-[13px] font-medium transition-colors hover:bg-[color:var(--row-hover)] hover:text-[color:var(--ink)] active:bg-[color:var(--row-press)]">
+            {context.kind === "new" ? "Kosongkan" : "Tutup"}
+          </button>
+        )}
         {onClose && (
           <button onClick={onClose} aria-label="Tutup ringkasan" className="icon-btn ink-soft h-10 w-10 shrink-0 rounded-full">
             <IconClose className="h-5 w-5" />
@@ -164,7 +189,11 @@ export function OrderPanel({
           <fieldset>
             <legend className="mb-1.5 flex items-baseline gap-1.5 text-[13px] font-semibold">
               Jenis pesanan
-              {noType && <span className="text-[12px] font-medium text-[color:var(--bad)]">· wajib dipilih</span>}
+              {noType ? (
+                <span className="text-[12px] font-medium text-[color:var(--bad)]">· wajib dipilih</span>
+              ) : (
+                SERVICE_HINT[orderType] && <span className="ink-faint text-[12px] font-normal">· {SERVICE_HINT[orderType]}</span>
+              )}
             </legend>
             <div className="grid grid-cols-3 gap-2">
               {orderTypes.map((t) => (
@@ -173,16 +202,16 @@ export function OrderPanel({
                   type="button"
                   onClick={() => onOrderType(t)}
                   aria-pressed={orderType === t}
-                  className="choice-card flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 text-center"
+                  title={SERVICE_HINT[t]}
+                  className="choice-card flex min-h-[2.75rem] items-center justify-center px-1.5 py-1.5 text-center text-[14px] font-semibold leading-tight"
                 >
-                  <span className="text-[14px] font-semibold leading-tight">{SERVICE_LABEL[t] ?? t}</span>
-                  {SERVICE_HINT[t] && <span className="ink-faint text-[11px] font-normal leading-tight">{SERVICE_HINT[t]}</span>}
+                  {SERVICE_LABEL[t] ?? t}
                 </button>
               ))}
             </div>
           </fieldset>
         )}
-        <div className={`flex gap-2 ${onOrderType ? "mt-2.5" : ""}`}>
+        <div className={`flex gap-2 ${onOrderType ? "mt-2" : ""}`}>
           {bill && (
             <input
               value={tableLabel}
@@ -214,7 +243,7 @@ export function OrderPanel({
         </div>
       </div>
 
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto px-5">
+      <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto overscroll-contain px-5">
         {empty ? (
           <div className="flex h-full min-h-[8rem] flex-col items-center justify-center text-center">
             <p className="text-[15px] font-medium">Belum ada item</p>
@@ -261,30 +290,61 @@ export function OrderPanel({
                 )}
                 <ul className="hairline-t">
                   {lines.map((l) => (
-                    <li key={l.uid} className="hairline-b flex items-start gap-3 py-3">
-                      <button onClick={() => onEdit(l.uid)} className="min-w-0 flex-1 rounded-lg text-left" aria-label={`Ubah ${l.title}`}>
-                        <p className="text-[15px] font-semibold leading-snug">
-                          {l.title}
-                          {l.guest && <span className="pill-warn ml-1.5 align-middle text-[11px]">{l.guest}</span>}
-                        </p>
-                        {l.modifiers.length > 0 && <p className="ink-soft text-[13px] leading-snug">{l.modifiers.join(", ")}</p>}
-                        {l.notes && (
-                          <p className="mt-0.5 flex items-center gap-1 text-[13px] leading-snug" style={{ color: "var(--warn)" }}>
-                            <IconNote className="h-3.5 w-3.5 shrink-0" /> {l.notes}
+                    <li key={l.uid} className="hairline-b py-2.5">
+                      <div className="flex items-start gap-3">
+                        <button onClick={() => onEdit(l.uid)} className="min-w-0 flex-1 rounded-lg text-left" aria-label={`Ubah ${l.title}`}>
+                          <p className="text-[15px] font-semibold leading-snug">
+                            {l.title}
+                            {l.guest && <span className="pill-warn ml-1.5 align-middle text-[11px]">{l.guest}</span>}
                           </p>
-                        )}
-                        <p className="ink-faint mt-0.5 text-xs tabular-nums">
-                          {formatRupiah(l.unitPrice)}
-                          {l.discount > 0 ? ` · diskon ${formatRupiah(l.discount)}` : ""}
+                          {l.modifiers.length > 0 && <p className="ink-soft text-[13px] leading-snug">{l.modifiers.join(", ")}</p>}
+                          {/* The note in full: it is what the kitchen will read. */}
+                          {l.notes && (
+                            <p className="mt-0.5 text-[13px] font-medium leading-snug" style={{ color: "var(--warn)" }}>
+                              “{l.notes}”
+                            </p>
+                          )}
+                          {l.qty > 1 && (
+                            <p className="ink-faint mt-0.5 text-xs tabular-nums">
+                              {l.qty} × {formatRupiah(l.unitPrice)}
+                            </p>
+                          )}
+                        </button>
+                        <p className="shrink-0 text-right text-[15px] font-semibold tabular-nums">
+                          {formatRupiah(l.unitPrice * l.qty - l.discount)}
+                          {l.discount > 0 && (
+                            <span className="ink-faint block text-xs font-normal line-through">{formatRupiah(l.unitPrice * l.qty)}</span>
+                          )}
                         </p>
-                      </button>
-                      <div className="flex shrink-0 flex-col items-end gap-1.5">
-                        <p className="text-[15px] font-semibold tabular-nums">{formatRupiah(l.unitPrice * l.qty - l.discount)}</p>
-                        <div className="surface-inset flex items-center rounded-xl p-0.5" role="group" aria-label={`Jumlah ${l.title}`}>
+                      </div>
+                      {/* The line's own controls, all the same height: what can be
+                          said about it on the left, how many on the right. */}
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <button
+                          onClick={() => onNote(l.uid)}
+                          data-set={l.notes ? "note" : undefined}
+                          className="line-action"
+                          aria-label={l.notes ? `Ubah catatan ${l.title}: ${l.notes}` : `Tambah catatan untuk ${l.title}`}
+                        >
+                          <IconNote className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{l.notes ? "Ubah catatan" : "Catatan"}</span>
+                        </button>
+                        {onDiscount && (
+                          <button
+                            onClick={() => onDiscount(l.uid)}
+                            data-set={l.discount > 0 ? "discount" : undefined}
+                            className="line-action shrink-0 tabular-nums"
+                            aria-label={l.discount > 0 ? `Ubah diskon ${l.title}` : `Beri diskon untuk ${l.title}`}
+                          >
+                            <IconTag className="h-4 w-4 shrink-0" />
+                            {l.discount > 0 ? `− ${formatRupiah(l.discount)}` : "Diskon"}
+                          </button>
+                        )}
+                        <div className="surface-inset ml-auto flex shrink-0 items-center rounded-xl p-0.5" role="group" aria-label={`Jumlah ${l.title}`}>
                           <button
                             onClick={() => onQty(l.uid, -1)}
                             aria-label={l.qty === 1 ? `Hapus ${l.title}` : `Kurangi ${l.title}`}
-                            className="h-11 w-11 rounded-[10px] text-lg font-medium transition-colors hover:bg-[color:var(--surface)]"
+                            className="h-10 w-10 rounded-[10px] text-lg font-medium transition-colors hover:bg-[color:var(--surface)] active:bg-[color:var(--row-press)]"
                           >
                             −
                           </button>
@@ -293,16 +353,11 @@ export function OrderPanel({
                             onClick={() => onQty(l.uid, +1)}
                             disabled={l.qty >= l.maxQty}
                             aria-label={`Tambah ${l.title}`}
-                            className="h-11 w-11 rounded-[10px] text-lg font-medium transition-colors hover:bg-[color:var(--surface)] disabled:opacity-30"
+                            className="h-10 w-10 rounded-[10px] text-lg font-medium transition-colors hover:bg-[color:var(--surface)] active:bg-[color:var(--row-press)] disabled:opacity-30"
                           >
                             +
                           </button>
                         </div>
-                        {onDiscount && (
-                          <button onClick={() => onDiscount(l.uid)} className="ink-faint -my-2 -mr-2 inline-flex min-h-[2.75rem] items-center px-2 text-xs underline-offset-2 hover:underline">
-                            {l.discount > 0 ? "ubah diskon" : "diskon"}
-                          </button>
-                        )}
                       </div>
                     </li>
                   ))}
@@ -313,75 +368,63 @@ export function OrderPanel({
         )}
       </div>
 
-      <footer className="hairline-t px-5 pb-5 pt-3">
-        {!empty && quote && (
-          <dl className="mb-2 space-y-0.5 text-[13px]">
-            {/* A subtotal equal to the total (e.g. tax included in the price) says
-                nothing; the printed receipt leaves it out too (till-8). */}
-            {Number(quote.subtotal) !== Number(quote.total) && (
-              <Row label="Subtotal" value={formatRupiah(quote.subtotal)} />
-            )}
-            {Number(quote.discount_total) > 0 && <Row label="Diskon" value={`− ${formatRupiah(quote.discount_total)}`} />}
-            {Number(quote.promo_total) > 0 && <Row label="Promo" value={`− ${formatRupiah(quote.promo_total)}`} />}
-            {Number(quote.service_charge) > 0 && <Row label="Service" value={formatRupiah(quote.service_charge)} />}
-            {Number(quote.delivery_fee) > 0 && <Row label="Ongkos kirim" value={formatRupiah(quote.delivery_fee)} />}
-            {Number(quote.tax_total) > 0 && <Row label={taxLineLabel(quote.tax_label, quote.tax_rate, quote.tax_inclusive)} value={formatRupiah(quote.tax_total)} />}
-            {Number(quote.rounding) !== 0 && <Row label="Pembulatan" value={formatRupiah(quote.rounding)} />}
-          </dl>
+      <footer className="hairline-t px-5 pb-4 pt-2.5">
+        {/* What the total is made of, as one quiet line: label and amount
+            pairs, wrapping to a second line only when there are many. */}
+        {!empty && quote && parts.length > 0 && (
+          <p className="ink-faint mb-1 text-[12px] leading-snug tabular-nums">
+            {parts.map(([label, value], i) => (
+              <span key={label}>
+                {i > 0 && <span aria-hidden> · </span>}
+                <span className="whitespace-nowrap">
+                  {label} {value}
+                </span>
+              </span>
+            ))}
+          </p>
         )}
-        <div className="flex items-baseline justify-between">
+        <div className="flex items-baseline justify-between gap-3">
           <span className="ink-soft text-sm">{bill && !empty ? "Total tagihan" : "Total"}</span>
-          <span className={`text-[26px] font-semibold tabular-nums tracking-[-0.02em] transition-opacity ${quoting ? "opacity-60" : ""}`}>{formatRupiah(total)}</span>
+          <span className={`text-[24px] font-semibold leading-none tabular-nums tracking-[-0.02em] transition-opacity ${quoting ? "opacity-60" : ""}`}>{formatRupiah(total)}</span>
         </div>
         {error && (
           <p role="alert" className="notice notice-bad mt-2 text-sm">
             {error}
           </p>
         )}
-        {sendFirst ? (
-          <>
-            <button onClick={onSend!} disabled={busy || !!sendMissing} className="btn-accent mt-3 w-full py-3.5 text-base">
-              Kirim ke dapur/bar · {unsentCount} item
-            </button>
-            {sendMissing ? (
-              <FormHint missing={sendMissing} />
-            ) : (
-              <p className="ink-faint mt-1.5 text-center text-xs">Slip bar/dapur dan nota meja dicetak. Dibayar nanti, saat meja selesai.</p>
-            )}
-          </>
-        ) : (
-          <>
-            <button onClick={onPay} disabled={!!payMissing || busy} className="btn-accent mt-3 w-full py-3.5 text-base">
-              Bayar {formatRupiah(total)}
-            </button>
-            <FormHint missing={payMissing} />
-          </>
-        )}
-        <div className="mt-2 flex gap-2">
-          {sendFirst && (
-            <button onClick={onPay} disabled={busy} className="btn-quiet min-h-[2.75rem] flex-1 py-2.5 text-sm">
-              Bayar sekarang
-            </button>
+        <div className="mt-2.5 flex gap-2">
+          {sendFirst ? (
+            <>
+              <button onClick={onPay} disabled={busy} className="btn-quiet min-h-[3rem] shrink-0 px-3.5 py-2.5 text-sm">
+                Bayar sekarang
+              </button>
+              <button onClick={onSend!} disabled={busy || !!sendMissing} className="btn-accent min-h-[3rem] min-w-0 flex-1 px-3 py-2.5 text-[15px]">
+                Kirim ke dapur/bar · {unsentCount}
+              </button>
+            </>
+          ) : (
+            <>
+              {onHold && lines.length > 0 && !bill && (
+                <button onClick={onHold} disabled={busy || noType} className="btn-quiet min-h-[3rem] shrink-0 px-3.5 py-2.5 text-sm">
+                  {context.kind === "open" ? "Simpan" : "Simpan dulu"}
+                </button>
+              )}
+              <button onClick={onPay} disabled={!!payMissing || busy} className="btn-accent min-h-[3rem] min-w-0 flex-1 px-3 py-2.5 text-base">
+                Bayar {formatRupiah(total)}
+              </button>
+            </>
           )}
-          {onHold && lines.length > 0 && !bill && (
-            <button onClick={onHold} disabled={busy || noType} className="btn-quiet min-h-[2.75rem] flex-1 py-2.5 text-sm">
-              {context.kind === "open" ? "Simpan perubahan" : "Simpan, bayar nanti"}
-            </button>
-          )}
-          <button onClick={onClear} disabled={busy || (empty && context.kind === "new")} className="btn-quiet min-h-[2.75rem] px-4 py-2.5 text-sm">
-            {context.kind === "new" ? "Kosongkan" : "Tutup"}
-          </button>
         </div>
+        {sendFirst ? (
+          sendMissing ? (
+            <FormHint missing={sendMissing} />
+          ) : (
+            <p className="ink-faint mt-1.5 text-center text-xs">Slip dan nota meja dicetak. Dibayar saat meja selesai.</p>
+          )
+        ) : (
+          <FormHint missing={payMissing} />
+        )}
       </footer>
     </section>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <dt className="ink-soft">{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
-    </div>
   );
 }

@@ -290,6 +290,13 @@ export const IconNote = (p: IconProps) => (
   </Svg>
 );
 
+export const IconTag = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 12.4V5.5A1.5 1.5 0 0 1 5.5 4h6.9a1.5 1.5 0 0 1 1.06.44l6.6 6.6a1.5 1.5 0 0 1 0 2.12l-6.9 6.9a1.5 1.5 0 0 1-2.12 0l-6.6-6.6A1.5 1.5 0 0 1 4 12.4Z" />
+    <circle cx="8.6" cy="8.6" r="1.3" />
+  </Svg>
+);
+
 export const IconLeaf = (p: IconProps) => (
   <Svg {...p}>
     <path d="M5 19c0-8 5-13.5 14-14-.5 9-6 14-14 14Z" />

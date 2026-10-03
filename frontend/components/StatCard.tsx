@@ -24,6 +24,10 @@ export function StatCard({
   spark?: number[];
   footer?: React.ReactNode;
 }) {
+  // A line with no movement in it (all zero, or one value repeated) draws a
+  // flat rule that says nothing; leave the space quiet instead.
+  const moves = !!spark && spark.length > 1 && spark.some((v) => v !== spark[0]);
+  const noDelta = deltaPct === undefined || deltaPct === null;
   return (
     <div className="flex min-h-[132px] min-w-0 flex-col px-5 py-5 md:px-6">
       <p className="ink-soft flex items-center gap-1.5 text-[13px] font-medium">
@@ -34,7 +38,7 @@ export function StatCard({
         <p className="shrink-0 whitespace-nowrap text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.025em] lg:text-[1.5rem] xl:text-[1.75rem]">
           {value}
         </p>
-        {spark && spark.length > 1 && (
+        {spark && moves && (
           <div className="h-8 min-w-0 max-w-24 flex-1 lg:hidden xl:block" aria-hidden>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={spark.map((v, i) => ({ i, v }))} margin={{ top: 2, left: 2, right: 2, bottom: 2 }}>
@@ -65,6 +69,7 @@ export function StatCard({
             {deltaLabel && <span className="ink-faint">{deltaLabel}</span>}
           </p>
         )}
+        {noDelta && deltaLabel && !footer && <p className="ink-faint text-[13px]">Belum ada pembanding</p>}
         {footer}
       </div>
     </div>

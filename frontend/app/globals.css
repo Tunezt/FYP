@@ -195,7 +195,8 @@ body::before {
     radial-gradient(60rem 30rem at 0% 0%, var(--ambient-warm-far), transparent 70%);
 }
 
-:root[data-theme="pos-light"] body::before {
+:root[data-theme="pos-light"] body::before,
+:root[data-surface="pos"] body::before {
   display: none;
 }
 
@@ -674,6 +675,39 @@ table {
   .chip-btn:hover {
     background: var(--fill);
     color: var(--ink);
+  }
+
+  /* An action on a cart line (note, discount): icon and word in an outlined
+     chip, so it reads as a control and not as a caption. Once it carries a
+     value it fills in and shows that value. */
+  .line-action {
+    @apply inline-flex h-11 min-w-0 items-center gap-1.5 rounded-xl px-3 text-[13px] font-medium;
+    color: var(--ink-soft);
+    box-shadow: inset 0 0 0 1px var(--border);
+    transition: background-color 150ms ease-out, color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+
+  .line-action:hover {
+    background: var(--row-hover);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  }
+
+  .line-action:active {
+    background: var(--row-press);
+  }
+
+  .line-action[data-set="discount"] {
+    background: var(--accent-soft);
+    color: var(--ink);
+    box-shadow: none;
+    font-weight: 600;
+  }
+
+  .line-action[data-set="note"] {
+    background: var(--warn-bg);
+    color: var(--warn);
+    box-shadow: none;
   }
 
   /* Choice chip (multi-select like "Service charge berlaku untuk"). */

@@ -5,8 +5,10 @@ import { api, ApiError, POS_TOKEN_KEY } from "@/lib/api";
 import { Select } from "@/components/Select";
 import { FormHint, missingText } from "@/components/FormHint";
 import { ProductPicker } from "@/components/ProductPicker";
-import { IconCheck, IconClose, IconLock, IconPrinter, IconSearch, IconWallet } from "@/components/icons";
-import { formatQty, formatRupiah } from "@/lib/format";
+import { IconCheck, IconClose, IconLock, IconNote, IconPrinter, IconSearch, IconTag, IconWallet } from "@/components/icons";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { Wordmark } from "@/components/Wordmark";
+import { formatQty, formatRupiah, initials } from "@/lib/format";
 import {
   displayName,
   freshSelection,
@@ -618,6 +620,8 @@ export function SellScreen({
   const [receiptAsk, setReceiptAsk] = useState<{ id: string; title: string; amount: string; change: number } | null>(null);
   const [lineDiscountFor, setLineDiscountFor] = useState<string | null>(null);
   const [lineDiscountDraft, setLineDiscountDraft] = useState("");
+  const [noteFor, setNoteFor] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
 
   useEffect(() => {
     api<Loyalty>("/pos/loyalty", { token }).then(setLoyalty).catch(() => setLoyalty(null));
@@ -1037,6 +1041,11 @@ export function SellScreen({
         const l = cart.find((x) => x.uid === uid);
         if (l) setPicker({ item: l.item, editUid: uid, initial: lineSelection(l) });
       }}
+      onNote={(uid) => {
+        const l = cart.find((x) => x.uid === uid);
+        setNoteFor(uid);
+        setNoteDraft(l?.notes ?? "");
+      }}
       onDiscount={
         ctx.kind === "open"
           ? null
@@ -1065,13 +1074,14 @@ export function SellScreen({
   return (
     <div className="min-h-[100dvh]">
       <header className="hairline-b sticky-bar sticky top-0 z-30">
-        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 md:flex-nowrap">
-          <div className="min-w-0 md:w-52">
-            <p className="ink-faint truncate text-[12px] font-medium">{businessName}</p>
-            <p className="truncate text-[15px] font-semibold tracking-[-0.01em]">Kasir · {staffName}</p>
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 lg:flex-nowrap">
+          {/* The sign over the counter. The SVG's box is its artwork, and the
+              swash under the letters hangs low, so it sits a hair above centre. */}
+          <div className="flex min-w-0 items-center lg:w-44">
+            <Wordmark className="w-[128px] -translate-y-px" title={businessName} />
           </div>
-          <nav aria-label="Ruang kerja kasir" className="order-last w-full md:order-none md:w-auto md:flex-1 md:text-center">
-            <div className="segmented flex w-full md:inline-flex md:w-auto" role="tablist">
+          <nav aria-label="Ruang kerja kasir" className="order-last w-full lg:order-none lg:w-auto lg:flex-1 lg:text-center">
+            <div className="segmented flex w-full lg:inline-flex lg:w-auto" role="tablist">
               {(
                 [
                   ["new", panelTitle, count],
@@ -1084,7 +1094,7 @@ export function SellScreen({
                   role="tab"
                   aria-selected={view === id}
                   onClick={() => setView(id)}
-                  className="segmented-item relative flex min-h-[2.75rem] flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-3 md:flex-none md:px-4"
+                  className="segmented-item relative flex min-h-[2.75rem] flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-3 lg:flex-none lg:px-4"
                 >
                   {label}
                   {n !== null && n > 0 && <span className={`tabular-nums ${view === id ? "font-semibold" : "ink-faint"}`}>{n}</span>}
@@ -1095,7 +1105,7 @@ export function SellScreen({
               ))}
             </div>
           </nav>
-          <div className="ml-auto flex items-center gap-1.5 md:ml-0">
+          <div className="ml-auto flex items-center gap-1 lg:ml-0">
             {shift === undefined ? null : shift === null ? (
               <button
                 onClick={() => {
@@ -1135,8 +1145,19 @@ export function SellScreen({
             <button onClick={openCashSheet} className="icon-btn ink-soft h-11 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Kas masuk / keluar">
               <IconWallet className="h-[18px] w-[18px]" /> <span className="hidden xl:inline">Kas</span>
             </button>
-            <button onClick={onLock} className="icon-btn ink-soft h-11 w-auto gap-1.5 rounded-xl px-2.5 text-sm" title="Kunci kasir">
-              <IconLock className="h-[18px] w-[18px]" /> <span className="hidden xl:inline">Kunci</span>
+            <ThemeToggle scope="pos" className="h-11 w-11 rounded-xl" />
+            {/* Who is on the till, and the way to hand it over: one control. */}
+            <button
+              onClick={onLock}
+              className="ml-1 flex h-11 items-center gap-2 rounded-full bg-[color:var(--surface)] pl-1.5 pr-3 shadow-key transition-colors hover:bg-[color:var(--surface-inset)] active:bg-[color:var(--row-press)]"
+              title="Kunci kasir"
+              aria-label={`Kasir ${staffName} — kunci kasir`}
+            >
+              <span className="surface-inset flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold" style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}>
+                {initials(staffName)}
+              </span>
+              <span className="hidden max-w-[7rem] truncate text-sm font-semibold sm:inline">{staffName}</span>
+              <IconLock className="ink-faint h-4 w-4" />
             </button>
           </div>
         </div>
@@ -1226,7 +1247,7 @@ export function SellScreen({
 
             {/* Wide till: the order is always in view */}
             <aside className="hidden lg:block">
-              <div className="glass-card sticky top-[4.5rem] my-4 h-[calc(100dvh-5.5rem)] overflow-hidden p-0">{panel()}</div>
+              <div className="glass-card sticky top-[4.25rem] my-2.5 h-[calc(100dvh-4.875rem)] overflow-hidden p-0">{panel()}</div>
             </aside>
 
             {/* Tablet: a persistent summary that opens the drawer */}
@@ -1350,43 +1371,106 @@ export function SellScreen({
         const gross = target ? linePrice(target) * target.qty : 0;
         const value = Number(lineDiscountDraft || 0);
         const discountMissing = !(value > 0) ? "Isi potongannya" : value > gross ? `Diskon tidak boleh lebih dari ${formatRupiah(gross)}` : null;
+        const save = () => {
+          if (discountMissing) return;
+          setCart((c) => c.map((l) => (l.uid === lineDiscountFor ? { ...l, discount: value } : l)));
+          setLineDiscountFor(null);
+        };
         return (
         <div className="sheet-scrim z-[60]" onClick={() => setLineDiscountFor(null)}>
-          <div className="sheet-panel block px-6 pb-8 pt-5 sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <p className="text-[19px] font-semibold tracking-[-0.015em]">Diskon baris</p>
-            <p className="ink-soft text-sm">Potongan rupiah untuk baris ini saja.</p>
-            <input
-              autoFocus
-              inputMode="numeric"
-              value={lineDiscountDraft}
-              onChange={(e) => setLineDiscountDraft(e.target.value.replace(/[^0-9]/g, ""))}
-              className="field mt-4 py-3 text-2xl font-semibold tabular-nums"
-              placeholder="0"
-              aria-label="Diskon dalam rupiah"
-            />
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={() => {
-                  setCart((c) => c.map((l) => (l.uid === lineDiscountFor ? { ...l, discount: 0 } : l)));
-                  setLineDiscountFor(null);
-                }}
-                className="btn-quiet flex-1 py-3"
-              >
-                Hapus diskon
+          <div role="dialog" aria-modal="true" aria-label="Diskon item" className="sheet-panel block px-6 pb-6 pt-5 sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <span className="surface-inset ink-soft mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                <IconTag className="h-[18px] w-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[19px] font-semibold leading-tight tracking-[-0.015em]">Diskon item</p>
+                <p className="ink-soft mt-0.5 truncate text-sm tabular-nums">
+                  {target ? `${target.item.name} · ${formatRupiah(gross)}` : "Potongan untuk baris ini saja"}
+                </p>
+              </div>
+            </div>
+            <label className="relative mt-4 block">
+              <span className="ink-faint pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium">Rp</span>
+              <input
+                autoFocus
+                inputMode="numeric"
+                value={lineDiscountDraft ? Number(lineDiscountDraft).toLocaleString("id-ID") : ""}
+                onChange={(e) => setLineDiscountDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 9))}
+                onKeyDown={(e) => e.key === "Enter" && save()}
+                className="field py-3 pl-12 text-2xl font-semibold tabular-nums"
+                placeholder="0"
+                aria-label="Diskon dalam rupiah"
+              />
+            </label>
+            <div className="mt-4 flex gap-2">
+              {target && target.discount > 0 && (
+                <button
+                  onClick={() => {
+                    setCart((c) => c.map((l) => (l.uid === lineDiscountFor ? { ...l, discount: 0 } : l)));
+                    setLineDiscountFor(null);
+                  }}
+                  className="btn-quiet px-4 py-3 text-[color:var(--bad)]"
+                >
+                  Hapus
+                </button>
+              )}
+              <button onClick={() => setLineDiscountFor(null)} className="btn-quiet px-4 py-3">
+                Batal
               </button>
-              <button
-                onClick={() => {
-                  if (discountMissing) return;
-                  setCart((c) => c.map((l) => (l.uid === lineDiscountFor ? { ...l, discount: value } : l)));
-                  setLineDiscountFor(null);
-                }}
-                disabled={!!discountMissing}
-                className="btn-accent flex-1 py-3"
-              >
+              <button onClick={save} disabled={!!discountMissing} className="btn-accent flex-1 py-3">
                 Simpan
               </button>
             </div>
             <FormHint missing={discountMissing} />
+          </div>
+        </div>
+        );
+      })()}
+
+      {noteFor && (() => {
+        const target = cart.find((l) => l.uid === noteFor);
+        const save = (text: string) => {
+          setCart((c) => c.map((l) => (l.uid === noteFor ? { ...l, notes: text.trim() } : l)));
+          setNoteFor(null);
+        };
+        return (
+        <div className="sheet-scrim z-[60]" onClick={() => setNoteFor(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Catatan item" className="sheet-panel block px-6 pb-6 pt-5 sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <span className="surface-inset ink-soft mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                <IconNote className="h-[18px] w-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[19px] font-semibold leading-tight tracking-[-0.015em]">Catatan item</p>
+                <p className="ink-soft mt-0.5 truncate text-sm">
+                  {target ? `${target.item.name} · ikut tercetak di slip bar/dapur` : "Ikut tercetak di slip bar/dapur"}
+                </p>
+              </div>
+            </div>
+            <input
+              autoFocus
+              value={noteDraft}
+              maxLength={200}
+              onChange={(e) => setNoteDraft(e.target.value.slice(0, 200))}
+              onKeyDown={(e) => e.key === "Enter" && save(noteDraft)}
+              className="field mt-4 select-text py-3"
+              placeholder="mis. es sedikit, tanpa gula"
+              aria-label="Catatan untuk bar/dapur"
+            />
+            <div className="mt-4 flex gap-2">
+              {target?.notes && (
+                <button onClick={() => save("")} className="btn-quiet px-4 py-3 text-[color:var(--bad)]">
+                  Hapus
+                </button>
+              )}
+              <button onClick={() => setNoteFor(null)} className="btn-quiet px-4 py-3">
+                Batal
+              </button>
+              <button onClick={() => save(noteDraft)} disabled={noteDraft.trim() === (target?.notes ?? "")} className="btn-accent flex-1 py-3">
+                Simpan catatan
+              </button>
+            </div>
           </div>
         </div>
         );

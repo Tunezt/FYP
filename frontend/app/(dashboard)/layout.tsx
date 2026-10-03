@@ -11,6 +11,7 @@ import type { StaffMember } from "@/lib/types";
 import { IconBell, IconBox, IconChart, IconChevronRight, IconGear, IconHome, IconLogout, IconMore, IconSpark, IconUsers, IconWallet } from "@/components/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { BrandMark, Sheet } from "@/components/ui";
+import { Wordmark } from "@/components/Wordmark";
 
 const NAV = [
   { href: "/overview", label: "Ringkasan", Icon: IconHome },
@@ -125,7 +126,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Content */}
-      <main className="min-w-0 flex-1 px-4 pb-32 pt-5 md:px-8 md:pb-12 md:pt-4">
+      <main className="min-w-0 flex-1 px-4 pb-32 pt-3 md:px-8 md:pb-12 md:pt-4">
+        {/* Phone: the sidebar is gone, so the sign moves to the top of the
+            page. Ink on porcelain here — the lit version belongs to the
+            charcoal shell. It scrolls away with the page; the tab bar stays. */}
+        <div className="mb-4 flex items-center justify-between md:hidden">
+          <Link href="/overview" aria-label="Poernama — ke Ringkasan" className="rounded-lg py-1.5">
+            <Wordmark className="w-[124px]" />
+          </Link>
+          <ThemeToggle className="h-10 w-10 rounded-full" />
+        </div>
         {demo && (
           <div
             className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl px-4 py-2.5 text-[13px]"
