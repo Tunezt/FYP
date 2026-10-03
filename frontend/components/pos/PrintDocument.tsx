@@ -1,11 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
+
 // A print job's frozen document (prt-3), drawn as the slip it will be on paper.
 // The same blocks a print bridge turns into ESC/POS; here they become an 80mm
 // white slip for preview and for the browser's own print dialog.
 
 export type PrintBlock = {
-  t: "title" | "banner" | "line" | "label" | "kv" | "rule" | "item" | "item_priced" | "total" | "text" | "note";
+  t: "title" | "banner" | "line" | "label" | "kv" | "rule" | "item" | "item_priced" | "total" | "text" | "note" | "qr";
+  data?: string;
   text?: string;
   left?: string;
   right?: string;
@@ -22,6 +26,16 @@ export type PrintBlock = {
 };
 
 export type PrintDoc = { v: number; kind: string; blocks: PrintBlock[]; reprint?: number };
+
+/** till-7: the WhatsApp receipt QR at the foot of a receipt, as on paper. */
+function QrBlock({ data }: { data: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    QRCode.toDataURL(data, { width: 280, margin: 1, errorCorrectionLevel: "M" }).then(setSrc).catch(() => setSrc(null));
+  }, [data]);
+  // eslint-disable-next-line @next/next/no-img-element
+  return src ? <img src={src} alt="Kode QR struk WhatsApp" className="mx-auto my-2 h-36 w-36" /> : null;
+}
 
 export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
   return (
@@ -102,6 +116,8 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
                 <span>{b.right}</span>
               </p>
             );
+          case "qr":
+            return b.data ? <QrBlock key={i} data={b.data} /> : null;
           case "note":
             return (
               <p key={i} className="font-bold">

@@ -43,6 +43,16 @@ export default function PrivacyPage() {
             disimpan. Nomornya hanya muncul di catatan server sementara, dan dibalas bahwa nomor itu belum
             terdaftar.
           </li>
+          <li>
+            <strong>Struk lewat WhatsApp:</strong> pelanggan yang meminta struk dengan memindai kode QR dan
+            mengirim pesan &ldquo;STRUK&rdquo; ke nomor Poernama memberikan nomor WhatsApp-nya kepada Meta,
+            yang mengantar pesan itu dan balasan struknya. Nomor itu tidak disimpan di Poernama (kecuali
+            pelanggan memang terdaftar di program poin); yang dicatat hanya bahwa struk itu diminta.
+          </li>
+          <li>
+            <strong>Struk lewat QR:</strong> struk yang dibuka dengan memindai kode QR di kasir tidak memuat
+            nama, alamat, atau nomor HP pelanggan, dan tidak meminta data apa pun.
+          </li>
         </ul>
       </Section>
 
@@ -57,7 +67,8 @@ export default function PrivacyPage() {
       <Section heading="Penyedia layanan yang ikut memproses">
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <strong>Meta (WhatsApp Business Platform):</strong> mengantar pesan antara pemilik dan asisten.
+            <strong>Meta (WhatsApp Business Platform):</strong> mengantar pesan antara pemilik dan asisten,
+            dan struk yang diminta pelanggan lewat WhatsApp.
           </li>
           <li>
             <strong>Google (Gemini):</strong> membaca pertanyaan dan foto nota yang dikirim pemilik lewat
@@ -101,8 +112,9 @@ export default function PrivacyPage() {
         system for the Poernama café. It stores staff, sales, customer loyalty and guest order details,
         and the owner&apos;s WhatsApp messages and receipt photos, only to run the business. Messages
         pass through Meta; the owner&apos;s questions and photos are read by Google Gemini; data is
-        hosted on Supabase, Railway and Vercel. Nothing is sold or used for advertising. Deletion
-        requests: see /hapus-data.
+        hosted on Supabase, Railway and Vercel. A customer who asks for a receipt on WhatsApp (by scanning
+        a QR and sending &ldquo;STRUK&rdquo;) has their number processed by Meta for that message; Poernama does not
+        store it. Nothing is sold or used for advertising. Deletion requests: see /hapus-data.
       </p>
     </LegalPage>
   );

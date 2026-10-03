@@ -81,6 +81,19 @@ async def _process_message(message: dict) -> None:
 
     sender = message.get("from", "")
     msg_type = message.get("type", "")
+
+    # till-7, route A: "STRUK <code>" asks for a receipt, from any number — a
+    # customer, who is registered nowhere, or an owner. Answered before the
+    # owner lookup so a customer never hears "belum terdaftar" for it.
+    if msg_type == "text":
+        from app.whatsapp.receipts import answer_receipt_request, receipt_code_in
+
+        code = receipt_code_in(message.get("text", {}).get("body", ""))
+        if code is not None:
+            intent = await answer_receipt_request(sender, code, send_text)
+            logger.info("whatsapp receipt request: %s", intent)
+            return
+
     business = await _resolve_business(sender)
 
     if business is None:

@@ -324,6 +324,27 @@ Changing it later is safe — nothing is rewritten, every report simply re-cuts 
 same sales on the new boundary — but the daily numbers either side of the change
 will not line up with the ones printed before it, so do it once, at setup.
 
+**Then replace the receipt placeholders.** A new cafe starts with obvious fakes,
+marked *Contoh* in Dashboard → Pengaturan → Data di struk: *Jl. Lorem Ipsum No. 1,
+Kota Dolor*, *0812-0000-0000*, *@poernama.cafe*. Type the real address, phone and
+Instagram before the first receipt is printed. The tax starts as *PBJT 10%,
+included in the menu price*; confirm the rate (and whether it is included or
+added on top) with the regency's Bapenda and set it under *Pajak, service &
+pembulatan*.
+
+New cafes also start with **"Wajib buka shift sebelum menjual"** on (the till
+asks for the opening cash before the first sale) and **"Tanya dulu sebelum
+mencetak struk pelanggan"** on (after payment the cashier taps Kertas, QR,
+WhatsApp or Tidak perlu; kitchen and bar slips always print). Both are in
+Pengaturan.
+
+**WhatsApp receipts switch on with one variable.** Once the bot's Indonesian
+number is registered and works, set `WHATSAPP_RECEIPT_NUMBER` in Railway to that
+number in international digits (e.g. `62811…`). The till's *WhatsApp* choice stops
+saying "Belum aktif", and printed receipts gain a QR at the foot. Customers scan
+it, send the ready-made `STRUK <code>` message, and the bot replies with the
+receipt. Leave it empty until a test message from a +62 phone gets a reply.
+
 **`python -m app.seed` is the demo cafe, not this.** It invents a month of sales
 and deletes and recreates what it made last time. It refuses to run with
 `ENVIRONMENT=production`, and asks before touching any database that is not on

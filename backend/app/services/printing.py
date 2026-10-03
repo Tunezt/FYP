@@ -242,8 +242,19 @@ async def render_receipt(session: AsyncSession, order: Order) -> dict:
     blocks += [
         {"t": "rule"},
         {"t": "text", "text": "Sebutkan nomor pesanan saat mengambil. Terima kasih!", "align": "center"},
-        {"t": "text", "text": f"Ref {order_number(order.id)}", "align": "center"},
     ]
+    # till-7, route A: once the bot's number is live, the paper carries the QR
+    # that opens WhatsApp with "STRUK <code>" ready, so the customer can keep
+    # the receipt on their phone too.
+    from app.services.receipt_delivery import ensure_receipt_code, whatsapp_link, whatsapp_live
+
+    if whatsapp_live():
+        code = await ensure_receipt_code(session, order)
+        blocks += [
+            {"t": "qr", "data": whatsapp_link(code)},
+            {"t": "text", "text": "Simpan struk di WhatsApp: pindai, lalu kirim pesannya", "align": "center"},
+        ]
+    blocks.append({"t": "text", "text": f"Ref {order_number(order.id)}", "align": "center"})
     return {"v": 1, "kind": "receipt", "blocks": blocks}
 
 

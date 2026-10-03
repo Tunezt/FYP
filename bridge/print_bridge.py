@@ -77,6 +77,24 @@ def _inverse(on: bool) -> bytes:
     return GS + b"B" + bytes([1 if on else 0])
 
 
+def qr_command(data: str, module: int = 6) -> bytes:
+    """GS ( k, QR model 2, error correction M, centred. Standard ESC/POS, but
+    NOT yet seen on the café's IW-J300H: only receipts carry it, and only once
+    the WhatsApp bot is live (till-7). A printer that ignores it prints the
+    caption under it, which still says what to do."""
+    payload = data.encode("ascii", "replace")
+    n = len(payload) + 3
+    return (
+        _align(1)
+        + GS + b"(k\x04\x00\x31\x41\x32\x00"              # model 2
+        + GS + b"(k\x03\x00\x31\x43" + bytes([max(1, min(module, 16))])   # module size
+        + GS + b"(k\x03\x00\x31\x45\x31"                # error correction M
+        + GS + b"(k" + bytes([n % 256, n // 256]) + b"\x31\x50\x30" + payload   # store
+        + GS + b"(k\x03\x00\x31\x51\x30"                # print
+        + LF + _align(0)
+    )
+
+
 def cut_command(mode: str, feed: int) -> bytes:
     """GS V function B: feed to the cutter plus `feed` lines, then cut."""
     if mode == "none":
@@ -295,6 +313,10 @@ def render_block(w: Writer, block: dict, profile: Profile) -> None:
     elif t == "text":
         w.rows(wrap(block.get("text", ""), cols), align="center" if block.get("align") == "center" else "left",
                bold=block.get("style") == "bold")
+    elif t == "qr":
+        # till-7: the WhatsApp receipt link as a QR code under the receipt.
+        if block.get("data"):
+            w.buf += qr_command(str(block["data"]))
     else:
         # A block this bridge does not know (a newer server). Print whatever
         # words it carries rather than silently dropping part of an order.

@@ -8,7 +8,7 @@ import { BrandMark } from "@/components/ui";
 // people to the owner at the café, which is true for a single-shop system.
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || null;
 
-export const UPDATED = "27 September 2026";
+export const UPDATED = "1 Oktober 2026";
 
 export function ContactLine() {
   return CONTACT_EMAIL ? (
