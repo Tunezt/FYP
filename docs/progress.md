@@ -2047,3 +2047,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Verified in the browser** (1280x800): Kas went "Isi jumlah dan alasan" → "Isi alasan" → enabled → "Pilih supplier yang dibayar" → "Isi alasan, lalu pilih supplier"; *Buka shift* disabled with "Isi modal awal — tulis 0 kalau laci kosong"; *Kirim ke dapur/bar* "Isi nomor meja dulu"; payment for *Antar* "Isi alamat pengantaran dan nomor HP penerima"; *Tambah staf* "Isi nama dan PIN 4 angka".
 **Deviation:** owner's plan of 1 Oct, work item 2; not a roadmap task. Not committed, per instruction; snapshot `refs/wip/till-2`.
 **Next:** [till-3] "Ubah pesanan" becomes "Tambah / ubah".
+
+
+### [till-3] "Ubah pesanan" becomes "Tambah / ubah" for every unpaid order
+**Date:** 2026-10-01
+**Status:** done in software; **uncommitted at the owner's request**
+**Changed:** frontend/components/pos/ActiveOrders.tsx
+**Gates:** pytest 670 passed, 1 failed, 0 skipped (671 collected); the failure is the pre-existing voucher fixture date (see till-1) - migrations round-trip ok (0043 -> 0042 -> 0043) - frontend build ok (synced copy) - seed ok
+**Notes:**
+- Tables already said *Tambah / ubah*; a held takeaway or QR order said *Ubah pesanan*. Adding is the common case (a family orders more drinks) and removing is still possible, so both now say **Tambah / ubah**.
+- Kept as *Ubah pesanan* on purpose: the button inside the "Harga berubah sejak dipesan" notice that appears when an item on the order is no longer sold. There the cashier must change the order, not add to it.
+- Verified in the browser: a held *Bawa pulang* order (PESANAN 001, Croissant) offers *Bayar Rp 28.000*, *Tambah / ubah*, *Batalkan*.
+**Deviation:** owner's plan of 1 Oct, work item 3. Not committed, per instruction; snapshot `refs/wip/till-3`.
+**Next:** [till-4] no default order type; a shift must be open before selling.

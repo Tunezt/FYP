@@ -444,7 +444,9 @@ function OrderDetail({
             )}
             <div className="flex gap-2">
               <button onClick={() => actions.resume(o)} disabled={busy} className="btn-quiet flex-1 py-2.5 text-sm">
-                {table ? "Tambah / ubah" : "Ubah pesanan"}
+                {/* till-3: adding is the common case (a family orders more drinks), for a
+                    table and for anything else not yet paid; removing is still possible. */}
+                Tambah / ubah
               </button>
               <button onClick={() => setCancelling(true)} disabled={busy} className="btn-quiet flex-1 py-2.5 text-sm">
                 Batalkan
