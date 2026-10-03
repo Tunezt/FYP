@@ -2487,3 +2487,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - What still needs hands at the printer tonight: seeing that `ESC M` (Font B) works on the IW-J300H at all, since `row` and polish-4 both rely on it for the middle size.
 **Deviation:** not a roadmap task.
 **Next:** the tablet runs the installer once more; photo of a slip.
+
+
+### [kasir-4] A real home-screen icon for the till; the installer comes off the site
+**Date:** 2026-10-04
+**Status:** done and pushed at the owner's instruction; not yet seen on the tablet's home screen
+**Changed:** scripts/app_icon.py (new), frontend/public/icons/kasir-192.png, kasir-512.png, kasir-maskable-512.png (new), frontend/public/kasir.webmanifest, frontend/public/pasang-bridge.sh (removed)
+**Gates:** frontend only; the manifest is static JSON. Full pytest last run 733 passed, 4 clock-dependent failures at 02.30 WIB.
+**Notes:**
+- Owner: the bridge is installed and the new slips are "all good" (so `ESC M`, Font B, works on the IW-J300H: seen by the owner on paper, 4 Oct). Next: "app icon on the main page of the tablet so the staff just click it".
+- The manifest listed only the SVG mark, which some Android builds replace with a letter tile. `scripts/app_icon.py` draws the same mark (the wordmark's eclipse O on the ink disc) as PNGs at 192 and 512 px plus a maskable 512, reusing the receipt logo's path reader. Looked at both 512s: correct.
+- prt-11's temporary installer is removed from the site now that the tablet has run it. `bridge/dist/pasang-bridge.sh` stays on the laptop.
+**Deviation:** not a roadmap task.
+**Next:** on the tablet: Chrome -> /kasir -> menu -> "Tambahkan ke layar utama".
