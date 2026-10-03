@@ -98,6 +98,8 @@ class Business(Base):
     # M15-T8: raised when the owner re-pairs. Every kiosk link and till session
     # carries the generation it was issued under; an older one is refused.
     pairing_generation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    # till-4, migration 0044: no payment at the till without the cashier's open shift.
+    require_shift: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
 

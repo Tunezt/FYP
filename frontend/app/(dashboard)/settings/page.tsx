@@ -68,7 +68,7 @@ export default function SettingsPage() {
   const loyalty = useOwnerData<LoyaltySettings>("/api/loyalty-settings");
   const mutate = useOwnerMutation();
 
-  const [profileDraft, setProfileDraft] = useState<{ name: string; business_type: string; day_start_hour: number } | null>(null);
+  const [profileDraft, setProfileDraft] = useState<{ name: string; business_type: string; day_start_hour: number; require_shift: boolean } | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [staffSheet, setStaffSheet] = useState(false);
   const [staffDraft, setStaffDraft] = useState<{ name: string; pin: string; role: "staff" | "manager" }>({
@@ -134,6 +134,7 @@ export default function SettingsPage() {
     name: b?.name ?? "",
     business_type: b?.business_type ?? "cafe",
     day_start_hour: b?.day_start_hour ?? 0,
+    require_shift: b?.require_shift ?? false,
   };
   const pricingForm: PricingForm = pricingDraft ?? toForm(pricing.data);
   const loyaltyForm: LoyaltyForm = loyaltyDraft ?? toLoyaltyForm(loyalty.data);
@@ -332,6 +333,21 @@ export default function SettingsPage() {
                 value={String(draft.day_start_hour)}
                 onChange={(value) => setProfileDraft({ ...draft, day_start_hour: Number(value) })}
               />
+            </label>
+            <label className="flex items-start gap-3 pt-1">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={draft.require_shift}
+                onChange={(e) => setProfileDraft({ ...draft, require_shift: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium">Wajib buka shift sebelum menjual</span>
+                <span className="ink-faint block text-xs">
+                  Kasir menghitung modal awal di laci dulu; sebelum itu layar kasir tidak bisa menerima pembayaran. Jadi
+                  setiap rupiah di laci masuk hitungan shift.
+                </span>
+              </span>
             </label>
             <div className="ink-soft flex flex-wrap gap-x-6 gap-y-1 pt-1 text-xs">
               <span>WhatsApp: +{b?.owner_phone}</span>

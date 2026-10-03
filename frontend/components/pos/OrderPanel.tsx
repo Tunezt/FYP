@@ -112,7 +112,9 @@ export function OrderPanel({
   const sendFirst = onSend !== null && lines.length > 0;
   // till-2: the main button says what it is still waiting for.
   const sendMissing = sendFirst && !tableLabel.trim() ? "Isi nomor meja dulu" : null;
-  const payMissing = empty ? "Ketuk menu untuk menambahkan item" : null;
+  // till-4: no order type is chosen for the cashier.
+  const noType = orderType === "";
+  const payMissing = empty ? "Ketuk menu untuk menambahkan item" : noType ? "Pilih jenis pesanan" : null;
 
   const title = context.kind === "new" ? "Pesanan baru" : context.title;
   const subtitle =
@@ -146,6 +148,11 @@ export function OrderPanel({
       </header>
 
       <div className="px-5">
+        {onOrderType && noType && (
+          <p className="mb-1.5 text-[13px] font-medium" style={{ color: "var(--warn)" }}>
+            Pilih jenis pesanan
+          </p>
+        )}
         {onOrderType && (
           <div className={`segmented grid w-full gap-[3px] ${orderTypes.length === 4 ? "grid-cols-2" : "grid-cols-3"}`} role="group" aria-label="Jenis pesanan">
             {orderTypes.map((t) => (
@@ -326,7 +333,7 @@ export function OrderPanel({
           </>
         ) : (
           <>
-            <button onClick={onPay} disabled={empty || busy} className="btn-accent mt-3 w-full py-3.5 text-base">
+            <button onClick={onPay} disabled={empty || busy || noType} className="btn-accent mt-3 w-full py-3.5 text-base">
               Bayar {formatRupiah(total)}
             </button>
             <FormHint missing={payMissing} />
@@ -339,7 +346,7 @@ export function OrderPanel({
             </button>
           )}
           {onHold && lines.length > 0 && (
-            <button onClick={onHold} disabled={busy} className="btn-quiet flex-1 py-2.5 text-sm">
+            <button onClick={onHold} disabled={busy || noType} className="btn-quiet flex-1 py-2.5 text-sm">
               {bill ? "Simpan, belum kirim" : context.kind === "open" ? "Simpan perubahan" : "Simpan, bayar nanti"}
             </button>
           )}

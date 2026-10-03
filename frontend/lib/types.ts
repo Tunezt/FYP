@@ -88,6 +88,7 @@ export type Business = {
   timezone: string;
   /** M15-T4: the hour the business day starts (0..23). 0 = calendar day. */
   day_start_hour: number;
+  require_shift?: boolean; // till-4: no sale at the till without an open shift
   onboarding_completed_at: string | null;
 };
 

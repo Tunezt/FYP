@@ -37,6 +37,7 @@ class BusinessOut(BaseModel):
     language_preference: str
     timezone: str
     day_start_hour: int          # M15-T4: the hour the business day starts, 0..23
+    require_shift: bool = False  # till-4: no sale at the till without an open shift
     onboarding_completed_at: datetime | None
 
     model_config = {"from_attributes": True}

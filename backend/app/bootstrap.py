@@ -105,6 +105,7 @@ async def bootstrap(
             owner_phone=owner_phone,
             language_preference=language,
             timezone=timezone,
+            require_shift=True,   # till-4: the owner's rule for every new café
         )
         session.add(business)
         await session.flush()

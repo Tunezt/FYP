@@ -359,6 +359,12 @@ class ReversalOut(BaseModel):
 # ── Shifts (M7-T1) ──────────────────────────────────────────────────────────
 
 
+class PosConfigOut(BaseModel):
+    """How this café's till works (till-4 onwards)."""
+
+    require_shift: bool = False      # no payment without the cashier's open shift
+
+
 class ShiftOpenIn(BaseModel):
     opening_float: Decimal = Field(default=Decimal(0), ge=0)
 

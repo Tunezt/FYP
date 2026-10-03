@@ -582,6 +582,7 @@ class BusinessUpdateIn(BaseModel):
     # night before. Bounded here as well as by the DDL check constraint, so a
     # bad value is a 422 in Indonesian rather than a database error.
     day_start_hour: int | None = Field(default=None, ge=0, le=23)
+    require_shift: bool | None = None   # till-4
 
 
 # ── Pricing settings (M7-T4b): tax, service charge, rounding, discount gate ──

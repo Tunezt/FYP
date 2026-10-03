@@ -247,6 +247,7 @@ async def register(payload: RegisterIn):
             owner_phone=phone,
             language_preference=payload.language_preference,
             timezone=payload.timezone,
+            require_shift=True,   # till-4: same as app.bootstrap, the two must not drift
         )
         session.add(business)
         await session.flush()

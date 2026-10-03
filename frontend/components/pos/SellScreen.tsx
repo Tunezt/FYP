@@ -192,7 +192,9 @@ export function SellScreen({
   const [ctx, setCtx] = useState<Ctx>({ kind: "new" });
   const [cart, setCart] = useState<CartLine[]>([]);
   const [sentLines, setSentLines] = useState<ActiveLine[]>([]);
-  const [orderType, setOrderType] = useState("takeaway");
+  // till-4 (decision 1): no type until the cashier taps one, so a pre-selected
+  // "Makan di sini" can never be sent by accident. "" = not chosen yet.
+  const [orderType, setOrderType] = useState("");
   const [guestName, setGuestName] = useState("");
   const [tableLabel, setTableLabel] = useState("");
   const [externalRef, setExternalRef] = useState("");
@@ -219,7 +221,7 @@ export function SellScreen({
     setCart([]);
     setSentLines([]);
     setCtx({ kind: "new" });
-    setOrderType("takeaway");
+    setOrderType("");
     setGuestName("");
     setTableLabel("");
     setExternalRef("");
@@ -302,7 +304,7 @@ export function SellScreen({
           ],
           bill_discount: Number(billDiscount || 0),
           voucher_code: voucherCode.trim() || null,
-          order_type: orderType,
+          order_type: orderType || undefined,
         },
       })
         .then((q) => {
@@ -372,6 +374,11 @@ export function SellScreen({
   async function holdCurrent(quiet = false): Promise<boolean> {
     if (cart.length === 0) return true;
     if (ctx.kind === "open" && !dirty) return true;
+    if (!orderType) {
+      setPanelError("Pilih jenis pesanan dulu — pesanan ini belum bisa disimpan.");
+      setView("new");
+      return false;
+    }
     if (orderType === "delivery") {
       setPanelError("Pesanan antar dibayar langsung — tidak bisa disimpan untuk nanti.");
       setView("new");
@@ -639,12 +646,13 @@ export function SellScreen({
     needsPin && managerPin.length < 4 && "PIN pemilik/manajer untuk diskon",
   ]);
   const payMissing =
+    (!orderType ? "Pilih jenis pesanan" : null) ??
     payFill ??
     (!splitValid ? "Bagian tunai harus lebih dari 0 dan kurang dari total" : null) ??
     (quote?.voucher_error && voucherCode.trim() ? "Kode voucher tidak berlaku — hapus atau ganti kodenya" : null);
 
   function openPay() {
-    if (cart.length === 0 && sentLines.length === 0) return;
+    if ((cart.length === 0 && sentLines.length === 0) || !orderType) return;
     const missing = cart.filter((l) => !itemById.has(l.item.id));
     if (missing.length) {
       setPanelError("Ada item yang sudah tidak ada di menu — hapus dulu.");
@@ -736,6 +744,10 @@ export function SellScreen({
       // connection replays this same payment instead of charging twice.
       setPayError(e instanceof ApiError ? e.detail : "Koneksi terputus — tekan Bayar lagi. Pembayaran tidak akan tercatat dua kali.");
       if (e instanceof ApiError && e.status === 409) void loadActive();
+      if (e instanceof ApiError && e.detail.startsWith("Shift belum dibuka")) {
+        setPaying(false);
+        loadShift();
+      }
     } finally {
       setBusy(false);
     }
@@ -811,6 +823,26 @@ export function SellScreen({
     api<Shift | null>("/pos/shift", { token }).then(setShift).catch(() => setShift(null));
   }, [token]);
   useEffect(loadShift, [loadShift]);
+  // till-4 (decision 2): a café that requires it does not sell before the
+  // cashier has counted the opening cash. The server refuses it too.
+  const [config, setConfig] = useState<{ require_shift: boolean } | null>(null);
+  useEffect(() => {
+    api<{ require_shift: boolean }>("/pos/config", { token }).then(setConfig).catch(() => setConfig(null));
+  }, [token]);
+  const shiftGate = !!config?.require_shift && shift === null && !shiftResult;
+  async function openShiftNow() {
+    if (shiftAmount === "" || busy) return;
+    setBusy(true);
+    setShiftError(null);
+    try {
+      setShift(await api<Shift>("/pos/shift/open", { token, body: { opening_float: Number(shiftAmount) } }));
+      setShiftAmount("");
+    } catch (e: unknown) {
+      setShiftError(e instanceof ApiError ? e.detail : "Gagal membuka shift — coba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const shiftMissing =
     shiftAmount === "" ? (shiftSheet === "open" ? "Isi modal awal — tulis 0 kalau laci kosong" : "Isi uang yang dihitung di laci") : null;
@@ -1131,6 +1163,7 @@ export function SellScreen({
                   <p className="ink-soft truncate text-[13px] font-medium">
                     {panelTitle} · {count > 0 ? `${count} item${sentLines.length ? " baru" : ""} · lihat` : sentLines.length ? "semua terkirim" : "kosong"}
                     {tableBill && cart.length > 0 && !tableLabel.trim() && <span style={{ color: "var(--warn)" }}> · isi nomor meja</span>}
+                    {count > 0 && !orderType && <span style={{ color: "var(--warn)" }}> · pilih jenis pesanan</span>}
                   </p>
                   <p className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{formatRupiah(cartTotal)}</p>
                 </button>
@@ -1142,7 +1175,7 @@ export function SellScreen({
                     Kirim
                   </button>
                 ) : (
-                  <button onClick={openPay} disabled={(cart.length === 0 && sentLines.length === 0) || busy} className="btn-accent px-6 py-3">
+                  <button onClick={openPay} disabled={(cart.length === 0 && sentLines.length === 0) || busy || !orderType} className="btn-accent px-6 py-3">
                     Bayar
                   </button>
                 )}
@@ -1515,6 +1548,40 @@ export function SellScreen({
               </button>
             </div>
             <FormHint missing={shiftMissing} />
+          </div>
+        </div>
+      )}
+
+      {shiftGate && (
+        <div className="sheet-scrim z-[80] items-center p-4" role="dialog" aria-modal="true" aria-labelledby="shift-gate-title">
+          <div className="glass-card w-full max-w-md px-6 pb-6 pt-6">
+            <p className="ink-soft text-[13px] font-medium">
+              {businessName} · {staffName}
+            </p>
+            <h2 id="shift-gate-title" className="mt-1 text-[24px] font-semibold tracking-[-0.02em]">
+              Buka shift dulu
+            </h2>
+            <p className="ink-soft mt-1 text-sm">Hitung uang di laci, lalu isi modal awalnya. Penjualan baru bisa diterima setelah shift dibuka.</p>
+            <label className="mt-5 block">
+              <span className="text-[13px] font-medium">Modal awal di laci (Rp)</span>
+              <input
+                autoFocus
+                inputMode="numeric"
+                value={shiftAmount ? Number(shiftAmount).toLocaleString("id-ID") : ""}
+                onChange={(e) => setShiftAmount(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
+                onKeyDown={(e) => e.key === "Enter" && void openShiftNow()}
+                className="field mt-1 py-3 text-2xl font-semibold tabular-nums"
+                placeholder="0"
+              />
+            </label>
+            {shiftError && <p className="notice notice-bad mt-3">{shiftError}</p>}
+            <button onClick={() => void openShiftNow()} disabled={busy || shiftAmount === ""} className="btn-accent mt-5 w-full py-3.5 text-base">
+              {busy ? "Membuka…" : "Buka shift"}
+            </button>
+            <FormHint missing={shiftAmount === "" ? "Isi modal awal — tulis 0 kalau laci kosong" : null} />
+            <button onClick={onLock} className="ink-soft mt-4 flex min-h-[2.75rem] w-full items-center justify-center gap-1.5 rounded-xl text-sm">
+              <IconLock className="h-4 w-4" /> Bukan {staffName}? Kunci kasir
+            </button>
           </div>
         </div>
       )}

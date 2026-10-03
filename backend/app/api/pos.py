@@ -18,7 +18,7 @@ from app.core.db import tenant_session
 from app.ai.periods import period_range
 from app.services import pin_guard
 from app.core.deps import PosCtx
-from app.schemas.pos import CashMovementIn, CashMovementOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
+from app.schemas.pos import CashMovementIn, CashMovementOut, PosConfigOut, PosSupplierOut, ShiftCloseIn, ShiftOpenIn, ShiftOut
 from app.schemas.menu import (
     ActiveOrderOut, DraftIn, LineCancelIn, OpenOrderUpdateIn, PosTicketOut, RepriceIn, SendIn, TicketCancelIn, TicketSettleIn,
 )
@@ -226,8 +226,33 @@ async def pos_items(ctx: PosCtx):
     ]
 
 
+# ── A shift before selling (till-4) ─────────────────────────────────────────
+
+SHIFT_REQUIRED = "Shift belum dibuka — buka shift dan isi modal awal di laci dulu, baru terima pembayaran"
+
+
+async def require_open_shift(ctx) -> None:
+    """The owner's rule (1 Oct 2026): no money is taken at the till until the
+    cashier has counted the opening cash into the drawer. A café that has not
+    switched it on (`businesses.require_shift`) sells without a shift, as M7-T1
+    always allowed."""
+    from app.services.shifts import open_shift_id
+
+    business = await ctx.session.get(Business, ctx.business_id)
+    if business is not None and business.require_shift and await open_shift_id(ctx.session, ctx.staff_id) is None:
+        raise HTTPException(status_code=409, detail=SHIFT_REQUIRED)
+
+
+@router.get("/config", response_model=PosConfigOut)
+async def pos_config(ctx: PosCtx):
+    """What the till needs to know about how this café works."""
+    business = await ctx.session.get(Business, ctx.business_id)
+    return PosConfigOut(require_shift=bool(business and business.require_shift))
+
+
 @router.post("/sales", response_model=SaleOut)
 async def pos_record_sale(payload: SaleIn, ctx: PosCtx):
+    await require_open_shift(ctx)
     start = time.perf_counter()
     try:
         recorded = await record_sale(
@@ -412,6 +437,8 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
         if replayed.status == "open":
             raise HTTPException(status_code=409, detail="Kode transaksi ini dipakai pesanan yang belum dibayar — muat ulang kasir")
         return await _order_out(ctx.session, await replay_created(ctx.session, replayed))
+    # A replay of a sale already made is answered above; new money needs a shift.
+    await require_open_shift(ctx)
     try:
         await require_explicit_choices(ctx.session, specs)
         created = await create_order(
@@ -563,6 +590,7 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
     from app.services.tickets import OrderChanged, PricesChanged, TicketNotFound, find_by_client_ref, get_open_order, settle_ticket
 
     start = time.perf_counter()
+    await require_open_shift(ctx)
     try:
         # The lock on the reference comes before the row is read, so a second
         # copy of the same tap waits for the first and then replays it (svc-2).
@@ -1321,6 +1349,10 @@ async def pos_record_cash(payload: CashMovementIn, ctx: PosCtx):
     and stamped with the cashier's open shift."""
     from app.services.cash import CashInvalid, cash_movement_view, record_cash_movement
 
+    from app.services.cash import KINDS, through_the_drawer
+
+    if payload.kind in KINDS and through_the_drawer(payload.kind, payload.via or KINDS[payload.kind][2]):
+        await require_open_shift(ctx)   # till-4: the drawer is only counted inside a shift
     if payload.kind == "supplier_payment" and payload.supplier_id is None:
         # till-2: nothing chosen is a form left incomplete, not an unknown supplier.
         raise HTTPException(status_code=422, detail="Supplier belum dipilih — pilih supplier yang dibayar dulu")

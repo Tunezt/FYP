@@ -151,6 +151,7 @@ async def seed(confirm: bool = False) -> None:
             language_preference="id",
             timezone="Asia/Jakarta",
             onboarding_completed_at=now - timedelta(days=31),
+            require_shift=True,   # till-4
         )
         # The demo café has 30 days of invented history, so its row has to be at
         # least that old or the story does not hold together: M15-T10 refuses a
