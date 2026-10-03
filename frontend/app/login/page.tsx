@@ -5,7 +5,7 @@ import { FormHint, missingText } from "@/components/FormHint";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError, OWNER_TOKEN_KEY } from "@/lib/api";
-import { demoAllowed, enableDemo } from "@/lib/demo";
+import { demoAllowed, disableDemo, enableDemo } from "@/lib/demo";
 
 // Owner login is phone + owner PIN only. The WhatsApp code needs a Meta
 // Authentication template, which Meta gates behind business verification
@@ -42,6 +42,7 @@ export default function LoginPage() {
         body: { phone, pin },
       });
       if (res.token) {
+        disableDemo();   // till-17: a real login ends the demo, or every save is silently faked
         localStorage.setItem(OWNER_TOKEN_KEY, res.token);
         router.replace("/overview");
       }

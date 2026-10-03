@@ -2290,3 +2290,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Category titles** at the till and on the QR menu: the name centred between two hairlines (── KOPI ──), letter-spaced; checked in the browser.
 **Deviation:** none. Not committed, per instruction; snapshot `refs/wip/till-16`.
 **Next:** at the café: probe and `--check` on the real IW-J300H printers (bridge/README.md checklist).
+
+
+### [till-17] A real login ends demo mode; the printer token never shows empty
+**Date:** 2026-10-03
+**Status:** done in software; **uncommitted at the owner's request**
+**Changed:** frontend/app/login/page.tsx, frontend/app/register/page.tsx, frontend/components/PrinterTokens.tsx
+**Gates:** pytest 710 passed, 1 failed (test_vouchers::test_pos_quote_and_owner_endpoints — pre-existing, expired fixture voucher, fails on HEAD too); next build OK; alembic round trip OK at 0048; seed OK
+**Notes:**
+- Owner's screenshot: Pengaturan → Printer → *Buat token perangkat* showed an empty token box and "Berlaku sampai Invalid Date".
+- **Cause:** demo mode. "Lihat mode demo" sets a browser flag under which every save is answered with an empty object (by design: the demo changes nothing). Logging in afterwards with phone and PIN **did not clear that flag**, so a real owner session could keep running as demo — reads from fixtures, saves silently discarded. The API itself was fine (checked: `POST /api/printers/front/token` → 200, a 317-character token, valid to 3 Oct 2027).
+- **Fix:** phone + PIN login and registration call `disableDemo()` before storing the real token. In demo, *Buat token perangkat* now says "Ini mode demo — token printer hanya bisa dibuat setelah masuk dengan nomor HP dan PIN pemilik." instead of an empty box, and an answer without a token is reported as an error rather than shown.
+- Verified in the browser: demo flag on → the message above, no "Invalid Date"; then the real login form → flag cleared, the token appears with "Berlaku sampai 3 Oktober 2027".
+**Deviation:** none. Not committed, per instruction; snapshot `refs/wip/till-17`.
+**Next:** owner's decision on printer-token renewal (expires after a year today).

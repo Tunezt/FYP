@@ -1,5 +1,6 @@
 "use client";
 
+import { disableDemo } from "@/lib/demo";
 import { FormHint, missingText } from "@/components/FormHint";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -100,6 +101,7 @@ export default function RegisterPage() {
           language_preference: language,
         },
       });
+      disableDemo();   // till-17: the new café is real from here on
       localStorage.setItem(OWNER_TOKEN_KEY, res.token);
       sessionStorage.removeItem("wp_registration_token");
       setStep(2);

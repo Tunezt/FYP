@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
+import { isDemo } from "@/lib/demo";
 import { CopyField, Plate } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 
@@ -88,10 +89,16 @@ export function PrinterTokens() {
   const [error, setError] = useState<string | null>(null);
 
   async function issue(printer: PrinterToken["printer"]) {
-    setBusy(printer);
     setError(null);
+    if (isDemo()) {
+      // till-17: demo saves nothing, so there is no token to show.
+      setError("Ini mode demo — token printer hanya bisa dibuat setelah masuk dengan nomor HP dan PIN pemilik.");
+      return;
+    }
+    setBusy(printer);
     try {
       const t = await mutate<PrinterToken>(`/api/printers/${printer}/token`, {});
+      if (!t?.token) throw new Error("Token belum diterima dari server — coba lagi.");
       setTokens((prev) => ({ ...prev, [printer]: t }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Token belum bisa dibuat — coba lagi ya.");
