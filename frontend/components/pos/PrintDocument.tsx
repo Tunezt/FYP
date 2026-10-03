@@ -135,18 +135,16 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
             );
           case "item":
             return (
-              <div key={i} className="mb-4 text-[19px] leading-[1.25]">
+              // polish-4: the station's rows in the printer's Font B doubled: 32 to a
+              // line, extras sharing one row, no blank row between items.
+              <div key={i} className="text-[15px] leading-[1.35]">
                 {b.flag && <p className="text-[13px] font-bold">[{b.flag}]</p>}
                 <p className="font-bold">
                   {b.qty}× {b.name}
                   {b.size ? ` (${b.size})` : ""}
                 </p>
-                {(b.modifiers ?? []).map((m, j) => (
-                  <p key={j} className="pl-3">
-                    - {m}
-                  </p>
-                ))}
-                {b.notes && <p className="pl-3 font-bold">* {b.notes}</p>}
+                {(b.modifiers ?? []).length > 0 && <p className="pl-2">- {(b.modifiers ?? []).join(", ")}</p>}
+                {b.notes && <p className="pl-2 font-bold">* {b.notes}</p>}
               </div>
             );
           case "item_priced":

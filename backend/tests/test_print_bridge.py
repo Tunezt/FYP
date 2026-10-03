@@ -167,7 +167,7 @@ def test_every_block_the_app_produces_becomes_printer_commands(columns):
     assert len(papers) == 1 and papers[0].cut == "partial"          # one document, one cut, at the end
     assert data.endswith(b"\x1dV\x42\x03") and data.count(b"\x1dV") == 1
     lines = papers[0].lines
-    assert all(len(l.text) * l.width <= columns for l in lines)     # nothing runs off the paper
+    assert all(l.dots <= columns * 12 for l in lines)               # nothing runs off the paper (polish-4: in dots, two fonts)
     assert all(ch.isascii() for l in lines for ch in l.text)        # no codepage guesswork
     body = _paper_text(papers[0])
     for words in ("DAPUR", "MEJA 7", "Pesanan 042", "Tambahan 1", "Makan di sini", "14.05", "[TUJUAN BELUM DIATUR]",
@@ -182,8 +182,14 @@ def test_every_block_the_app_produces_becomes_printer_commands(columns):
         assert by_text[label].inverse and by_text[label].bold and by_text[label].width == 2
     assert by_text["MEJA 7"].width == 2 and by_text["MEJA 7"].height == 2
     # polish-2: what the kitchen cooks from is doubled both ways, never only stretched tall.
+    # polish-4: in the smaller font, so it is 4 mm tall and 32 to a line on 80 mm, not 6 mm and 24.
     name = [l for l in lines if l.text.startswith("2x Nasi Goreng")]
-    assert len(name) == 1 and name[0].width == 2 and name[0].height == 2 and name[0].bold
+    assert len(name) == 1 and name[0].width == 2 and name[0].height == 2 and name[0].bold and name[0].font == 1
+    if columns == 48:
+        assert name[0].text == "2x Nasi Goreng Kampung (Besar)"       # the size stays on the name's row
+    # Only the item rows change font; the rest of the slip is the receipt's own.
+    assert by_text["MEJA 7"].font == 0 and by_text["DAPUR"].font == 0 and by_text["BATAL"].font == 0
+    assert by_text["TOTAL SEMENTARA".ljust(columns - 8) + "Rp 9.000"].font == 0
     for part in ("- Pedas", "* tanpa"):
         row = [l for l in lines if l.text.strip().startswith(part)]
         assert len(row) == 1 and row[0].width == 2 and row[0].height == 2, part
@@ -200,12 +206,12 @@ def test_long_names_modifiers_and_notes_wrap_inside_the_paper():
     ]}
     papers = sp.decode(pb.render(doc, pb.Profile(columns=32)))
     lines = papers[0].lines
-    assert all(len(l.text) * l.width <= 32 for l in lines)
+    assert all(l.dots <= 32 * 12 for l in lines)
     words = " ".join(l.text.strip() for l in lines)
     assert "12x Nasi Goreng Kampung Spesial Dengan Telur Ceplok Dan Kerupuk Udang (Jumbo)" in words
-    # polish-2: item rows are double width, so a 32-column paper holds 16 of them and a
-    # run of 70 is cut into pieces of 13 (was pieces of 27 at single width).
-    assert "x" * 13 in words and sum(l.text.count("x") for l in lines) == 70 + 2     # split, not lost (+ the x of "12x" and "1x")
+    # polish-2/4: item rows are double width in the smaller font, so a 32-column paper holds
+    # 21 of them and a run of 70 is cut into pieces of 18 (was pieces of 27 at single width).
+    assert "x" * 18 in words and sum(l.text.count("x") for l in lines) == 70 + 2     # split, not lost (+ the x of "12x" and "1x")
     assert all(l.width == 2 and l.height == 2 for l in lines if "xxxx" in l.text)
     assert "anak-anak ikut makan juga ya kak" in words and "Rp 1.250.000" in words
     # Continuation lines of an item hang under its name, not under the quantity.

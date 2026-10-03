@@ -2458,3 +2458,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Checked in the browser with a deliberately broken pairing: error screen, then setup form, pairing cleared.
 **Deviation:** not a roadmap task.
 **Next:** on the tablet: reload /kasir, tap "Siapkan ulang", enter the owner's phone and PIN.
+
+
+### [polish-4] Station slips: a middle size, half the paper
+**Date:** 2026-10-04
+**Status:** done in software and pushed at the owner's instruction; not yet seen on paper
+**Changed:** bridge/print_bridge.py, bridge/sim_printer.py, backend/tests/test_print_bridge.py, frontend/components/pos/PrintDocument.tsx, frontend/public/pasang-bridge.sh (the installer, rebuilt; see prt-11)
+**Gates:** print tests pass (test_print_bridge, nota_layout, receipt_content, receipt_brand, printer_by_name, prep_routing); tsc OK. Full pytest last run 733 passed, 4 clock-dependent failures at 02.30 WIB.
+**Notes:**
+- Owner's photo of polish-2 on the real front printer (Bar slip, three items): "now it's too big, taking way too much paper... remember who will read it". Font A doubled both ways held 24 to a line, so "(Standar)" wrapped under every drink, and the blank row between items added more: ten rows for three items.
+- Now: item rows in Font B doubled both ways (`ESC M 1`): letters about 4 mm tall with their natural shape, 32 to a line on 80 mm, so name and size share a row. Extras share one row ("- Extra matcha, Susu oat") instead of one each. No blank row between items; the note keeps its own bold row. The same three items take five rows.
+- `ESC M` has NOT been seen on the IW-J300H. If the printer ignores it the rows come out in the old large font and long ones wrap at the paper's edge; nothing is lost. The owner is at the printers and will see the first slip.
+- The rest of the slip and the whole receipt are unchanged. Width is now checked in dots (two fonts); the simulator reads `ESC M`.
+- Tests: the two size assertions of polish-2 now also require Font B and, on 80 mm, the name and size on one row; the "nothing runs off the paper" checks count dots instead of characters.
+**Deviation:** not a roadmap task; owner's instruction in chat.
+**Next:** the owner's photo of the new slip.

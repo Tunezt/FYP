@@ -34,6 +34,12 @@ class Line:
     width: int = 1
     height: int = 1
     align: int = 0
+    font: int = 0                 # 0 = Font A (12 dots wide), 1 = Font B (9 dots wide)
+
+    @property
+    def dots(self) -> int:
+        """How far across the paper this row reaches, in dots."""
+        return len(self.text) * self.width * (9 if self.font else 12)
 
 
 @dataclass
@@ -87,7 +93,7 @@ def decode(data: bytes) -> list[Paper]:
     not paper and are skipped."""
     papers: list[Paper] = []
     lines: list[Line] = []
-    style = dict(bold=False, inverse=False, width=1, height=1, align=0)
+    style = dict(bold=False, inverse=False, width=1, height=1, align=0, font=0)
     text = bytearray()
     start = 0
     beeped = False
@@ -111,6 +117,8 @@ def decode(data: bytes) -> list[Paper]:
             op = cmd[1]
             if op == ord("E"):
                 style["bold"] = bool(cmd[2])
+            elif op == ord("M"):
+                style["font"] = cmd[2] & 1
             elif op == ord("a"):
                 style["align"] = cmd[2]
             elif op == ord("B"):
@@ -288,10 +296,10 @@ class SimPrinter:
         if not papers:
             return
         p = papers[-1]
-        width = max((len(l.text) * l.width for l in p.lines), default=32)
+        width = max((l.dots // 12 for l in p.lines), default=32)
         print(f"\n--- {self.name}: kertas #{len(papers)} ({p.cut} cut{', beep' if p.beeped else ''}) " + "-" * 10)
         for l in p.lines:
-            mark = ("[inv]" if l.inverse else "") + ("[b]" if l.bold else "") + (f"[{l.width}x{l.height}]" if (l.width, l.height) != (1, 1) else "")
+            mark = ("[inv]" if l.inverse else "") + ("[b]" if l.bold else "") + (f"[{l.width}x{l.height}]" if (l.width, l.height) != (1, 1) else "") + ("[fontB]" if l.font else "")
             text = l.text.center(width // l.width) if l.align == 1 else l.text
             print(f"| {text}   {mark}")
         print("-" * 40, flush=True)

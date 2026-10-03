@@ -75,6 +75,14 @@ def _size(width: int, height: int) -> bytes:
     return GS + b"!" + bytes([((width - 1) << 4) | (height - 1)])
 
 
+def _font(n: int) -> bytes:
+    """ESC M: 0 = Font A (12x24 dots, 48 to a line on 80 mm), 1 = Font B (9x17, 64 to a line)."""
+    return ESC + b"M" + bytes([n])
+
+
+FONT_DOTS = {0: 12, 1: 9}       # character width in dots, before any doubling
+
+
 def _inverse(on: bool) -> bytes:
     return GS + b"B" + bytes([1 if on else 0])
 
@@ -262,13 +270,18 @@ class Writer:
         self.buf = bytearray()
 
     def row(self, text: str, *, align: str = "left", bold: bool = False, width: int = 1, height: int = 1,
-            inverse: bool = False) -> None:
+            inverse: bool = False, font: int = 0) -> None:
         text = to_printer_text(text)
-        assert len(text) * width <= self.columns, (text, width, self.columns)
+        # Measured in dots: `columns` counts Font A characters, 12 dots each.
+        assert len(text) * width * FONT_DOTS[font] <= self.columns * 12, (text, width, font, self.columns)
         self.buf += _align({"left": 0, "center": 1, "right": 2}[align])
+        if font:
+            self.buf += _font(font)
         self.buf += _bold(bold) + _size(width, height) + _inverse(inverse)
         self.buf += text.encode("ascii") + LF
         self.buf += _inverse(False) + _size(1, 1) + _bold(False) + _align(0)
+        if font:
+            self.buf += _font(0)
 
     def rows(self, lines: list[str], **style) -> None:
         for line in lines:
@@ -325,19 +338,24 @@ def render_block(w: Writer, block: dict, profile: Profile) -> None:
     elif t == "item":
         if block.get("flag"):
             w.rows(wrap(f"[{block['flag']}]", cols), bold=True)
-        # What the bar and the kitchen cook from, read at arm's length: every
-        # row doubled both ways. Double height alone gives tall, thin letters
-        # that have to be studied; doubled both ways they keep their shape. It
-        # costs half the columns, so long names wrap under themselves.
-        big = cols // 2
+        # What the bar and the kitchen cook from. Three sizes were tried on the
+        # café's printers (4 Oct 2026): Font A double height only gave tall thin
+        # letters that had to be studied; Font A doubled both ways read well but
+        # held 24 to a line, wrapped "(Standar)" under every drink and used far
+        # too much paper. Font B doubled both ways sits between them: letters
+        # 4 mm tall with their natural shape, 32 to a line, so a name with its
+        # size stays on one row. Extras share one row instead of taking one
+        # each, and items follow one another without a blank row between.
+        big = (cols * 12) // (FONT_DOTS[1] * 2)
+        style = dict(font=1, width=2, height=2)
         head = _item_head(block)
         hang = " " * min(len(to_printer_text(block.get("qty") or "")) + 2, 6)
-        w.rows(wrap(head, big, "", hang), bold=True, width=2, height=2)
-        for m in block.get("modifiers") or []:
-            w.rows(wrap(f"- {m}", big, " ", "   "), width=2, height=2)
+        w.rows(wrap(head, big, "", hang), bold=True, **style)
+        mods = [str(m) for m in block.get("modifiers") or [] if str(m).strip()]
+        if mods:
+            w.rows(wrap("- " + ", ".join(mods), big, " ", "   "), **style)
         if block.get("notes"):
-            w.rows(wrap(f"* {block['notes']}", big, " ", "   "), bold=True, width=2, height=2)
-        w.row("")
+            w.rows(wrap(f"* {block['notes']}", big, " ", "   "), bold=True, **style)
     elif t == "item_priced" and block.get("unit_price"):
         # till-12: the name on its own line, then "2 x @15.000" and the amount
         # on the right, the way café receipts set an item.
