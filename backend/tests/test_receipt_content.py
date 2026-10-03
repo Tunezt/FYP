@@ -6,7 +6,8 @@ something meaningful; no cash given or change; and "Matcha Latte · Standar" on
 the receipt but "Matcha Latte" in *Riwayat transaksi*.
 
 Now: the café's details come from its settings (placeholders, marked, until the
-owner types the real ones); the tax is named and rated ("PBJT 10% (termasuk)");
+owner types the real ones); the tax is named and rated ("PB1 10%", added on top
+of the menu price since till-11; "(termasuk)" when a café keeps it inside);
 a cash payment shows what was handed over and the change; the internal
 reference is a small "Ref" at the foot; and a size is written by one rule
 everywhere — whenever the product has sizes, "Standar" included, never for a
@@ -153,8 +154,9 @@ def test_the_tax_line_names_the_tax():
 
 async def test_the_paper_receipt_has_the_cafe_the_tax_and_the_change(client, session_factory, cafe):
     c = cafe
-    sale = await _sell(client, c, [{"method": "cash", "amount": 48000, "tendered": 100000}])
-    assert sale["payments"][0]["tendered"] == "100000.00"
+    # till-11: 48.000 on the menu + PB1 10% = 52.800 to pay.
+    sale = await _sell(client, c, [{"method": "cash", "amount": 52800, "tendered": 100000}])
+    assert sale["payments"][0]["tendered"] == "100000.00" and sale["total"] == "52800.00"
     doc = await _receipt_doc(session_factory, c, sale["id"])
     paper = _paper_lines(doc)
     joined = "\n".join(paper)
@@ -163,10 +165,13 @@ async def test_the_paper_receipt_has_the_cafe_the_tax_and_the_change(client, ses
     assert "0812-0000-0000 - IG @poernama.cafe" in joined                       # "·" is "-" on paper (ASCII only)
     assert "PESANAN" in joined                                                     # the big number stays
     assert "Kasir Sari" in joined
-    assert any(l.startswith("PBJT 10% (termasuk)") and l.endswith("Rp 4.364") for l in paper)   # 48.000 x 10/110
-    assert any(l.startswith("Tunai") and l.endswith("Rp 48.000") for l in paper)
+    assert any(l.startswith("Subtotal") and l.endswith("Rp 48.000") for l in paper)
+    assert any(l.startswith("PB1 10%") and l.endswith("Rp 4.800") for l in paper)   # on top: 48.000 x 10%
+    assert "termasuk" not in joined
+    assert any("TOTAL" in l and l.endswith("Rp 52.800") for l in paper)
+    assert any(l.startswith("Tunai") and l.endswith("Rp 52.800") for l in paper)
     assert any(l.startswith("Diterima") and l.endswith("Rp 100.000") for l in paper)
-    assert any(l.startswith("Kembali") and l.endswith("Rp 52.000") for l in paper)
+    assert any(l.startswith("Kembali") and l.endswith("Rp 47.200") for l in paper)
     assert "Struk #" not in joined and any(l.strip().startswith("Ref ") for l in paper)
     # The longest name, its size, a priced modifier and a long note fit 48 columns.
     assert max(len(l) for l in paper) <= 48
@@ -179,13 +184,13 @@ async def test_the_size_is_written_by_one_rule_everywhere(client, session_factor
     nothing is. The same on the screen receipt, the owner's receipt and the
     paper, and on the kitchen/bar slips."""
     c = cafe
-    sale = await _sell(client, c, [{"method": "qris", "amount": 48000}])
+    sale = await _sell(client, c, [{"method": "qris", "amount": 52800}])
     till = (await client.get(f"/pos/orders/{sale['id']}/receipt", headers=c["pos"])).json()
     owner = (await client.get(f"/api/orders/{sale['id']}/receipt", headers=c["owner"])).json()
     for view in (till, owner):
         sizes = {l["name"]: l["size"] for l in view["lines"]}
         assert sizes == {LONG_NAME: "Standar", "Roti": None}
-        assert view["tax_label"] == "PBJT" and view["tax_rate"] == "0.1000"
+        assert view["tax_label"] == "PB1" and view["tax_rate"] == "0.1000"
         assert view["business_address"] == RECEIPT_PLACEHOLDERS["address"]
     doc = await _receipt_doc(session_factory, c, sale["id"])
     items = {b["name"]: b.get("size") for b in doc["blocks"] if b["t"] == "item_priced"}
@@ -209,7 +214,7 @@ async def test_cash_handed_over_must_cover_the_cash_payment(client, session_fact
         "payments": [{"method": "qris", "amount": 15000, "tendered": 20000}],
     })
     assert qris.status_code == 422
-    exact = await _sell(client, c, [{"method": "cash", "amount": 48000}])        # nothing typed: exact money
+    exact = await _sell(client, c, [{"method": "cash", "amount": 52800}])        # nothing typed: exact money
     async with session_factory() as s:
         await _set_tenant(s, c["bid"])
         payment = (await s.execute(select(Payment).where(Payment.order_id == uuid.UUID(exact["id"])))).scalar_one()
@@ -226,10 +231,17 @@ async def test_the_owner_replaces_the_placeholders(client, cafe):
         "address": "Jl. Merdeka 12, Bandung", "contact_phone": "0811-2233-4455",
     })
     assert after.status_code == 200 and after.json()["placeholders"] == ["instagram"]
-    label = await client.patch("/api/pricing-settings", headers=c["owner"], json={"tax_label": "PB1"})
-    assert label.status_code == 200 and label.json()["tax_label"] == "PB1"
+    label = await client.patch("/api/pricing-settings", headers=c["owner"], json={"tax_label": "Pajak Resto"})
+    assert label.status_code == 200 and label.json()["tax_label"] == "Pajak Resto"
     quote = await client.post("/pos/quote", headers=c["pos"], json={"lines": [{"item_id": str(c["roti"]), "quantity": 1}]})
-    assert quote.json()["tax_label"] == "PB1" and Decimal(quote.json()["tax_total"]) == Decimal("1363.64")
+    q = quote.json()
+    assert q["tax_label"] == "Pajak Resto" and Decimal(q["tax_total"]) == Decimal("1500.00")    # on top: 15.000 x 10%
+    assert q["tax_inclusive"] is False and Decimal(q["total"]) == Decimal("16500.00")
+    # A café whose prices already include it keeps that: one setting.
+    inside = await client.patch("/api/pricing-settings", headers=c["owner"], json={"tax_inclusive": True})
+    assert inside.status_code == 200
+    q = (await client.post("/pos/quote", headers=c["pos"], json={"lines": [{"item_id": str(c["roti"]), "quantity": 1}]})).json()
+    assert Decimal(q["tax_total"]) == Decimal("1363.64") and Decimal(q["total"]) == Decimal("15000.00")
 
 
 async def test_an_ojol_order_paid_in_the_app_is_owed_by_the_app_not_in_the_drawer(client, session_factory, cafe):
@@ -244,12 +256,12 @@ async def test_an_ojol_order_paid_in_the_app_is_owed_by_the_app_not_in_the_drawe
         "order_type": "pickup",
         "external_ref": "GF-123",
         "lines": [{"item_id": str(c["roti"]), "quantity": 2}],
-        "payments": [{"method": "other", "amount": 30000, "reference": "ojol"}],
+        "payments": [{"method": "other", "amount": 33000, "reference": "ojol"}],   # 2 x 15.000 + PB1 10%
     })
     assert resp.status_code == 201, resp.text
     sale = resp.json()
     paper = _paper_lines(await _receipt_doc(session_factory, c, sale["id"]))
-    assert any(l.startswith("Dibayar aplikasi") and l.endswith("Rp 30.000") for l in paper)
+    assert any(l.startswith("Dibayar aplikasi") and l.endswith("Rp 33.000") for l in paper)
     assert "Ojol" in "\n".join(paper) and "Ambil sendiri" not in "\n".join(paper)
     async with session_factory() as s:
         await _set_tenant(s, c["bid"])
@@ -260,5 +272,5 @@ async def test_an_ojol_order_paid_in_the_app_is_owed_by_the_app_not_in_the_drawe
             .where(JournalEntry.source_type == "order", JournalEntry.source_id == uuid.UUID(sale["id"]), JournalLine.debit > 0)
         )).all()
     debits = {code: Decimal(d) for code, d in rows}
-    assert debits.get("1200") == Decimal(30000)
+    assert debits.get("1200") == Decimal(33000)
     assert "1110" not in debits

@@ -399,6 +399,11 @@ export default function SettingsPage() {
                   onChange={(e) => setPricingDraft({ ...pricingForm, tax_percent: e.target.value })}
                   placeholder="0"
                 />
+                {Number(pricingForm.tax_percent || 0) === 0 && (
+                  <span className="mt-1 block text-xs" style={{ color: "var(--warn)" }}>
+                    Belum diisi — struk belum mencantumkan pajak. Isi tarif yang sudah dipastikan ke Bapenda, mis. 10.
+                  </span>
+                )}
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-[13px] font-medium">Service charge (%)</span>
@@ -418,11 +423,12 @@ export default function SettingsPage() {
                 maxLength={20}
                 value={pricingForm.tax_label}
                 onChange={(e) => setPricingDraft({ ...pricingForm, tax_label: e.target.value })}
-                placeholder="PBJT"
+                placeholder="PB1"
               />
               <span className="ink-faint mt-1 block text-xs">
-                Makanan dan minuman restoran dikenai PBJT (dulu PB1) dari Pemda, maksimal 10% — bukan PPN. Tarifnya
-                ditetapkan per kabupaten/kota; tanyakan ke Bapenda. Di struk tertulis mis. &ldquo;PBJT 10% (termasuk)&rdquo;.
+                Pajak restoran adalah pajak daerah — namanya kini PBJT, dulu Pajak Restoran / PB1 — maksimal 10%,
+                bukan PPN. Tarifnya ditetapkan per kabupaten/kota; tanyakan ke Bapenda. Di struk tertulis mis.
+                &ldquo;PB1 10%&rdquo; di bawah Subtotal, lalu Total sudah termasuk pajak.
               </span>
             </label>
             <label className="flex items-start gap-3">

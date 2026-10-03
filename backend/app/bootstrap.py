@@ -35,6 +35,7 @@ import re
 import sys
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 
 from sqlalchemy import select
 
@@ -128,7 +129,7 @@ async def bootstrap(
         accounts = await ensure_standard_chart(session, business_id)  # M6-T1
         rules = await ensure_standard_rules(session, business_id)     # M6-T3
         pricing = await ensure_pricing_settings(session, business_id)  # M7-T4
-        apply_tax_placeholder(pricing)                                 # till-5a: PBJT 10% (termasuk), to confirm
+        apply_tax_placeholder(pricing, rate=Decimal(0))                # till-11: PB1 on top, 0% until the owner sets the confirmed rate
         await ensure_loyalty_settings(session, business_id)           # M8-T2
 
     return BootstrapResult(

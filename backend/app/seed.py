@@ -187,7 +187,7 @@ async def seed(confirm: bool = False) -> None:
         uoms = await ensure_standard_uoms(session, business_id)
         await ensure_standard_chart(session, business_id)  # M6-T1
         await ensure_standard_rules(session, business_id)  # M6-T3
-        apply_tax_placeholder(await ensure_pricing_settings(session, business_id))  # M7-T4; till-5a PBJT 10% (termasuk)
+        apply_tax_placeholder(await ensure_pricing_settings(session, business_id))  # M7-T4; till-5a/11 PB1 10% on top of the price
         loyalty = await ensure_loyalty_settings(session, business_id)  # M8-T2: on, 1 poin / Rp 1.000, poin = Rp 100
         loyalty.is_active, loyalty.rupiah_per_point, loyalty.point_value, loyalty.min_redeem_points = True, Decimal(1000), Decimal(100), 10
         await session.flush()

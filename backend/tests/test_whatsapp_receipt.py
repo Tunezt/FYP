@@ -109,7 +109,7 @@ async def cafe(session_factory):
 async def _paid_with_code(client, c):
     sale = await client.post("/pos/orders", headers=c["pos"], json={
         "order_type": "takeaway", "lines": [{"item_id": str(c["kopi"]), "quantity": 1}],
-        "payments": [{"method": "cash", "amount": 22000, "tendered": 50000}],
+        "payments": [{"method": "cash", "amount": 24200, "tendered": 50000}],   # 22.000 + PB1 10% (till-11)
     })
     assert sale.status_code == 201, sale.text
     choice = await client.post(f"/pos/orders/{sale.json()['id']}/receipt-choice", headers=c["pos"], json={"choice": "qr"})
@@ -136,9 +136,9 @@ async def test_a_customer_sends_struk_and_gets_the_receipt(client, session_facto
     to, body = send_text.await_args.args
     assert to == CUSTOMER
     assert body.startswith("*POERNAMA*") and "Jl. Lorem Ipsum No. 1, Kota Dolor" in body
-    assert "1× Kopi Susu — Rp 22.000" in body and "*Total: Rp 22.000*" in body
-    assert "PBJT 10% (termasuk): Rp 2.000" in body
-    assert "Tunai Rp 22.000 · diterima Rp 50.000 · kembali Rp 28.000" in body
+    assert "1× Kopi Susu — Rp 22.000" in body and "*Total: Rp 24.200*" in body
+    assert "PB1 10%: Rp 2.200" in body
+    assert "Tunai Rp 24.200 · diterima Rp 50.000 · kembali Rp 25.800" in body
     assert f"/struk/{code}" in body and "belum terdaftar" not in body
     async with session_factory() as s:
         await _set_tenant(s, c["bid"])
@@ -183,7 +183,7 @@ async def test_once_the_bot_is_live_the_paper_receipt_carries_the_whatsapp_qr(cl
     with patch.object(get_settings(), "whatsapp_receipt_number", "6281100001234"):
         sale = await client.post("/pos/orders", headers=c["pos"], json={
             "order_type": "takeaway", "lines": [{"item_id": str(c["kopi"]), "quantity": 1}],
-            "payments": [{"method": "qris", "amount": 22000}],
+            "payments": [{"method": "qris", "amount": 24200}],
         })
         choice = (await client.post(f"/pos/orders/{sale.json()['id']}/receipt-choice", headers=c["pos"], json={"choice": "paper"})).json()
     async with session_factory() as s:
@@ -201,7 +201,7 @@ async def test_once_the_bot_is_live_the_paper_receipt_carries_the_whatsapp_qr(cl
     # Without the bot's number, no QR and no code is made for a printed receipt.
     sale2 = await client.post("/pos/orders", headers=c["pos"], json={
         "order_type": "takeaway", "lines": [{"item_id": str(c["kopi"]), "quantity": 1}],
-        "payments": [{"method": "qris", "amount": 22000}],
+        "payments": [{"method": "qris", "amount": 24200}],
     })
     job2 = (await client.post(f"/pos/orders/{sale2.json()['id']}/receipt-choice", headers=c["pos"], json={"choice": "paper"})).json()
     async with session_factory() as s:

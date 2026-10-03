@@ -7,6 +7,7 @@ are owner-only.
 """
 import logging
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import jwt as pyjwt
 from fastapi import APIRouter, HTTPException
@@ -283,7 +284,7 @@ async def register(payload: RegisterIn):
         await ensure_standard_rules(session, business_id)  # M6-T3
         from app.services.business_profile import apply_tax_placeholder
 
-        apply_tax_placeholder(await ensure_pricing_settings(session, business_id))  # M7-T4; till-5a as app.bootstrap
+        apply_tax_placeholder(await ensure_pricing_settings(session, business_id), rate=Decimal(0))  # M7-T4; till-11 as app.bootstrap
         await ensure_loyalty_settings(session, business_id)  # M8-T2
         business = await session.get(Business, business_id)
         business_out = BusinessOut.model_validate(business)

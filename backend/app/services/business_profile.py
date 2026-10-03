@@ -6,11 +6,22 @@ into the receipt code. Until Ibu Diah gives the real ones they are clearly
 fake placeholders, and the settings page marks every field still equal to one
 of them, so nobody mistakes "Jl. Lorem Ipsum" for an address.
 
-The tax is the regional PBJT makanan dan minuman (formerly PB1), at most 10%,
-set per regency; small cafés may be under the threshold. 10% is a placeholder
-too, until the owner confirms with her Bapenda. It is kept *inclusive* (menu
-prices are what the customer pays), the existing default, so the placeholder
-does not change anything a customer is charged.
+The tax is the regional restaurant tax — legally PBJT makanan dan minuman
+since UU 1/2022 (HKPD), formerly Pajak Restoran / "PB1" — at most 10%, set per
+regency; small cafés may be under the threshold. It is *not* PPN: food and
+drink served by a restaurant is a regional tax object, outside VAT. 10% is a
+placeholder until the owner confirms with her Bapenda.
+
+till-11 (owner's feedback, 2 Oct 2026): the tax is added *on top* of the menu
+price, as Indonesian cafés print it — Subtotal, PB1 10%, Total — and it is
+called "PB1", the name customers know from restaurant receipts. Both are
+settings (Pengaturan → Harga & pajak), so "PBJT" or "Pajak Resto", or prices
+that already include it, are one change away.
+
+Because the tax is now *charged on top*, an unconfirmed rate would change what
+real customers pay. So a real café (`app.bootstrap`, dashboard registration)
+starts at 0% — the receipt shows no tax line — until the owner types the rate
+Bapenda confirmed; the demo seed uses the 10% placeholder so the layout shows.
 """
 from __future__ import annotations
 
@@ -22,7 +33,7 @@ RECEIPT_PLACEHOLDERS: dict[str, str] = {
     "instagram": "@poernama.cafe",
 }
 
-TAX_LABEL_PLACEHOLDER = "PBJT"
+TAX_LABEL_PLACEHOLDER = "PB1"
 TAX_RATE_PLACEHOLDER = Decimal("0.10")
 
 
@@ -39,10 +50,10 @@ def apply_placeholders(business) -> None:
             setattr(business, field, value)
 
 
-def apply_tax_placeholder(pricing_row) -> None:
+def apply_tax_placeholder(pricing_row, rate: Decimal = TAX_RATE_PLACEHOLDER) -> None:
     pricing_row.tax_label = TAX_LABEL_PLACEHOLDER
-    pricing_row.tax_rate = TAX_RATE_PLACEHOLDER
-    pricing_row.tax_inclusive = True
+    pricing_row.tax_rate = rate
+    pricing_row.tax_inclusive = False   # till-11: added on top of the menu price
 
 
 def tax_line_label(label: str | None, rate, inclusive: bool) -> str:
