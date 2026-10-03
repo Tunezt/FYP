@@ -2304,3 +2304,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Verified in the browser: demo flag on → the message above, no "Invalid Date"; then the real login form → flag cleared, the token appears with "Berlaku sampai 3 Oktober 2027".
 **Deviation:** none. Not committed, per instruction; snapshot `refs/wip/till-17`.
 **Next:** owner's decision on printer-token renewal (expires after a year today).
+
+
+### [till-18] The till link, the printer tokens and the QR menu link no longer expire after a year
+**Date:** 2026-10-03
+**Status:** done in software; **uncommitted at the owner's request**
+**Changed:** backend/app/core/security.py, backend/app/api/printing.py, frontend/components/PrinterTokens.tsx, frontend/app/(dashboard)/settings/page.tsx, docs/printing.md, backend/tests/test_links_do_not_expire.py (new, 3 tests)
+**Gates:** pytest 713 passed, 1 failed (test_vouchers::test_pos_quote_and_owner_endpoints — pre-existing, expired fixture voucher, fails on HEAD too); next build OK; alembic round trip OK at 0048; seed OK
+**Notes:**
+- Owner, 3 Oct: "remove this 1-year period, whether the till link or the print token… I don't want our system to suddenly stop working a year later. Where else is this logic?"
+- **Audit of everything on a timer.** Year-long, would have stopped the café silently — all three removed: the till pairing link (`create_pairing_token`), each printer's device token (`POST /api/printers/{printer}/token`, was `PRINTER_TOKEN_DAYS = 365`), and the QR menu link printed on the tables (`create_menu_token`). They now carry no `exp` claim at all. Kept, because they never stop the system: login sessions (owner 12 h, cashier 12 h — re-enter the PIN), the 30-minute registration step, PIN lockouts, WhatsApp nota confirmation, print-queue hold times, vouchers' own dates. One dated item is deliberate and unrelated: `otp_fallback.py`, a temporary support hole that turns itself off on 16 Oct 2026.
+- **What still ends them:** the owner. "Tablet hilang? Putuskan perangkat lama" raises the pairing generation, which retires the till link and the printer tokens issued before it (tested). The QR menu link has no off switch and needs none: it only reads the menu and places a ticket the cashier must still accept.
+- `PrinterTokenOut.expires_at` is now null; the dashboard says "Tidak ada masa berlaku…" for a printer token and "berlaku terus" for the till and menu links.
+- Tokens issued before this change keep the expiry they were minted with; nothing is live on the real tablet yet, so the links made at setup will be the permanent kind.
+- Tests: no `exp` on the three; they still decode with the clock ten years ahead while a login session does not; re-pairing still cuts off the till link and a printer token; the menu link survives a re-pair.
+**Deviation:** reverses the "lasts a year" choice of M11-T1 / M15-T8 / prt-4 at the owner's instruction; the revocation those tasks built is kept. Not committed, per instruction; snapshot `refs/wip/till-18`.
+**Next:** owner's review.

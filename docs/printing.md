@@ -156,7 +156,7 @@ dashboard. This only happens when the books disagree with the shelf.
 ## Printer device API (built, tested with simulated devices)
 
 A printer device authenticates with a token issued by the owner (Pengaturan → Printer → *Buat
-token perangkat*). A token names one printer (`front` or `kitchen`), lasts a year, and dies
+token perangkat*). A token names one printer (`front` or `kitchen`), has no expiry date (till-18), and dies
 when the owner disconnects all till devices (the pairing generation rises).
 
 ```

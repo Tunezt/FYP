@@ -47,6 +47,7 @@ def create_token(
     ttl_minutes: int | None = None,
     generation: int = 1,
     extra: dict | None = None,
+    permanent: bool = False,
 ) -> str:
     """`generation` (M15-T8) is the business's `pairing_generation` at the moment
     of issue. Checked on every `pos` request, so re-pairing a lost tablet ends
@@ -64,8 +65,11 @@ def create_token(
         "scope": scope,
         "gen": int(generation),
         "iat": now,
-        "exp": now + timedelta(minutes=ttl_minutes),
     }
+    # till-18: a device's token (a printer's) has no date on which it stops;
+    # it ends when the owner disconnects the café's devices (`generation`).
+    if not permanent:
+        payload["exp"] = now + timedelta(minutes=ttl_minutes)
     if staff_id:
         payload["staff_id"] = staff_id
     for key, value in (extra or {}).items():   # prt-4: e.g. which printer a device token is for
@@ -103,27 +107,32 @@ def create_registration_token(phone: str) -> str:
 
 
 def create_menu_token(business_id: str) -> str:
-    """Long-lived token baked into the QR code on the table (M11-T1). Grants
-    only: read the menu, place a ticket, watch that ticket — for one business.
-    Stateless like the pairing token; a new QR replaces an old one."""
+    """The token baked into the QR code on the table (M11-T1). Grants only:
+    read the menu, place a ticket, watch that ticket — for one business.
+
+    till-18 (owner, 3 Oct 2026): it does not expire. A sticker printed and
+    stuck on every table must not stop working a year later because of a
+    date nobody remembers. It carries no secret a guest should not have, and
+    a ticket still has to be accepted and paid at the till."""
     settings = get_settings()
     now = datetime.now(timezone.utc)
     return jwt.encode(
-        {"business_id": business_id, "scope": "menu", "iat": now, "exp": now + timedelta(days=365)},
+        {"business_id": business_id, "scope": "menu", "iat": now},
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )
 
 
 def create_pairing_token(business_id: str, generation: int = 1) -> str:
-    """Long-lived token baked into the POS kiosk URL. Grants only the ability
-    to list staff names and attempt PIN logins for one business — never data
-    access.
+    """The token baked into the POS kiosk URL. Grants only the ability to list
+    staff names and attempt PIN logins for one business — never data access.
 
-    It lives a year, so it needs a way to die early (M15-T8): the token carries
-    the business's `pairing_generation`, and re-pairing raises that counter,
-    which retires every link and session issued before it. No revocation table —
-    one integer compared against the business row that the caller already reads."""
+    till-18 (owner, 3 Oct 2026): it does not expire; the café's till must not
+    stop one morning because a year went by. It dies only when the owner says
+    so (M15-T8): the token carries the business's `pairing_generation`, and
+    re-pairing ("Tablet hilang?") raises that counter, which retires every
+    link and session issued before it. No revocation table — one integer
+    compared against the business row that the caller already reads."""
     settings = get_settings()
     now = datetime.now(timezone.utc)
     return jwt.encode(
@@ -132,7 +141,6 @@ def create_pairing_token(business_id: str, generation: int = 1) -> str:
             "scope": "pos-pairing",
             "gen": int(generation),
             "iat": now,
-            "exp": now + timedelta(days=365),
         },
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,

@@ -6,7 +6,7 @@ import { isDemo } from "@/lib/demo";
 import { CopyField, Plate } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 
-type PrinterToken = { printer: "front" | "kitchen"; token: string; claim_path: string; result_path: string; expires_at: string };
+type PrinterToken = { printer: "front" | "kitchen"; token: string; claim_path: string; result_path: string; expires_at?: string | null };
 type PrintDevice = {
   printer: "front" | "kitchen";
   device: string;
@@ -141,9 +141,8 @@ export function PrinterTokens() {
               <div className="space-y-1">
                 <CopyField value={tokens[p.id]!.token} />
                 <p className="ink-faint text-xs">
-                  Pasang di perangkat printer {p.name.toLowerCase()} saja. Berlaku sampai{" "}
-                  {new Date(tokens[p.id]!.expires_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}; berhenti
-                  berlaku kalau semua perangkat kasir diputuskan.
+                  Pasang di perangkat printer {p.name.toLowerCase()} saja. Tidak ada masa berlaku: token ini terus
+                  dipakai sampai kamu menekan &ldquo;Putuskan perangkat lama&rdquo; di bagian perangkat kasir.
                 </p>
               </div>
             )}

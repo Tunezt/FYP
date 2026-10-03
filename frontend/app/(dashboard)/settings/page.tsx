@@ -748,7 +748,7 @@ export default function SettingsPage() {
         </h2>
         <Plate className="space-y-3 px-6 py-5">
           <p className="ink-soft text-sm">
-            Hubungkan perangkat kasir dengan tautan berpasangan. Tautan berlaku setahun dan hanya
+            Hubungkan perangkat kasir dengan tautan berpasangan. Tautan berlaku terus (sampai kamu memutuskannya) dan hanya
             membuka layar kasir — bukan dashboard ini.
           </p>
           {pairing ? (
@@ -814,7 +814,7 @@ export default function SettingsPage() {
         </h2>
         <Plate className="space-y-3 px-6 py-5">
           <p className="ink-soft text-sm">
-            Satu tautan untuk semua meja, berlaku setahun. Tautan ini hanya membuka menu dan
+            Satu tautan untuk semua meja, berlaku terus tanpa batas waktu. Tautan ini hanya membuka menu dan
             mengirim pesanan — tidak bisa melihat stok, harga modal, atau dashboard.
           </p>
           {menuLink ? (

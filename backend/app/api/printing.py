@@ -43,7 +43,6 @@ agent_router = APIRouter(prefix="/print/agent", tags=["print-agent"])
 pos_router = APIRouter(prefix="/pos/print-jobs", tags=["pos"])
 owner_router = APIRouter(prefix="/api/printers", tags=["dashboard"])
 
-PRINTER_TOKEN_DAYS = 365
 KIND_LABEL = {
     "receipt": "Struk", "nota": "Nota meja", "bar_ticket": "Slip bar", "kitchen_ticket": "Slip dapur",
     "bar_cancel": "Batal (bar)", "kitchen_cancel": "Batal (dapur)",
@@ -182,7 +181,7 @@ class PrinterTokenOut(BaseModel):
     token: str
     claim_path: str
     result_path: str
-    expires_at: datetime
+    expires_at: datetime | None = None   # till-18: None — a printer token has no end date
 
 
 def job_out(job: PrintJob, order: Order | None, model=PrintJobOut, now: datetime | None = None, document: dict | None = None):
@@ -440,15 +439,15 @@ async def pos_printers(ctx: PosCtx):
 
 @owner_router.post("/{printer}/token", response_model=PrinterTokenOut)
 async def owner_printer_token(printer: Literal["front", "kitchen"], ctx: OwnerCtx):
-    """A long-lived token for one printer device. It can pull that printer's
-    jobs and report on them, and nothing else."""
+    """A token for one printer device. It can pull that printer's jobs and
+    report on them, and nothing else. till-18: it does not expire — printing
+    must not stop a year after setup; it ends when the owner disconnects the
+    café's devices (the pairing generation it carries)."""
     business = await ctx.session.get(Business, ctx.business_id)
-    token = create_token(business_id=str(ctx.business_id), scope="printer", ttl_minutes=PRINTER_TOKEN_DAYS * 24 * 60,
+    token = create_token(business_id=str(ctx.business_id), scope="printer", permanent=True,
                          generation=business.pairing_generation, extra={"printer": printer})
-    claims = decode_token(token)
     return PrinterTokenOut(
         printer=printer, token=token, claim_path="/print/agent/claim", result_path="/print/agent/jobs/{job_id}/result",
-        expires_at=datetime.fromtimestamp(claims["exp"], tz=timezone.utc),
     )
 
 
