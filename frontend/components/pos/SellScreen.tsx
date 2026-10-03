@@ -373,6 +373,7 @@ export function SellScreen({
   const printQueue = usePrintQueue(token);
   const [printSheet, setPrintSheet] = useState(false);
   const [browserJob, setBrowserJob] = useState<string | null>(null);
+  const [previewJob, setPreviewJob] = useState<string | null>(null); // till-13: "Lihat slip"
   async function printReceiptOf(orderId: string) {
     try {
       const jobs = await api<PrintJob[]>("/pos/print-jobs?scope=recent&printer=front", { token });
@@ -1293,6 +1294,7 @@ export function SellScreen({
                               void printQueue.load();
                             }}
                             onBrowserPrint={setBrowserJob}
+                            onPreview={setPreviewJob}
                           />
                         </div>
                       </li>
@@ -1894,7 +1896,10 @@ export function SellScreen({
         </div>
       )}
 
-      {printSheet && <PrintQueueSheet token={token} queue={printQueue} onClose={() => setPrintSheet(false)} onBrowserPrint={setBrowserJob} />}
+      {printSheet && (
+        <PrintQueueSheet token={token} queue={printQueue} onClose={() => setPrintSheet(false)} onBrowserPrint={setBrowserJob} onPreview={setPreviewJob} />
+      )}
+      {previewJob && <BrowserPrintSheet jobId={previewJob} token={token} previewOnly onDone={() => setPreviewJob(null)} />}
       {browserJob && (
         <BrowserPrintSheet
           jobId={browserJob}

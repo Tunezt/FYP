@@ -2222,3 +2222,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Verified in the browser: a paid takeaway order's receipt in the print preview (logo, PESANAN 001 between double rules, Tanggal/Jenis/Kasir, "1 x @35.000", Total item 2, Subtotal 50.000, Promo −3.500, PB1 10% 4.650, TOTAL 51.150 between double rules, the Wi-Fi line, Terima kasih!, Ref); the customer's /struk page at 375 px with the wordmark (a promo amount that wrapped was fixed); Pengaturan shows the logo toggle (on, with preview) and the closing line.
 **Deviation:** `test_receipt_content.py` (mine, till-5a) looked for the text "Kasir Sari"; the cashier is now a label/value line, so it asserts a line starting "Kasir" and ending "Sari". Not committed, per instruction; snapshot `refs/wip/till-12`.
 **Next:** till-13 slip preview and manual printing of kitchen slips.
+
+
+### [till-13] Every slip can be looked at, and a kitchen slip can be printed by hand
+**Date:** 2026-10-02
+**Status:** done in software; **uncommitted at the owner's request**
+**Changed:** frontend/components/pos/PrintQueue.tsx, frontend/components/pos/SellScreen.tsx
+**Gates:** pytest 702 passed, 5 failed at ~03:50 WIB: the pre-existing voucher test and the same 4 clock-window tests as till-11/12; **full pytest re-run after 07:00 WIB pending**. next build OK; alembic round trip OK at 0048; seed OK
+**Notes:**
+- Owner's feedback of 2 Oct, point 7: "I can't see what the kitchen slip looks like; why is there no Cetak manual for it?"
+- **Lihat slip** on every print job (open, held, failed, printed — in *Antrean cetak* and in an order's print status): the document drawn exactly as the printer gets it, 80 mm, with the printer it goes to. It only reads the job (`GET /pos/print-jobs/{id}`); nothing is claimed or marked.
+- **Cetak manual** now also on kitchen (Dapur) slips that are waiting, held or failed. The sheet says where it will come out: "Slip dapur. Dicetak di printer yang tersambung ke tablet ini (biasanya printer depan) — antar kertasnya ke dapur." The flow is unchanged: the job is taken only when the print dialog is opened, and it is *printed* only when the person answers "Ya, sudah tercetak". The API already allowed this; only the till hid the button.
+- Verified in the browser: table 7's Nasi Goreng sent to the kitchen; *Lihat slip* on the Dapur job shows DAPUR · MEJA 7 · Pesanan 001 · 1× Nasi Goreng Spesial; *Cetak manual* on it shows the walk-it-to-the-kitchen note; *Lihat slip* on the table's nota shows the logo header from till-12.
+**Deviation:** none. Not committed, per instruction; snapshot `refs/wip/till-13`.
+**Next:** daytime full pytest re-run (clock window), then the owner's review.

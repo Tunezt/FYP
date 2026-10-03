@@ -141,12 +141,14 @@ export function PrintJobActions({
   token,
   onChanged,
   onBrowserPrint,
+  onPreview,
   compact = false,
 }: {
   job: Pick<PrintJob, "id" | "status" | "printer">;
   token: string | null;
   onChanged: () => void;
   onBrowserPrint: (jobId: string) => void;
+  onPreview?: (jobId: string) => void; // till-13: see the slip as it prints
   compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
@@ -167,6 +169,11 @@ export function PrintJobActions({
   const btn = `btn-quiet ${compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"}`;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      {onPreview && (
+        <button onClick={() => onPreview(job.id)} disabled={busy} className={btn}>
+          Lihat slip
+        </button>
+      )}
       {job.status === "held" && (
         <button onClick={() => act("release")} disabled={busy} className={btn} title="Dicetak dengan tanda TERLAMBAT">
           Cetak sekarang (terlambat)
@@ -177,8 +184,13 @@ export function PrintJobActions({
           Coba lagi
         </button>
       )}
-      {(job.status === "pending" || job.status === "held" || job.status === "failed") && job.printer === "front" && (
-        <button onClick={() => onBrowserPrint(job.id)} disabled={busy} className={btn} title="Cadangan manual: dialog cetak browser">
+      {(job.status === "pending" || job.status === "held" || job.status === "failed") && (
+        <button
+          onClick={() => onBrowserPrint(job.id)}
+          disabled={busy}
+          className={btn}
+          title={job.printer === "kitchen" ? "Cadangan manual: dicetak di printer tablet ini, lalu diantar ke dapur" : "Cadangan manual: dialog cetak browser"}
+        >
           Cetak manual
         </button>
       )}
@@ -207,11 +219,13 @@ export function PrintQueueSheet({
   queue,
   onClose,
   onBrowserPrint,
+  onPreview,
 }: {
   token: string | null;
   queue: ReturnType<typeof usePrintQueue>;
   onClose: () => void;
   onBrowserPrint: (jobId: string) => void;
+  onPreview?: (jobId: string) => void;
 }) {
   const [tab, setTab] = useState<"open" | "recent">("open");
   const [recent, setRecent] = useState<PrintJob[] | null>(null);
@@ -293,7 +307,7 @@ export function PrintQueueSheet({
                     </span>
                   </div>
                   <div className="mt-2">
-                    <PrintJobActions job={j} token={token} onChanged={() => void queue.load()} onBrowserPrint={onBrowserPrint} compact />
+                    <PrintJobActions job={j} token={token} onChanged={() => void queue.load()} onBrowserPrint={onBrowserPrint} onPreview={onPreview} compact />
                   </div>
                 </li>
               ))}
@@ -334,15 +348,29 @@ function PrinterDevices({ devices }: { devices: PrintDevice[] }) {
 /** Manual fallback through the browser's print dialog. The job is taken, the
  *  slip is shown and printed, and then the person is asked. A closed dialog is
  *  not proof of paper, so nothing is marked printed without that answer. */
-export function BrowserPrintSheet({ jobId, token, onDone }: { jobId: string; token: string | null; onDone: () => void }) {
+export function BrowserPrintSheet({
+  jobId,
+  token,
+  onDone,
+  previewOnly = false,
+}: {
+  jobId: string;
+  token: string | null;
+  onDone: () => void;
+  previewOnly?: boolean; // till-13: look at any slip, printed or not, without taking it
+}) {
   const [doc, setDoc] = useState<PrintDoc | null>(null);
+  const [meta, setMeta] = useState<{ printer: "front" | "kitchen"; kind_label?: string; order_label?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [asked, setAsked] = useState(false);
   const [busy, setBusy] = useState(false);
   // Preview first; the job is only taken when the dialog is actually opened.
   useEffect(() => {
-    api<{ document: PrintDoc }>(`/pos/print-jobs/${jobId}`, { token })
-      .then((j) => setDoc(j.document))
+    api<{ document: PrintDoc; printer: "front" | "kitchen"; kind_label?: string; order_label?: string }>(`/pos/print-jobs/${jobId}`, { token })
+      .then((j) => {
+        setDoc(j.document);
+        setMeta({ printer: j.printer, kind_label: j.kind_label, order_label: j.order_label });
+      })
       .catch((e: unknown) => setError(e instanceof ApiError ? e.detail : "Slip tidak bisa diambil"));
   }, [jobId, token]);
 
@@ -377,9 +405,15 @@ export function BrowserPrintSheet({ jobId, token, onDone }: { jobId: string; tok
       <div className="sheet-panel max-h-[92dvh] w-full overflow-y-auto sm:max-w-md print:shadow-none" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 pt-4 print:hidden">
           <p className="flex items-center gap-2 text-[17px] font-semibold">
-            <IconPrinter className="h-5 w-5" /> Cetak manual lewat browser
+            <IconPrinter className="h-5 w-5" /> {previewOnly ? (meta?.kind_label ?? "Lihat slip") : "Cetak manual lewat browser"}
           </p>
-          <p className="ink-soft text-[13px]">Cadangan kalau printer belum tersambung otomatis. Pilih printer depan di dialog cetak.</p>
+          <p className="ink-soft text-[13px]">
+            {previewOnly
+              ? `Seperti yang keluar di ${meta?.printer === "kitchen" ? "printer dapur" : "printer depan"}, kertas 80 mm.`
+              : meta?.printer === "kitchen"
+                ? "Slip dapur. Dicetak di printer yang tersambung ke tablet ini (biasanya printer depan) — antar kertasnya ke dapur."
+                : "Cadangan kalau printer belum tersambung otomatis. Pilih printer depan di dialog cetak."}
+          </p>
         </div>
         {error && <p className="notice notice-bad mx-5 mt-3 print:hidden">{error}</p>}
         {doc && (
@@ -388,7 +422,11 @@ export function BrowserPrintSheet({ jobId, token, onDone }: { jobId: string; tok
           </div>
         )}
         <div className="px-5 pb-5 pt-3 print:hidden">
-          {!asked ? (
+          {previewOnly ? (
+            <button onClick={onDone} className="btn-quiet w-full py-3">
+              Tutup
+            </button>
+          ) : !asked ? (
             <div className="flex gap-2">
               <button onClick={onDone} className="btn-quiet px-4 py-3" disabled={busy}>
                 Tutup
