@@ -230,3 +230,35 @@ async def test_the_owner_replaces_the_placeholders(client, cafe):
     assert label.status_code == 200 and label.json()["tax_label"] == "PB1"
     quote = await client.post("/pos/quote", headers=c["pos"], json={"lines": [{"item_id": str(c["roti"]), "quantity": 1}]})
     assert quote.json()["tax_label"] == "PB1" and Decimal(quote.json()["tax_total"]) == Decimal("1363.64")
+
+
+async def test_an_ojol_order_paid_in_the_app_is_owed_by_the_app_not_in_the_drawer(client, session_factory, cafe):
+    """till-9: at the till "pickup" is Ojol — a GoFood/GrabFood driver collects
+    it and the customer already paid the app. The payment is "other" with the
+    reference "ojol": the receipt says "Dibayar aplikasi", the ledger books a
+    receivable (1200), and no cash reaches the drawer (1110)."""
+    from app.models import Account, JournalEntry, JournalLine
+
+    c = cafe
+    resp = await client.post("/pos/orders", headers=c["pos"], json={
+        "order_type": "pickup",
+        "external_ref": "GF-123",
+        "lines": [{"item_id": str(c["roti"]), "quantity": 2}],
+        "payments": [{"method": "other", "amount": 30000, "reference": "ojol"}],
+    })
+    assert resp.status_code == 201, resp.text
+    sale = resp.json()
+    paper = _paper_lines(await _receipt_doc(session_factory, c, sale["id"]))
+    assert any(l.startswith("Dibayar aplikasi") and l.endswith("Rp 30.000") for l in paper)
+    assert "Ojol" in "\n".join(paper) and "Ambil sendiri" not in "\n".join(paper)
+    async with session_factory() as s:
+        await _set_tenant(s, c["bid"])
+        rows = (await s.execute(
+            select(Account.code, JournalLine.debit)
+            .join(Account, Account.id == JournalLine.account_id)
+            .join(JournalEntry, JournalEntry.id == JournalLine.entry_id)
+            .where(JournalEntry.source_type == "order", JournalEntry.source_id == uuid.UUID(sale["id"]), JournalLine.debit > 0)
+        )).all()
+    debits = {code: Decimal(d) for code, d in rows}
+    assert debits.get("1200") == Decimal(30000)
+    assert "1110" not in debits

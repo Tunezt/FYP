@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
-import { orderHeading, orderLabel, serviceDateLabel, taxLineLabel, withSize } from "@/lib/pos";
+import { orderHeading, orderLabel, paymentLabel, serviceDateLabel, taxLineLabel, withSize } from "@/lib/pos";
 import { FormHint, missingText } from "@/components/FormHint";
 import { ReceiptChoiceSheet } from "@/components/pos/ReceiptChoice";
 import { IconChevronLeft, IconPrinter } from "@/components/icons";
@@ -46,7 +46,7 @@ export type Receipt = {
   tax_rate?: string;
   rounding: string;
   total: string;
-  payments: { method: string; amount: string; tendered?: string | null }[];
+  payments: { method: string; amount: string; reference?: string | null; tendered?: string | null }[];
   business_address?: string | null;
   business_phone?: string | null;
   business_instagram?: string | null;
@@ -319,7 +319,7 @@ export function TransactionsView({
                         value={note}
                         onChange={(e) => setNote(e.target.value.slice(0, 200))}
                         className="field mt-1 w-full text-sm"
-                        placeholder="cth. salah pencet menu"
+                        placeholder="cth. salah pencet menu" aria-required="true"
                       />
                     </label>
                     <label className="block">
@@ -330,7 +330,7 @@ export function TransactionsView({
                         value={pin}
                         onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
                         className="field mt-1 w-full text-sm tabular-nums"
-                        placeholder="••••"
+                        placeholder="••••" aria-required="true"
                       />
                     </label>
                     <button
@@ -423,7 +423,6 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
   const when = new Date(receipt.sold_at).toLocaleString("id-ID", {
     day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
-  const method = (m: string) => ({ cash: "Tunai", qris: "QRIS", points: "Poin" } as Record<string, string>)[m] ?? m.toUpperCase();
   const contact = [receipt.business_phone, receipt.business_instagram ? `IG ${receipt.business_instagram}` : null].filter(Boolean).join(" · ");
   return (
     <div className="sheet-scrim z-[60] items-center p-6 print:bg-transparent print:backdrop-blur-none" onClick={onClose}>
@@ -545,7 +544,7 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
           .map((p, i) => (
             <div key={i}>
               <div className="flex justify-between">
-                <span>{method(p.method)}</span>
+                <span>{paymentLabel(p)}</span>
                 <span>{formatRupiah(p.amount)}</span>
               </div>
               {p.method === "cash" && p.tendered && Number(p.tendered) > Number(p.amount) && (

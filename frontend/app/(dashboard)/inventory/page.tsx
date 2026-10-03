@@ -186,7 +186,7 @@ export default function InventoryPage() {
               className="field"
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              placeholder="cth. Biji Arabica"
+              placeholder="cth. Biji Arabica" aria-required="true"
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
@@ -204,7 +204,7 @@ export default function InventoryPage() {
                 className="field"
                 value={draft.unit}
                 onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
-                placeholder="kg / pcs / liter"
+                placeholder="kg / pcs / liter" aria-required="true"
               />
             </Field>
             <Field label="Harga modal (Rp)">

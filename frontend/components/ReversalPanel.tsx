@@ -243,7 +243,7 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                                         className="field"
                                         value={note}
                                         onChange={(e) => setNote(e.target.value.slice(0, 200))}
-                                        placeholder="cth. salah pencet menu"
+                                        placeholder="cth. salah pencet menu" aria-required="true"
                                       />
                                     </label>
                                     <label className="block">
@@ -256,7 +256,7 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                                         inputMode="numeric"
                                         value={pin}
                                         onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                                        placeholder="••••"
+                                        placeholder="••••" aria-required="true"
                                       />
                                     </label>
                                   </div>

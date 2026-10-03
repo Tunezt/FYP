@@ -137,7 +137,7 @@ export function AddExpenseSheet({
             autoFocus
             inputMode="numeric"
             className="field py-3 text-2xl font-semibold tabular-nums"
-            placeholder="0"
+            placeholder="0" aria-required="true"
             value={amount ? Number(amount).toLocaleString("id-ID") : ""}
             onChange={(e) => setAmount(digits(e.target.value).slice(0, 10))}
           />

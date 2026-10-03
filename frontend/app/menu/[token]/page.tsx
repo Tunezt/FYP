@@ -535,7 +535,7 @@ export default function MenuPage() {
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {orderType === "dine_in" && (
-                  <input value={table} onChange={(e) => setTable(e.target.value.slice(0, 20))} className="field" placeholder="Nomor meja" aria-label="Nomor meja" />
+                  <input value={table} onChange={(e) => setTable(e.target.value.slice(0, 20))} className="field" placeholder="Nomor meja" aria-required="true" aria-label="Nomor meja" />
                 )}
                 <input
                   value={name}

@@ -174,7 +174,7 @@ export default function RegisterPage() {
                 className="field"
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="cth. Poernama"
+                placeholder="cth. Poernama" aria-required="true"
                 autoFocus
               />
             </label>
@@ -203,7 +203,7 @@ export default function RegisterPage() {
                   className="field"
                   value={ownerName}
                   onChange={(e) => setOwnerName(e.target.value)}
-                  placeholder="cth. Ibu Diah"
+                  placeholder="cth. Ibu Diah" aria-required="true"
                 />
               </label>
               <label className="block">
@@ -216,7 +216,7 @@ export default function RegisterPage() {
                   maxLength={4}
                   value={ownerPin}
                   onChange={(e) => setOwnerPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="••••"
+                  placeholder="••••" aria-required="true"
                 />
               </label>
             </div>

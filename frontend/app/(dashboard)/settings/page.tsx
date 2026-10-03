@@ -929,7 +929,7 @@ export default function SettingsPage() {
               maxLength={4}
               value={pinDraft}
               onChange={(e) => setPinDraft(e.target.value.replace(/\D/g, ""))}
-              placeholder="••••"
+              placeholder="••••" aria-required="true"
             />
           </label>
           <button
@@ -951,7 +951,7 @@ export default function SettingsPage() {
               className="field"
               value={staffDraft.name}
               onChange={(e) => setStaffDraft({ ...staffDraft, name: e.target.value })}
-              placeholder="cth. Sari"
+              placeholder="cth. Sari" aria-required="true"
             />
           </label>
           <label className="block">
@@ -962,7 +962,7 @@ export default function SettingsPage() {
               maxLength={4}
               value={staffDraft.pin}
               onChange={(e) => setStaffDraft({ ...staffDraft, pin: e.target.value.replace(/\D/g, "") })}
-              placeholder="••••"
+              placeholder="••••" aria-required="true"
             />
           </label>
           <label className="block">

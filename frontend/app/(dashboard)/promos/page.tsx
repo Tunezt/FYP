@@ -388,7 +388,7 @@ export default function PromosPage() {
             {vdraft.mode === "single" ? (
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-[13px] font-medium">Kode</span>
-                <input className="field font-mono" placeholder="HEMAT5" value={vdraft.code} onChange={(e) => setVdraft({ ...vdraft, code: e.target.value.toUpperCase() })} autoFocus />
+                <input className="field font-mono" placeholder="HEMAT5" aria-required="true" value={vdraft.code} onChange={(e) => setVdraft({ ...vdraft, code: e.target.value.toUpperCase() })} autoFocus />
               </label>
             ) : (
               <div className="grid grid-cols-3 gap-2">

@@ -148,11 +148,29 @@ export const PREP_LABEL: Record<PrepState, string> = {
 
 export const SOURCE_LABEL: Record<string, string> = { pos: "Kasir", menu: "QR" };
 
+/* till-9: three ways an order leaves the counter at Poernama. "pickup" is an
+ * online-delivery order (GoFood, GrabFood, ShopeeFood) that the app's driver
+ * collects: the customer paid the app, the app owes the café. "delivery" (the
+ * café's own courier, with an address and a fee) is no longer offered at the
+ * till; older orders keep their name. */
 export const SERVICE_LABEL: Record<string, string> = {
   dine_in: "Makan di sini",
   takeaway: "Bawa pulang",
-  pickup: "Ambil sendiri",
-  delivery: "Antar",
+  pickup: "Ojol",
+  delivery: "Antar kurir kafe",
+};
+
+/** A payment's name on a receipt; an ojol order paid in the app says so (till-9). */
+export function paymentLabel(p: { method: string; reference?: string | null }): string {
+  if (p.method === "other" && p.reference === "ojol") return "Dibayar aplikasi";
+  return ({ cash: "Tunai", qris: "QRIS", points: "Poin", transfer: "Transfer", card: "Kartu", ewallet: "E-wallet", other: "Lainnya" } as Record<string, string>)[p.method] ?? p.method.toUpperCase();
+}
+
+/** One line under each choice at the till, so nobody has to guess. */
+export const SERVICE_HINT: Record<string, string> = {
+  dine_in: "diantar ke meja",
+  takeaway: "dibungkus",
+  pickup: "GoFood · Grab",
 };
 
 /** A reference a device invents once per submission, so a retry is the same

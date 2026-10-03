@@ -2,7 +2,7 @@
 
 import { IconClose, IconLock, IconNote } from "@/components/icons";
 import { formatRupiah } from "@/lib/format";
-import { SERVICE_LABEL, taxLineLabel } from "@/lib/pos";
+import { SERVICE_HINT, SERVICE_LABEL, taxLineLabel } from "@/lib/pos";
 import { FormHint } from "@/components/FormHint";
 
 export type PanelLine = {
@@ -116,7 +116,15 @@ export function OrderPanel({
   const sendMissing = sendFirst && !tableLabel.trim() ? "Isi nomor meja dulu" : null;
   // till-4: no order type is chosen for the cashier.
   const noType = orderType === "";
-  const payMissing = empty ? "Ketuk menu untuk menambahkan item" : noType ? "Pilih jenis pesanan" : null;
+  // till-9: an ojol order is matched to its driver by the app's order code.
+  const ojol = orderType === "pickup";
+  const payMissing = empty
+    ? "Ketuk menu untuk menambahkan item"
+    : noType
+      ? "Pilih jenis pesanan"
+      : ojol && !externalRef.trim()
+        ? "Isi kode pesanan ojol"
+        : null;
 
   const title = context.kind === "new" ? "Pesanan baru" : context.title;
   const subtitle =
@@ -150,53 +158,59 @@ export function OrderPanel({
       </header>
 
       <div className="px-5">
-        {onOrderType && noType && (
-          <p className="mb-1.5 text-[13px] font-medium" style={{ color: "var(--warn)" }}>
-            Pilih jenis pesanan
-          </p>
-        )}
         {onOrderType && (
-          <div className={`segmented grid w-full gap-[3px] ${orderTypes.length === 4 ? "grid-cols-2" : "grid-cols-3"}`} role="group" aria-label="Jenis pesanan">
-            {orderTypes.map((t) => (
-              <button
-                key={t}
-                onClick={() => onOrderType(t)}
-                aria-pressed={orderType === t}
-                className="segmented-item min-h-[2.75rem] whitespace-nowrap px-2 text-[13px]"
-              >
-                {SERVICE_LABEL[t] ?? t}
-              </button>
-            ))}
-          </div>
+          /* till-9: three separate, outlined choices under a named group, not a
+             grey strip that reads as a label. Unchosen, the name says so in red. */
+          <fieldset>
+            <legend className="mb-1.5 flex items-baseline gap-1.5 text-[13px] font-semibold">
+              Jenis pesanan
+              {noType && <span className="text-[12px] font-medium text-[color:var(--bad)]">· wajib dipilih</span>}
+            </legend>
+            <div className="grid grid-cols-3 gap-2">
+              {orderTypes.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => onOrderType(t)}
+                  aria-pressed={orderType === t}
+                  className="choice-card flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 text-center"
+                >
+                  <span className="text-[14px] font-semibold leading-tight">{SERVICE_LABEL[t] ?? t}</span>
+                  {SERVICE_HINT[t] && <span className="ink-faint text-[11px] font-normal leading-tight">{SERVICE_HINT[t]}</span>}
+                </button>
+              ))}
+            </div>
+          </fieldset>
         )}
-        <div className={`flex gap-2 ${onOrderType ? "mt-2" : ""}`}>
+        <div className={`flex gap-2 ${onOrderType ? "mt-2.5" : ""}`}>
           {bill && (
             <input
               value={tableLabel}
               onChange={(e) => onTableLabel(e.target.value.slice(0, 20))}
               className="field min-h-[2.75rem] w-28 py-2 text-sm font-semibold"
-              placeholder="Meja"
+              placeholder="No. meja"
               aria-label="Nomor meja"
+              aria-required="true"
+            />
+          )}
+          {ojol && (
+            <input
+              value={externalRef}
+              onChange={(e) => onExternalRef(e.target.value.slice(0, 40))}
+              className="field min-h-[2.75rem] w-40 py-2 text-sm font-semibold"
+              placeholder="Kode pesanan ojol"
+              aria-label="Kode pesanan ojol"
+              aria-required="true"
+              title="Nomor pesanan dari aplikasi GoFood / GrabFood / ShopeeFood"
             />
           )}
           <input
             value={guestName}
             onChange={(e) => onGuestName(e.target.value.slice(0, 60))}
             className="field min-h-[2.75rem] min-w-0 flex-1 py-2 text-sm"
-            placeholder="Nama pelanggan (opsional)"
+            placeholder={ojol ? "Nama (opsional)" : "Nama pelanggan (opsional)"}
             aria-label="Nama pelanggan"
           />
-          {/* till-8: a delivery app's order code belongs to Antar only. */}
-          {orderType === "delivery" && (
-            <input
-              value={externalRef}
-              onChange={(e) => onExternalRef(e.target.value.slice(0, 40))}
-              className="field min-h-[2.75rem] w-32 py-2 text-sm"
-              placeholder="Kode driver"
-              aria-label="Kode driver (opsional)"
-              title="Nomor pesanan dari aplikasi ojol, kalau ada"
-            />
-          )}
         </div>
       </div>
 
@@ -337,7 +351,7 @@ export function OrderPanel({
           </>
         ) : (
           <>
-            <button onClick={onPay} disabled={empty || busy || noType} className="btn-accent mt-3 w-full py-3.5 text-base">
+            <button onClick={onPay} disabled={!!payMissing || busy} className="btn-accent mt-3 w-full py-3.5 text-base">
               Bayar {formatRupiah(total)}
             </button>
             <FormHint missing={payMissing} />
@@ -349,9 +363,9 @@ export function OrderPanel({
               Bayar sekarang
             </button>
           )}
-          {onHold && lines.length > 0 && (
+          {onHold && lines.length > 0 && !bill && (
             <button onClick={onHold} disabled={busy || noType} className="btn-quiet min-h-[2.75rem] flex-1 py-2.5 text-sm">
-              {bill ? "Simpan, belum kirim" : context.kind === "open" ? "Simpan perubahan" : "Simpan, bayar nanti"}
+              {context.kind === "open" ? "Simpan perubahan" : "Simpan, bayar nanti"}
             </button>
           )}
           <button onClick={onClear} disabled={busy || (empty && context.kind === "new")} className="btn-quiet min-h-[2.75rem] px-4 py-2.5 text-sm">

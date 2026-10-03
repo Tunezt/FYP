@@ -69,7 +69,7 @@ def receipt_text(view, web_url: str | None) -> str:
     """The receipt for a chat window: short lines, WhatsApp's own *bold* and
     _italic_, no column alignment (the 48-column layout is for paper)."""
     from app.services.business_profile import tax_line_label
-    from app.services.printing import PAYMENT_LABEL
+    from app.services.printing import payment_label
 
     head = f"MEJA {view.table_label.upper()} · " if view.order_type == "dine_in" and view.table_label else ""
     out: list[str] = [f"*{view.business_name.upper()}*"]
@@ -105,7 +105,7 @@ def receipt_text(view, web_url: str | None) -> str:
     for p in view.payments:
         if Decimal(p.amount) <= 0:
             continue
-        text = f"{PAYMENT_LABEL.get(p.method, p.method.upper())} {_rp(p.amount)}"
+        text = f"{payment_label(p)} {_rp(p.amount)}"
         if p.method == "cash" and p.tendered and Decimal(p.tendered) > Decimal(p.amount):
             text += f" · diterima {_rp(p.tendered)} · kembali {_rp(Decimal(p.tendered) - Decimal(p.amount))}"
         out.append(text)

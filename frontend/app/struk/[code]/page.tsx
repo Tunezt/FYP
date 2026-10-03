@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { formatQty, formatRupiah } from "@/lib/format";
-import { orderHeading, serviceDateLabel, taxLineLabel } from "@/lib/pos";
+import { orderHeading, paymentLabel, serviceDateLabel, taxLineLabel } from "@/lib/pos";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 import type { Receipt } from "@/components/pos/Receipts";
 
@@ -44,7 +44,6 @@ export default function ReceiptPage() {
   const when = new Date(r.sold_at).toLocaleString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const head = orderHeading(r);
   const contact = [r.business_phone, r.business_instagram ? `IG ${r.business_instagram}` : null].filter(Boolean).join(" · ");
-  const method = (m: string) => ({ cash: "Tunai", qris: "QRIS", points: "Poin" } as Record<string, string>)[m] ?? m.toUpperCase();
   const extras: [string, string][] = [];
   if (Number(r.discount_total) > 0) extras.push(["Diskon", `− ${formatRupiah(r.discount_total)}`]);
   if (Number(r.promo_total) > 0) extras.push([`Promo${r.promo_names.length ? ` (${r.promo_names.join(", ")})` : ""}`, `− ${formatRupiah(r.promo_total)}`]);
@@ -110,7 +109,7 @@ export default function ReceiptPage() {
             .filter((p) => Number(p.amount) > 0)
             .map((p, i) => (
               <div key={i}>
-                <Row label={method(p.method)} value={formatRupiah(p.amount)} />
+                <Row label={paymentLabel(p)} value={formatRupiah(p.amount)} />
                 {p.method === "cash" && p.tendered && Number(p.tendered) > Number(p.amount) && (
                   <>
                     <Row label="Diterima" value={formatRupiah(p.tendered)} />

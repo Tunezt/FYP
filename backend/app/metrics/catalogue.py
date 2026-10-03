@@ -229,8 +229,8 @@ async def discount_cost(session: AsyncSession, ctx: MetricContext) -> MetricResu
     return MetricResult(name="discount_cost", unit="rupiah", value=await _order_sum(session, ctx, Order.discount_total))
 
 
-@metric("revenue_by_order_type", description_id="Total tagihan per jenis pesanan (makan di tempat, bawa pulang, antar, ambil sendiri) dalam periode",
-        description_en="Bill totals by order type (dine-in, takeaway, delivery, pickup) in the period", unit="rupiah")
+@metric("revenue_by_order_type", description_id="Total tagihan per jenis pesanan (dine_in makan di tempat, takeaway bawa pulang, pickup = ojol GoFood/GrabFood, delivery antar kurir kafe) dalam periode",
+        description_en="Bill totals by order type (dine-in, takeaway, pickup = ride-hailing food apps, delivery = own courier) in the period", unit="rupiah")
 async def revenue_by_order_type(session: AsyncSession, ctx: MetricContext) -> MetricResult:
     """Routing by order type (M11-T3), read back: how much of the day was
     eaten in, carried out or sent — `total` as paid, delivery fees shown apart."""

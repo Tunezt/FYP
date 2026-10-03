@@ -415,7 +415,7 @@ function Board({
   );
 }
 
-const SERVICE: Record<string, string> = { dine_in: "Makan di sini", takeaway: "Bawa pulang", pickup: "Ambil sendiri", delivery: "Antar" };
+const SERVICE: Record<string, string> = { dine_in: "Makan di sini", takeaway: "Bawa pulang", pickup: "Ojol", delivery: "Antar kurir kafe" };
 
 function lineText(lines: KitchenLine[]) {
   return lines.map((l) => `${formatQty(l.quantity)}× ${l.size ? `${l.item_name} ${l.size}` : l.item_name || l.name}`).join(", ");

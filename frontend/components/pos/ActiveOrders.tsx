@@ -405,7 +405,7 @@ function OrderDetail({
               value={reason}
               onChange={(e) => setReason(e.target.value.slice(0, 200))}
               className="field mt-1.5 text-sm"
-              placeholder="mis. tamu tidak jadi"
+              placeholder="mis. tamu tidak jadi" aria-required={reasonNeeded}
             />
             <p className="ink-soft mt-1.5 text-xs">
               {reasonNeeded

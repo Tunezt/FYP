@@ -244,8 +244,8 @@ export type OrderType = "dine_in" | "takeaway" | "delivery" | "pickup";
 export const ORDER_TYPE_LABEL: Record<OrderType, string> = {
   dine_in: "Makan di tempat",
   takeaway: "Bawa pulang",
-  delivery: "Antar",
-  pickup: "Ambil sendiri",
+  delivery: "Antar kurir kafe",
+  pickup: "Ojol (GoFood/Grab)",   // till-9: an online-delivery app's driver collects it
 };
 
 // Customers (M8-T1). History is derived from orders by the API.

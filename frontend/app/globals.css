@@ -475,6 +475,18 @@ table {
     color: var(--ink-faint);
   }
 
+  /* till-9: a field that must be filled before the next step says so while it
+     is empty — a red-tinted outline and a red placeholder — and goes back to
+     normal the moment something is typed. Mark it with aria-required="true". */
+  .field[aria-required="true"]:placeholder-shown {
+    border-color: color-mix(in srgb, var(--bad) 55%, var(--border));
+  }
+
+  .field[aria-required="true"]:placeholder-shown::placeholder {
+    color: var(--bad);
+    opacity: 0.9;
+  }
+
   .field:disabled {
     @apply cursor-not-allowed;
     background: var(--surface-inset);

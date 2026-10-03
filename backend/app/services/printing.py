@@ -45,7 +45,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Business, Order, PrintDevice, PrintJob, Staff
 
-SERVICE_LABEL = {"dine_in": "Makan di sini", "takeaway": "Bawa pulang", "pickup": "Ambil sendiri", "delivery": "Antar"}
+# till-9: "pickup" is an online-delivery app's driver (GoFood, GrabFood, ShopeeFood).
+SERVICE_LABEL = {"dine_in": "Makan di sini", "takeaway": "Bawa pulang", "pickup": "Ojol", "delivery": "Antar kurir kafe"}
 STATION_TITLE = {"bar": "BAR", "kitchen": "DAPUR"}
 STATION_PRINTER = {"bar": "front", "kitchen": "kitchen"}
 TICKET_KIND = {"bar": "bar_ticket", "kitchen": "kitchen_ticket"}
@@ -258,7 +259,17 @@ async def render_receipt(session: AsyncSession, order: Order) -> dict:
     return {"v": 1, "kind": "receipt", "blocks": blocks}
 
 
-PAYMENT_LABEL = {"cash": "Tunai", "qris": "QRIS", "points": "Poin", "transfer": "Transfer", "card": "Kartu", "ewallet": "E-wallet"}
+PAYMENT_LABEL = {"cash": "Tunai", "qris": "QRIS", "points": "Poin", "transfer": "Transfer", "card": "Kartu", "ewallet": "E-wallet",
+                 "other": "Lainnya"}
+# till-9: an ojol order the customer paid inside the app.
+APP_PAID_REFERENCE = "ojol"
+
+
+def payment_label(p) -> str:
+    """A payment's name on a receipt: an ojol order paid in the app says so."""
+    if p.method == "other" and getattr(p, "reference", None) == APP_PAID_REFERENCE:
+        return "Dibayar aplikasi"
+    return PAYMENT_LABEL.get(p.method, str(p.method).upper())
 
 
 def payment_blocks(payments) -> list[dict]:
@@ -268,7 +279,7 @@ def payment_blocks(payments) -> list[dict]:
     for p in payments:
         if Decimal(p.amount) <= 0:
             continue
-        out.append({"t": "kv", "left": PAYMENT_LABEL.get(p.method, str(p.method).upper()), "right": _rp(p.amount)})
+        out.append({"t": "kv", "left": payment_label(p), "right": _rp(p.amount)})
         tendered = getattr(p, "tendered", None)
         if p.method == "cash" and tendered is not None and Decimal(tendered) > Decimal(p.amount):
             out.append({"t": "kv", "left": "Diterima", "right": _rp(tendered)})

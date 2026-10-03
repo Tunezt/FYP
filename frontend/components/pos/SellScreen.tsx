@@ -90,7 +90,8 @@ type Quote = {
   discount_requires_pin: boolean;
 };
 
-type PayMode = "cash" | "qris" | "split";
+// till-9: "app" — an ojol order the customer already paid in GoFood/Grab/Shopee.
+type PayMode = "cash" | "qris" | "split" | "app";
 type PosConfig = { require_shift: boolean; receipt_mode: "always" | "ask"; whatsapp_receipts: boolean };
 type Shift = {
   id: string;
@@ -154,8 +155,10 @@ const fingerprint = (cart: CartLine[], orderType: string, guest: string, table: 
   JSON.stringify([cart.map(lineKey).map((k, i) => `${k}×${cart[i].qty}`).sort(), orderType, guest.trim(), table.trim()]);
 
 let lineSeq = 0;
-const NEW_TYPES = ["takeaway", "dine_in", "pickup", "delivery"];
-const HELD_TYPES = ["takeaway", "dine_in", "pickup"];
+// till-9: the till offers three. "pickup" is shown as Ojol (an online-delivery
+// app's driver collects it); the café's own delivery is not offered here.
+const NEW_TYPES = ["dine_in", "takeaway", "pickup"];
+const HELD_TYPES = NEW_TYPES;
 
 export function SellScreen({
   posToken,
@@ -403,7 +406,7 @@ export function SellScreen({
         saved = await api<ActiveOrder>(`/pos/open-orders/${ctx.id}`, {
           token,
           method: "PUT",
-          body: { rev: ctx.rev, lines: cartBody(cart), order_type: orderType, guest_name: guestName, table_label: tableLabel, external_ref: externalRef },
+          body: { rev: ctx.rev, lines: cartBody(cart), order_type: orderType, guest_name: guestName, table_label: tableLabel, external_ref: orderType === "pickup" ? externalRef : "" },
         });
       } else {
         saved = await api<ActiveOrder>("/pos/drafts", {
@@ -414,7 +417,7 @@ export function SellScreen({
             guest_name: guestName.trim() || null,
             table_label: orderType === "dine_in" ? tableLabel.trim() || null : null,
             client_ref: holdRef.current,
-            external_ref: orderType === "delivery" ? externalRef.trim() || null : null,
+            external_ref: orderType === "pickup" ? externalRef.trim() || null : null,
           },
         });
       }
@@ -651,13 +654,15 @@ export function SellScreen({
       : 0;
   const pointsAmount = pointsUsable >= (loyalty?.min_redeem_points ?? 0) ? pointsUsable * pointValue : 0;
   const moneyDue = cartTotal - pointsAmount;
-  const cashAmount = payMode === "cash" ? moneyDue : payMode === "qris" ? 0 : Number(cashPart || 0);
-  const qrisAmount = moneyDue - cashAmount;
+  const cashAmount = payMode === "cash" ? moneyDue : payMode === "qris" || payMode === "app" ? 0 : Number(cashPart || 0);
+  const qrisAmount = payMode === "app" ? 0 : moneyDue - cashAmount;
+  const appAmount = payMode === "app" ? moneyDue : 0;
   const splitValid = payMode !== "split" || (cashAmount > 0 && cashAmount < moneyDue) || moneyDue === 0;
   const tenderedValue = payMode === "cash" ? Number(tendered || 0) : 0;
   const tenderedShort = tendered !== "" && tenderedValue < cashAmount;
 
   const payFill = missingText("Isi", [
+    orderType === "pickup" && !externalRef.trim() && "kode pesanan ojol",
     orderType === "delivery" && !deliveryAddress.trim() && "alamat pengantaran",
     orderType === "delivery" && !deliveryPhone.trim() && !customer?.phone && "nomor HP penerima",
     needsPin && managerPin.length < 4 && "PIN pemilik/manajer untuk diskon",
@@ -677,6 +682,9 @@ export function SellScreen({
       return;
     }
     setPayError(null);
+    // An ojol order is normally paid inside the app; anything else never is.
+    if (orderType === "pickup") setPayMode("app");
+    else if (payMode === "app") setPayMode("cash");
     setDrawer(false);
     setPaying(true);
   }
@@ -694,6 +702,8 @@ export function SellScreen({
         ? [{ method: "cash", amount: cashAmount, ...(payMode === "cash" && tenderedValue > cashAmount ? { tendered: tenderedValue } : {}) }]
         : []),
       ...(qrisAmount > 0 ? [{ method: "qris", amount: qrisAmount }] : []),
+      // Owed by the app, not in the drawer: the ledger books it as a receivable.
+      ...(appAmount > 0 ? [{ method: "other", amount: appAmount, reference: "ojol" }] : []),
     ];
     try {
       let res: OrderResult;
@@ -703,7 +713,7 @@ export function SellScreen({
           const saved = await api<ActiveOrder>(`/pos/open-orders/${ctx.id}`, {
             token,
             method: "PUT",
-            body: { rev, lines: cartBody(cart), order_type: orderType, guest_name: guestName, table_label: tableLabel, external_ref: externalRef },
+            body: { rev, lines: cartBody(cart), order_type: orderType, guest_name: guestName, table_label: tableLabel, external_ref: orderType === "pickup" ? externalRef : "" },
           });
           rev = saved.rev;
           setCtx({ ...ctx, rev, baseline: fingerprint(cart, orderType, guestName, tableLabel) });
@@ -736,7 +746,7 @@ export function SellScreen({
             customer_id: customer?.id ?? null,
             voucher_code: quote?.voucher_code ?? null,
             client_ref: payRef.current,
-            external_ref: orderType === "delivery" ? externalRef.trim() || null : null,
+            external_ref: orderType === "pickup" ? externalRef.trim() || null : null,
           },
         });
       }
@@ -1397,7 +1407,7 @@ export function SellScreen({
                   </div>
                 ) : customerNew ? (
                   <div className="mt-1 grid grid-cols-2 gap-2">
-                    <input autoFocus value={customerNew.name} onChange={(e) => setCustomerNew({ ...customerNew, name: e.target.value })} className="field text-sm" placeholder="Nama" />
+                    <input autoFocus value={customerNew.name} onChange={(e) => setCustomerNew({ ...customerNew, name: e.target.value })} className="field text-sm" placeholder="Nama" aria-required="true" />
                     <input inputMode="tel" value={customerNew.phone} onChange={(e) => setCustomerNew({ ...customerNew, phone: e.target.value })} className="field text-sm tabular-nums" placeholder="Nomor HP" />
                     <button onClick={quickAddCustomer} disabled={!customerNew.name.trim()} className="btn-accent py-2 text-sm">
                       Simpan pelanggan
@@ -1463,7 +1473,7 @@ export function SellScreen({
                       value={managerPin}
                       onChange={(e) => setManagerPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
                       className="field mt-1 text-sm tabular-nums"
-                      placeholder="••••"
+                      placeholder="••••" aria-required="true"
                     />
                   </label>
                 )}
@@ -1482,9 +1492,11 @@ export function SellScreen({
               <div className="segmented mt-4 flex w-full" role="group" aria-label="Cara bayar">
                 {(
                   [
+                    ...(orderType === "pickup" ? [["app", "Via aplikasi"]] : []),
                     ["cash", "Tunai"],
                     ["qris", "QRIS"],
-                    ["split", "Tunai + QRIS"],
+                    // An ojol driver pays one way or the app does; no split.
+                    ...(orderType === "pickup" ? [] : [["split", "Tunai + QRIS"]]),
                   ] as [PayMode, string][]
                 ).map(([mode, label]) => (
                   <button key={mode} onClick={() => setPayMode(mode)} aria-pressed={payMode === mode} className="segmented-item min-h-[2.75rem] flex-1">
@@ -1492,12 +1504,17 @@ export function SellScreen({
                   </button>
                 ))}
               </div>
+              {payMode === "app" && (
+                <p className="ink-soft mt-2 text-sm">
+                  Pelanggan sudah membayar di aplikasi ojol. Uang ini ditagih ke aplikasinya, tidak masuk laci kas.
+                </p>
+              )}
               {payMode === "split" && (
                 <div className="mt-3">
                   <label className="text-[13px] font-medium" htmlFor="cash-part">
                     Bagian tunai (sisanya QRIS)
                   </label>
-                  <input id="cash-part" inputMode="numeric" value={cashPart} onChange={(e) => setCashPart(e.target.value.replace(/[^0-9]/g, ""))} placeholder="0" className="field mt-1 py-3 text-xl font-semibold tabular-nums" />
+                  <input id="cash-part" inputMode="numeric" value={cashPart} onChange={(e) => setCashPart(e.target.value.replace(/[^0-9]/g, ""))} placeholder="0" aria-required="true" className="field mt-1 py-3 text-xl font-semibold tabular-nums" />
                   <p className="ink-soft mt-1 text-sm tabular-nums">
                     Tunai {formatRupiah(cashAmount)} · QRIS {formatRupiah(Math.max(0, qrisAmount))}
                     {!splitValid && cashPart !== "" && " — tunai harus di antara 0 dan total"}
@@ -1596,7 +1613,7 @@ export function SellScreen({
             ) : null}
             <label className="mt-5 block">
               <span className="text-[13px] font-medium">{shiftSheet === "open" ? "Modal awal (Rp)" : "Uang dihitung (Rp)"}</span>
-              <input autoFocus inputMode="numeric" value={shiftAmount} onChange={(e) => setShiftAmount(e.target.value.replace(/[^0-9]/g, ""))} className="field mt-1 py-3 text-2xl font-semibold tabular-nums" placeholder="0" />
+              <input autoFocus inputMode="numeric" value={shiftAmount} onChange={(e) => setShiftAmount(e.target.value.replace(/[^0-9]/g, ""))} className="field mt-1 py-3 text-2xl font-semibold tabular-nums" placeholder="0" aria-required="true" />
             </label>
             {shiftSheet === "close" && <input value={shiftNote} onChange={(e) => setShiftNote(e.target.value)} className="field mt-3 text-sm" placeholder="Catatan (opsional)" />}
             {shiftError && <p className="notice notice-bad mt-3">{shiftError}</p>}
@@ -1632,7 +1649,7 @@ export function SellScreen({
                 onChange={(e) => setShiftAmount(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
                 onKeyDown={(e) => e.key === "Enter" && void openShiftNow()}
                 className="field mt-1 py-3 text-2xl font-semibold tabular-nums"
-                placeholder="0"
+                placeholder="0" aria-required="true"
               />
             </label>
             {shiftError && <p className="notice notice-bad mt-3">{shiftError}</p>}
@@ -1690,9 +1707,9 @@ export function SellScreen({
             </div>
             <label className="mt-4 block">
               <span className="text-[13px] font-medium">Jumlah (Rp)</span>
-              <input autoFocus inputMode="numeric" value={cashInput} onChange={(e) => setCashInput(e.target.value.replace(/[^0-9]/g, ""))} className="field mt-1 py-3 text-2xl font-semibold tabular-nums" placeholder="0" />
+              <input autoFocus inputMode="numeric" value={cashInput} onChange={(e) => setCashInput(e.target.value.replace(/[^0-9]/g, ""))} className="field mt-1 py-3 text-2xl font-semibold tabular-nums" placeholder="0" aria-required="true" />
             </label>
-            <input value={cashReason} onChange={(e) => setCashReason(e.target.value)} className="field mt-3 text-sm" placeholder={cashKind === "petty_cash" ? "Beli apa? (mis. es batu)" : "Alasan"} />
+            <input value={cashReason} onChange={(e) => setCashReason(e.target.value)} className="field mt-3 text-sm" placeholder={cashKind === "petty_cash" ? "Beli apa? (mis. es batu)" : "Alasan"} aria-required="true" />
             {cashKind === "petty_cash" && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {["bahan baku", "operasional", "lainnya"].map((cat) => (
@@ -1753,7 +1770,7 @@ export function SellScreen({
                 value={voiding.reason}
                 onChange={(e) => setVoiding({ ...voiding, reason: e.target.value.slice(0, 200), error: null })}
                 className="field mt-1 text-sm"
-                placeholder="mis. salah ukuran, tamu tidak jadi"
+                placeholder="mis. salah ukuran, tamu tidak jadi" aria-required="true"
               />
             </label>
             {voiding.error && <p className="notice notice-bad mt-3 text-sm">{voiding.error}</p>}
