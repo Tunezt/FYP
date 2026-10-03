@@ -67,7 +67,7 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
                 {b.flag && <p className="text-[11px] font-bold">[{b.flag}]</p>}
                 <p className="text-[17px] font-bold leading-tight">
                   {b.qty}× {b.name}
-                  {b.size ? ` · ${b.size}` : ""}
+                  {b.size ? ` (${b.size})` : ""}
                 </p>
                 {(b.modifiers ?? []).map((m, j) => (
                   <p key={j} className="pl-5 text-[15px]">
@@ -83,7 +83,7 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
                 <p className="flex justify-between gap-2">
                   <span>
                     {b.qty}× {b.name}
-                    {b.size ? ` · ${b.size}` : ""}
+                    {b.size ? ` (${b.size})` : ""}
                   </span>
                   <span className="shrink-0">{b.amount}</span>
                 </p>

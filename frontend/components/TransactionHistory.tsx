@@ -100,7 +100,7 @@ function TransactionRow({ order, tz }: { order: OrderRow; tz?: string }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">
                       {formatQty(line.quantity)}× {line.name}
-                      {line.variant ? ` · ${line.variant}` : ""}
+                      {line.size ? ` · ${line.size}` : ""}
                     </p>
                     {line.modifiers.length > 0 && (
                       <p className="ink-faint truncate text-xs">

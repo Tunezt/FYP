@@ -79,6 +79,7 @@ class PricingConfig:
     # flat fee on `delivery`, added after tax, never taxed.
     service_applies_to: tuple[str, ...] = ALL_ORDER_TYPES
     delivery_fee: Decimal = Decimal(0)
+    tax_label: str = "Pajak"   # till-5a: printing only, never used in arithmetic
 
     @classmethod
     def from_row(cls, row: PricingSettings) -> "PricingConfig":
@@ -92,6 +93,7 @@ class PricingConfig:
             discount_requires_pin=bool(row.discount_requires_pin),
             service_applies_to=tuple(row.service_applies_to or ALL_ORDER_TYPES),
             delivery_fee=Decimal(row.delivery_fee or 0),
+            tax_label=row.tax_label or "Pajak",
         )
 
 

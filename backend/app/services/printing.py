@@ -189,7 +189,15 @@ async def render_ticket(session: AsyncSession, order: Order, station: str, *, ca
 
 
 async def render_receipt(session: AsyncSession, order: Order) -> dict:
-    """The customer's receipt: everything bought, with prices and payment."""
+    """The customer's receipt: everything bought, with prices and payment.
+
+    till-5a: under the name, the café's address and how to reach it (from its
+    settings, placeholders until the owner types the real ones); the tax by its
+    own name and rate ("PBJT 10% (termasuk)"); for cash, what was handed over
+    and the change. The big order number stays: it is what the customer listens
+    for. The internal reference moves to the foot, small, where staff can still
+    find it."""
+    from app.services.business_profile import tax_line_label
     from app.services.orders import load_receipt, order_number
     from app.services.pricing import pricing_config
 
@@ -198,9 +206,13 @@ async def render_receipt(session: AsyncSession, order: Order) -> dict:
     config = await pricing_config(session, order.business_id)
     when = await _local(session, order.business_id, order.sold_at)
     blocks: list[dict] = [{"t": "title", "text": (business.name if business else "").upper()}]
+    blocks += _cafe_details(business)
     blocks += heading_blocks(order)
     blocks.append({"t": "kv", "left": SERVICE_LABEL.get(order.order_type, order.order_type), "right": when.strftime("%d/%m/%Y %H.%M")})
-    blocks.append({"t": "kv", "left": f"Struk #{order_number(order.id)}", "right": data["staff_name"] or ""})
+    who = [f"Kasir {data['staff_name']}" if data["staff_name"] else None,
+           f"untuk {data['customer_name']}" if data.get("customer_name") else None]
+    if any(who):
+        blocks.append({"t": "text", "text": " · ".join(w for w in who if w)})
     blocks.append({"t": "rule"})
     from app.services.kitchen import _lines_of
 
@@ -216,20 +228,58 @@ async def render_receipt(session: AsyncSession, order: Order) -> dict:
             "notes": line.notes, "amount": _rp(line.line_total),
         })
     blocks.append({"t": "rule"})
+    tax_label = tax_line_label(config.tax_label, config.tax_rate, config.tax_inclusive)
     for label, value, sign in (
         ("Subtotal", order.subtotal, ""), ("Diskon", order.discount_total, "-"), ("Promo", order.promo_total, "-"),
         ("Voucher", order.voucher_total, "-"), ("Service", order.service_charge, ""),
-        ("Ongkos kirim", order.delivery_fee, ""), ("Pajak (termasuk)" if config.tax_inclusive else "Pajak", order.tax_total, ""),
+        ("Ongkos kirim", order.delivery_fee, ""), (tax_label, order.tax_total, ""),
         ("Pembulatan", order.rounding, ""),
     ):
         if Decimal(value or 0) != 0 and (label != "Subtotal" or Decimal(order.subtotal) != Decimal(order.total)):
             blocks.append({"t": "kv", "left": label, "right": f"{sign}{_rp(value)}"})
     blocks.append({"t": "total", "left": "TOTAL", "right": _rp(order.total)})
-    for p in data["payments"]:
-        if Decimal(p.amount) > 0:
-            blocks.append({"t": "kv", "left": "Tunai" if p.method == "cash" else p.method.upper(), "right": _rp(p.amount)})
-    blocks += [{"t": "rule"}, {"t": "text", "text": "Sebutkan nomor pesanan saat mengambil. Terima kasih!", "align": "center"}]
+    blocks += payment_blocks(data["payments"])
+    blocks += [
+        {"t": "rule"},
+        {"t": "text", "text": "Sebutkan nomor pesanan saat mengambil. Terima kasih!", "align": "center"},
+        {"t": "text", "text": f"Ref {order_number(order.id)}", "align": "center"},
+    ]
     return {"v": 1, "kind": "receipt", "blocks": blocks}
+
+
+PAYMENT_LABEL = {"cash": "Tunai", "qris": "QRIS", "points": "Poin", "transfer": "Transfer", "card": "Kartu", "ewallet": "E-wallet"}
+
+
+def payment_blocks(payments) -> list[dict]:
+    """Each payment by name; for cash the customer handed over more than the
+    bill, what they gave and what they got back (till-5a)."""
+    out: list[dict] = []
+    for p in payments:
+        if Decimal(p.amount) <= 0:
+            continue
+        out.append({"t": "kv", "left": PAYMENT_LABEL.get(p.method, str(p.method).upper()), "right": _rp(p.amount)})
+        tendered = getattr(p, "tendered", None)
+        if p.method == "cash" and tendered is not None and Decimal(tendered) > Decimal(p.amount):
+            out.append({"t": "kv", "left": "Diterima", "right": _rp(tendered)})
+            out.append({"t": "kv", "left": "Kembali", "right": _rp(Decimal(tendered) - Decimal(p.amount))})
+    return out
+
+
+def _cafe_details(business: Business | None) -> list[dict]:
+    """Address, then phone and Instagram on one line, under the name."""
+    if business is None:
+        return []
+    out: list[dict] = []
+    if (business.address or "").strip():
+        out.append({"t": "text", "text": business.address.strip(), "align": "center"})
+    contact = [c for c in ((business.contact_phone or "").strip(), (business.instagram or "").strip()) if c]
+    if contact:
+        out.append({"t": "text", "text": " · ".join(
+            c if not c.startswith("@") else f"IG {c}" for c in contact
+        ), "align": "center"})
+    if out:
+        out.append({"t": "rule"})
+    return out
 
 
 # ── The queue ────────────────────────────────────────────────────────────────

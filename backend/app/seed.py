@@ -38,6 +38,7 @@ from app.services.catalog import (
 from app.services.accounts import ensure_standard_chart
 from app.services.posting_rules import ensure_standard_rules
 from app.services.points import award_points_for_order, ensure_loyalty_settings
+from app.services.business_profile import apply_placeholders, apply_tax_placeholder
 from app.services.pricing import ensure_pricing_settings
 from app.services.customers import create_customer
 from app.services.promos import create_promo
@@ -153,6 +154,7 @@ async def seed(confirm: bool = False) -> None:
             onboarding_completed_at=now - timedelta(days=31),
             require_shift=True,   # till-4
         )
+        apply_placeholders(business)   # till-5a
         # The demo café has 30 days of invented history, so its row has to be at
         # least that old or the story does not hold together: M15-T10 refuses a
         # paper sale dated before the business existed, and a business created
@@ -177,7 +179,7 @@ async def seed(confirm: bool = False) -> None:
         uoms = await ensure_standard_uoms(session, business_id)
         await ensure_standard_chart(session, business_id)  # M6-T1
         await ensure_standard_rules(session, business_id)  # M6-T3
-        await ensure_pricing_settings(session, business_id)  # M7-T4
+        apply_tax_placeholder(await ensure_pricing_settings(session, business_id))  # M7-T4; till-5a PBJT 10% (termasuk)
         loyalty = await ensure_loyalty_settings(session, business_id)  # M8-T2: on, 1 poin / Rp 1.000, poin = Rp 100
         loyalty.is_active, loyalty.rupiah_per_point, loyalty.point_value, loyalty.min_redeem_points = True, Decimal(1000), Decimal(100), 10
         await session.flush()

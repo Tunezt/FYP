@@ -583,6 +583,9 @@ class BusinessUpdateIn(BaseModel):
     # bad value is a 422 in Indonesian rather than a database error.
     day_start_hour: int | None = Field(default=None, ge=0, le=23)
     require_shift: bool | None = None   # till-4
+    address: str | None = Field(default=None, max_length=120)          # till-5a, printed on receipts
+    contact_phone: str | None = Field(default=None, max_length=40)
+    instagram: str | None = Field(default=None, max_length=60)
 
 
 # ── Pricing settings (M7-T4b): tax, service charge, rounding, discount gate ──
@@ -598,6 +601,7 @@ class PricingSettingsOut(BaseModel):
     discount_requires_pin: bool
     service_applies_to: list[str] = ["dine_in", "takeaway", "delivery", "pickup"]   # M11-T3
     delivery_fee: Decimal = Decimal(0)
+    tax_label: str = "Pajak"   # till-5a: "PBJT" on the receipt
 
     model_config = {"from_attributes": True}
 
@@ -615,6 +619,7 @@ class PricingSettingsPatch(BaseModel):
     discount_requires_pin: bool | None = None
     service_applies_to: list[Literal["dine_in", "takeaway", "delivery", "pickup"]] | None = Field(default=None, max_length=4)   # M11-T3
     delivery_fee: Decimal | None = Field(default=None, ge=0, le=Decimal("9999999"))
+    tax_label: str | None = Field(default=None, min_length=1, max_length=20)   # till-5a
 
 
 # ── Customers (M8-T1) ───────────────────────────────────────────────────────

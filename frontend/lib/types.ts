@@ -89,6 +89,11 @@ export type Business = {
   /** M15-T4: the hour the business day starts (0..23). 0 = calendar day. */
   day_start_hour: number;
   require_shift?: boolean; // till-4: no sale at the till without an open shift
+  // till-5a: printed on receipts; `placeholders` lists the fields still at their placeholder.
+  address?: string | null;
+  contact_phone?: string | null;
+  instagram?: string | null;
+  placeholders?: string[];
   onboarding_completed_at: string | null;
 };
 
@@ -163,6 +168,7 @@ export type OrdersPage = { total: number; rows: OrderRow[] };
 export type ReceiptLine = {
   name: string;
   variant: string | null;
+  size?: string | null; // till-5a: written only when the product has sizes
   quantity: string;
   unit_price: string;
   line_total: string;
@@ -231,6 +237,7 @@ export type PricingSettings = {
   discount_requires_pin: boolean;
   service_applies_to: OrderType[]; // M11-T3: where the service charge applies
   delivery_fee: string;                    // flat fee on delivery orders
+  tax_label?: string;                      // till-5a: "PBJT" on the receipt
 };
 export type OrderType = "dine_in" | "takeaway" | "delivery" | "pickup";
 export const ORDER_TYPE_LABEL: Record<OrderType, string> = {

@@ -311,5 +311,6 @@ async def quote(menu_token: str, payload: MenuQuoteIn):
             lines=[MenuQuoteLineOut(item_id=uuid.UUID(l["item_id"]), unit_price=l["unit_price"], line_total=l["line_total"]) for l in cart_lines],
             subtotal=bill.subtotal, service_charge=bill.service_charge, tax_total=bill.tax_total,
             tax_inclusive=config.tax_inclusive, rounding=bill.rounding, total=bill.total,
+            tax_label=config.tax_label, tax_rate=config.tax_rate,
         )
 

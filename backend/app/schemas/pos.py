@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PosStaffOut(BaseModel):
@@ -119,6 +119,14 @@ class PaymentIn(BaseModel):
     method: PosPaymentMethod
     amount: Decimal = Field(gt=0, le=Decimal("999999999"))
     reference: str | None = Field(default=None, max_length=120)
+    # till-5a: the cash the customer handed over, so the receipt can say the change.
+    tendered: Decimal | None = Field(default=None, gt=0, le=Decimal("999999999"))
+
+    @model_validator(mode="after")
+    def _tendered_covers_cash(self):
+        if self.tendered is not None and (self.method != "cash" or self.tendered < self.amount):
+            raise ValueError("uang diterima hanya untuk tunai dan tidak boleh kurang dari jumlahnya")
+        return self
 
 
 class OrderIn(BaseModel):
@@ -212,6 +220,8 @@ class QuoteOut(BaseModel):
     total: Decimal
     discount_requires_pin: bool
     lines: list[QuoteLineOut]
+    tax_label: str = "Pajak"          # till-5a: "PBJT 10% (termasuk)" on the panel
+    tax_rate: Decimal = Decimal(0)
 
 
 class OrderLineOut(BaseModel):
@@ -232,6 +242,7 @@ class PaymentOut(BaseModel):
     method: str
     amount: Decimal
     reference: str | None
+    tendered: Decimal | None = None   # till-5a: cash handed over; change = tendered - amount
 
 
 class OrderOut(BaseModel):
@@ -262,7 +273,8 @@ class OrderOut(BaseModel):
 
 class ReceiptLineOut(BaseModel):
     name: str                       # item name
-    variant: str | None             # size, when the item has one
+    variant: str | None             # the variant sold, by name ("Standar" too)
+    size: str | None = None         # till-5a: how a customer reads it: the size only when the product has sizes
     quantity: Decimal
     unit_price: Decimal
     line_total: Decimal
@@ -294,9 +306,14 @@ class ReceiptOut(BaseModel):
     service_charge: Decimal = Decimal(0)
     tax_total: Decimal = Decimal(0)
     tax_inclusive: bool = True        # true → tax_total is contained in the prices ("termasuk pajak")
+    tax_label: str = "Pajak"          # till-5a: "PBJT"
+    tax_rate: Decimal = Decimal(0)
     rounding: Decimal = Decimal(0)
     total: Decimal
     payments: list[PaymentOut]
+    business_address: str | None = None      # till-5a: the café's details, from its settings
+    business_phone: str | None = None
+    business_instagram: str | None = None
     parent_number: str | None = None   # svc-3: printed as "Tambahan untuk #..."
     order_no: str = ""                 # prt-1: "042"
     service_date: date | None = None

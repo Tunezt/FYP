@@ -181,7 +181,7 @@ export function ReversalPanel({ tz, dayStart }: { tz?: string; dayStart?: number
                                 <li key={i} className="flex justify-between gap-3">
                                   <span className="min-w-0 truncate">
                                     {formatQty(l.quantity)}× {l.name}
-                                    {l.variant && l.variant !== "Standar" ? ` (${l.variant})` : ""}
+                                    {l.size ? ` · ${l.size}` : ""}
                                   </span>
                                   <span className="tabular-nums">{formatRupiah(l.line_total)}</span>
                                 </li>

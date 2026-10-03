@@ -29,6 +29,7 @@ type PricingForm = {
   discount_requires_pin: boolean;
   service_types: OrderType[]; // M11-T3: which order types carry the service charge
   delivery_fee: string;
+  tax_label: string; // till-5a: what the tax is called on the receipt
 };
 
 const pct = (fraction: string | undefined) => {
@@ -47,6 +48,7 @@ function toForm(p: PricingSettings | null | undefined): PricingForm {
     discount_requires_pin: p?.discount_requires_pin ?? true,
     service_types: p?.service_applies_to ?? ["dine_in", "takeaway", "delivery", "pickup"],
     delivery_fee: String(Math.round(Number(p?.delivery_fee ?? 0))),
+    tax_label: p?.tax_label ?? "Pajak",
   };
 }
 
@@ -142,7 +144,9 @@ export default function SettingsPage() {
   const percentOk = (v: string) => v.trim() !== "" && Number(v) >= 0 && Number(v) < 100;
   const pricingMissing = !percentOk(pricingForm.tax_percent) || !percentOk(pricingForm.service_percent)
     ? "Persentase pajak dan service harus 0–99"
-    : null;
+    : !pricingForm.tax_label.trim()
+      ? "Isi nama pajak di struk"
+      : null;
   const loyaltyMissing = !(Number(loyaltyForm.rupiah_per_point) > 0)
     ? "Isi belanja per 1 poin (lebih dari 0)"
     : loyaltyForm.point_value === "" || loyaltyForm.min_redeem_points === ""
@@ -199,6 +203,7 @@ export default function SettingsPage() {
           discount_requires_pin: pricingForm.discount_requires_pin,
           service_applies_to: pricingForm.service_types,
           delivery_fee: Math.max(0, Number(pricingForm.delivery_fee) || 0).toFixed(2),
+          tax_label: pricingForm.tax_label.trim(),
         },
         "PATCH",
       );
@@ -366,6 +371,9 @@ export default function SettingsPage() {
       </section>
 
 
+      {/* till-5a: the café's details printed under its name on every receipt */}
+      <ReceiptDetails business={b} loading={business.loading} onSaved={business.reload} />
+
       {/* Pricing (M7-T4): tax, service charge, rounding, discount gate */}
       <section>
         <h2 className="mb-2 flex items-center gap-2 section-title">
@@ -403,6 +411,20 @@ export default function SettingsPage() {
                 />
               </label>
             </div>
+            <label className="block sm:w-1/2">
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama pajak di struk</span>
+              <input
+                className="field"
+                maxLength={20}
+                value={pricingForm.tax_label}
+                onChange={(e) => setPricingDraft({ ...pricingForm, tax_label: e.target.value })}
+                placeholder="PBJT"
+              />
+              <span className="ink-faint mt-1 block text-xs">
+                Makanan dan minuman restoran dikenai PBJT (dulu PB1) dari Pemda, maksimal 10% — bukan PPN. Tarifnya
+                ditetapkan per kabupaten/kota; tanyakan ke Bapenda. Di struk tertulis mis. &ldquo;PBJT 10% (termasuk)&rdquo;.
+              </span>
+            </label>
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
@@ -975,5 +997,94 @@ export default function SettingsPage() {
         </div>
       </Sheet>
     </div>
+  );
+}
+
+
+const DETAIL_FIELDS: { key: "address" | "contact_phone" | "instagram"; label: string; hint: string; max: number }[] = [
+  { key: "address", label: "Alamat", hint: "mis. Jl. Merdeka 12, Bandung", max: 120 },
+  { key: "contact_phone", label: "Nomor telepon / WhatsApp", hint: "mis. 0811-2233-4455", max: 40 },
+  { key: "instagram", label: "Instagram", hint: "mis. @namakafe", max: 60 },
+];
+
+/** Address, phone and Instagram under the café's name on every receipt
+ *  (till-5a). New cafés start with obvious placeholders; each one still at its
+ *  placeholder is marked "Contoh" so nobody prints "Jl. Lorem Ipsum" by mistake. */
+function ReceiptDetails({ business, loading, onSaved }: { business: Business | null; loading: boolean; onSaved: () => void }) {
+  const mutate = useOwnerMutation();
+  const [draft, setDraft] = useState<Record<string, string> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const current: Record<string, string> = draft ?? {
+    address: business?.address ?? "",
+    contact_phone: business?.contact_phone ?? "",
+    instagram: business?.instagram ?? "",
+  };
+  const placeholders = business?.placeholders ?? [];
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await mutate("/api/business", {
+        address: current.address.trim(),
+        contact_phone: current.contact_phone.trim(),
+        instagram: current.instagram.trim(),
+      }, "PATCH");
+      setDraft(null);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal menyimpan — coba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="mb-2 flex items-center gap-2 section-title">
+        Data di struk
+        <HelpTip title="Data di struk">
+          Dicetak di bawah nama usaha pada setiap struk pelanggan, dan tampil di struk digital. Kosongkan yang tidak
+          ingin dicetak.
+        </HelpTip>
+      </h2>
+      {loading ? (
+        <Skeleton className="h-40" />
+      ) : (
+        <Plate className="space-y-3 px-6 py-5">
+          {placeholders.length > 0 && !draft && (
+            <p className="notice notice-warn text-sm" role="status">
+              Masih contoh — ganti dengan data asli sebelum struk pertama dicetak.
+            </p>
+          )}
+          {DETAIL_FIELDS.map((f) => {
+            const isPlaceholder = !draft && placeholders.includes(f.key);
+            return (
+              <label key={f.key} className="block">
+                <span className="ink-soft mb-1.5 flex items-center gap-2 text-[13px] font-medium">
+                  {f.label}
+                  {isPlaceholder && <span className="pill-warn text-[11px]">Contoh</span>}
+                </span>
+                <input
+                  className="field"
+                  maxLength={f.max}
+                  value={current[f.key]}
+                  placeholder={f.hint}
+                  onChange={(e) => setDraft({ ...current, [f.key]: e.target.value })}
+                  aria-invalid={isPlaceholder || undefined}
+                />
+              </label>
+            );
+          })}
+          {error && <p className="notice notice-bad">{error}</p>}
+          {draft && (
+            <button onClick={save} disabled={busy} className="btn-accent px-5 py-2.5 text-sm">
+              {busy ? "Menyimpan…" : "Simpan data struk"}
+            </button>
+          )}
+        </Plate>
+      )}
+    </section>
   );
 }

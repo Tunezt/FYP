@@ -24,6 +24,7 @@ import {
   orderHeading,
   orderLabel,
   PRINT_KIND_LABEL,
+  quickCash,
   type ActiveLine,
   type ActiveOrder,
   type PosItem,
@@ -63,7 +64,7 @@ type OrderResult = {
   total: string;
   points_earned: number;
   lines: { item_name: string; quantity: string }[];
-  payments: { method: string; amount: string }[];
+  payments: { method: string; amount: string; tendered?: string | null }[];
   parent_number: string | null;
   order_no: string;
   batch_no: number;
@@ -81,6 +82,8 @@ type Quote = {
   delivery_fee: string;
   tax_total: string;
   tax_inclusive: boolean;
+  tax_label?: string;
+  tax_rate?: string;
   rounding: string;
   total: string;
   discount_requires_pin: boolean;
@@ -581,6 +584,8 @@ export function SellScreen({
   const [paying, setPaying] = useState(false);
   const [payMode, setPayMode] = useState<PayMode>("cash");
   const [cashPart, setCashPart] = useState("");
+  // till-5a: what the customer handed over, so the receipt and the cashier see the change.
+  const [tendered, setTendered] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [customer, setCustomer] = useState<CustomerLite | null>(null);
@@ -639,6 +644,8 @@ export function SellScreen({
   const cashAmount = payMode === "cash" ? moneyDue : payMode === "qris" ? 0 : Number(cashPart || 0);
   const qrisAmount = moneyDue - cashAmount;
   const splitValid = payMode !== "split" || (cashAmount > 0 && cashAmount < moneyDue) || moneyDue === 0;
+  const tenderedValue = payMode === "cash" ? Number(tendered || 0) : 0;
+  const tenderedShort = tendered !== "" && tenderedValue < cashAmount;
 
   const payFill = missingText("Isi", [
     orderType === "delivery" && !deliveryAddress.trim() && "alamat pengantaran",
@@ -649,6 +656,7 @@ export function SellScreen({
     (!orderType ? "Pilih jenis pesanan" : null) ??
     payFill ??
     (!splitValid ? "Bagian tunai harus lebih dari 0 dan kurang dari total" : null) ??
+    (tenderedShort ? "Uang diterima kurang dari total" : null) ??
     (quote?.voucher_error && voucherCode.trim() ? "Kode voucher tidak berlaku — hapus atau ganti kodenya" : null);
 
   function openPay() {
@@ -672,7 +680,9 @@ export function SellScreen({
     setPayError(null);
     const payments = [
       ...(pointsAmount > 0 ? [{ method: "points", amount: pointsAmount }] : []),
-      ...(cashAmount > 0 ? [{ method: "cash", amount: cashAmount }] : []),
+      ...(cashAmount > 0
+        ? [{ method: "cash", amount: cashAmount, ...(payMode === "cash" && tenderedValue > cashAmount ? { tendered: tenderedValue } : {}) }]
+        : []),
       ...(qrisAmount > 0 ? [{ method: "qris", amount: qrisAmount }] : []),
     ];
     try {
@@ -733,6 +743,7 @@ export function SellScreen({
       setPaying(false);
       setPayMode("cash");
       setCashPart("");
+      setTendered("");
       setCustomerQuery("");
       setCustomerNew(null);
       resetOrder();
@@ -1477,6 +1488,40 @@ export function SellScreen({
                   </p>
                 </div>
               )}
+              {payMode === "cash" && cashAmount > 0 && (
+                <div className="mt-3">
+                  <label className="text-[13px] font-medium" htmlFor="tendered">
+                    Uang diterima <span className="ink-faint font-normal">(opsional, untuk kembalian)</span>
+                  </label>
+                  <input
+                    id="tendered"
+                    inputMode="numeric"
+                    value={tendered ? Number(tendered).toLocaleString("id-ID") : ""}
+                    onChange={(e) => setTendered(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
+                    placeholder={formatRupiah(cashAmount)}
+                    className="field mt-1 py-3 text-xl font-semibold tabular-nums"
+                    aria-invalid={tenderedShort || undefined}
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Uang diterima">
+                    {quickCash(cashAmount).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setTendered(String(v))}
+                        aria-pressed={tenderedValue === v}
+                        className="choice-chip min-h-[2.75rem] tabular-nums"
+                      >
+                        {v === cashAmount ? "Uang pas" : formatRupiah(v)}
+                      </button>
+                    ))}
+                  </div>
+                  {tenderedValue > cashAmount && (
+                    <p className="mt-2 text-[17px] font-semibold tabular-nums" role="status">
+                      Kembalian {formatRupiah(tenderedValue - cashAmount)}
+                    </p>
+                  )}
+                </div>
+              )}
               {pointsAmount > 0 && <p className="ink-soft mt-2 text-sm">Sisa dibayar {formatRupiah(moneyDue)}</p>}
 
               {payError && (
@@ -1741,6 +1786,10 @@ export function SellScreen({
               </p>
               <p className="ink-soft truncate text-xs">
                 {flash.payments.map((p) => `${p.method === "cash" ? "tunai" : p.method === "points" ? "poin" : p.method.toUpperCase()} ${formatRupiah(p.amount)}`).join(" + ")}
+                {flash.payments
+                  .filter((p) => p.tendered && Number(p.tendered) > Number(p.amount))
+                  .map((p) => ` · kembalian ${formatRupiah(Number(p.tendered) - Number(p.amount))}`)
+                  .join("")}
                 {" · "}
                 {flash.paper}
               </p>

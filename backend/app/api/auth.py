@@ -249,6 +249,9 @@ async def register(payload: RegisterIn):
             timezone=payload.timezone,
             require_shift=True,   # till-4: same as app.bootstrap, the two must not drift
         )
+        from app.services.business_profile import apply_placeholders
+
+        apply_placeholders(business)   # till-5a: as app.bootstrap
         session.add(business)
         await session.flush()
         business_id = business.id
@@ -277,7 +280,9 @@ async def register(payload: RegisterIn):
         await ensure_standard_uoms(session, business_id)
         await ensure_standard_chart(session, business_id)  # M6-T1
         await ensure_standard_rules(session, business_id)  # M6-T3
-        await ensure_pricing_settings(session, business_id)  # M7-T4
+        from app.services.business_profile import apply_tax_placeholder
+
+        apply_tax_placeholder(await ensure_pricing_settings(session, business_id))  # M7-T4; till-5a as app.bootstrap
         await ensure_loyalty_settings(session, business_id)  # M8-T2
         business = await session.get(Business, business_id)
         business_out = BusinessOut.model_validate(business)

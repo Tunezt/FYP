@@ -100,6 +100,10 @@ class Business(Base):
     pairing_generation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     # till-4, migration 0044: no payment at the till without the cashier's open shift.
     require_shift: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    # till-5a, migration 0045: printed under the name on every receipt.
+    address: Mapped[str | None] = mapped_column(Text)
+    contact_phone: Mapped[str | None] = mapped_column(Text)
+    instagram: Mapped[str | None] = mapped_column(Text)
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
 
@@ -767,6 +771,8 @@ class Payment(Base):
     reference: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
     shift_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("shifts.id"))  # M7-T1: the till it moved through
+    # till-5a, migration 0045: cash handed over, when typed. Cash only, never below `amount`.
+    tendered: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
 
 
 class Shift(Base):
@@ -843,6 +849,8 @@ class PricingSettings(Base):
     )
     delivery_fee: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0")
     discount_requires_pin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    # till-5a, migration 0045: what the tax is called on paper ("PBJT"); 1..20 characters.
+    tax_label: Mapped[str] = mapped_column(Text, nullable=False, server_default="Pajak")
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = _now()
 

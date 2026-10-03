@@ -410,6 +410,7 @@ async def pos_quote(payload: QuoteIn, ctx: PosCtx):
         service_charge=bill.service_charge, delivery_fee=bill.delivery_fee,
         tax_total=bill.tax_total, tax_inclusive=bill.tax_inclusive, rounding=bill.rounding, total=bill.total,
         discount_requires_pin=config.discount_requires_pin,
+        tax_label=config.tax_label, tax_rate=config.tax_rate,
         lines=[
             QuoteLineOut(item_id=iid, unit_price=pl.unit_price, quantity=pl.quantity, gross=pl.gross,
                          line_discount=pl.line_discount, line_total=pl.line_total, promo_discount=pl.promo_discount,
@@ -447,7 +448,7 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
             staff_id=ctx.staff_id,
             order_type=payload.order_type,
             lines=specs,
-            payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
+            payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference, tendered=p.tendered) for p in payload.payments],
             bill_discount=payload.bill_discount,
             manager_pin=payload.manager_pin,
             customer_id=payload.customer_id,
@@ -563,7 +564,7 @@ async def _order_out(session, created) -> OrderOut:
             )
             for cl in created.lines
         ],
-        payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in created.payments],
+        payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference, tendered=p.tendered) for p in created.payments],
     )
 
 
@@ -598,7 +599,7 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
         ticket = await get_open_order(ctx.session, order_id)
         created = await settle_ticket(
             ctx.session, business_id=ctx.business_id, ticket=ticket, staff_id=ctx.staff_id,
-            payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference) for p in payload.payments],
+            payments=[PaymentSpec(method=p.method, amount=p.amount, reference=p.reference, tendered=p.tendered) for p in payload.payments],
             bill_discount=payload.bill_discount, manager_pin=payload.manager_pin,
             customer_id=payload.customer_id, voucher_code=payload.voucher_code,
             expected_rev=payload.rev, client_ref=payload.client_ref,
@@ -1082,7 +1083,7 @@ async def receipt_view(session, business_id: uuid.UUID, order_id: uuid.UUID) -> 
         sold_at=order.sold_at,
         lines=[
             ReceiptLineOut(
-                name=entry["item_name"], variant=entry["variant_name"], quantity=entry["line"].quantity,
+                name=entry["item_name"], variant=entry["variant_name"], size=entry.get("size"), quantity=entry["line"].quantity,
                 unit_price=entry["line"].unit_price, line_total=entry["line"].line_total,
                 modifiers=[LineModifierOut(name=m.name, price_delta=m.price_delta) for m in entry["modifiers"]],
                 notes=entry["line"].notes,
@@ -1098,9 +1099,14 @@ async def receipt_view(session, business_id: uuid.UUID, order_id: uuid.UUID) -> 
         service_charge=order.service_charge,
         tax_total=order.tax_total,
         tax_inclusive=config.tax_inclusive,
+        tax_label=config.tax_label,
+        tax_rate=config.tax_rate,
         rounding=order.rounding,
         total=order.total,
-        payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference) for p in data["payments"]],
+        payments=[PaymentOut(id=p.id, method=p.method, amount=p.amount, reference=p.reference, tendered=p.tendered) for p in data["payments"]],
+        business_address=business.address if business else None,
+        business_phone=business.contact_phone if business else None,
+        business_instagram=business.instagram if business else None,
         parent_number=order_number(order.parent_order_id) if order.parent_order_id else None,
         order_no=service_label(order), service_date=order.service_date, batch_no=order.batch_no or 0,
         external_ref=order.external_ref,

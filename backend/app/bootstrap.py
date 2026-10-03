@@ -44,6 +44,7 @@ from app.models import Business, Staff
 from app.services.accounts import ensure_standard_chart
 from app.services.points import ensure_loyalty_settings
 from app.services.posting_rules import ensure_standard_rules
+from app.services.business_profile import apply_placeholders, apply_tax_placeholder
 from app.services.pricing import ensure_pricing_settings
 from app.services.units import ensure_standard_uoms
 from app.whatsapp.client import normalize_phone, to_international_phone
@@ -107,6 +108,7 @@ async def bootstrap(
             timezone=timezone,
             require_shift=True,   # till-4: the owner's rule for every new café
         )
+        apply_placeholders(business)   # till-5a: marked placeholders until the owner types the real ones
         session.add(business)
         await session.flush()
         business_id = business.id
@@ -124,7 +126,8 @@ async def bootstrap(
         uoms = await ensure_standard_uoms(session, business_id)       # M4-T3
         accounts = await ensure_standard_chart(session, business_id)  # M6-T1
         rules = await ensure_standard_rules(session, business_id)     # M6-T3
-        await ensure_pricing_settings(session, business_id)           # M7-T4
+        pricing = await ensure_pricing_settings(session, business_id)  # M7-T4
+        apply_tax_placeholder(pricing)                                 # till-5a: PBJT 10% (termasuk), to confirm
         await ensure_loyalty_settings(session, business_id)           # M8-T2
 
     return BootstrapResult(

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, computed_field, Field, field_validator
 
 from app.whatsapp.client import normalize_phone, to_international_phone
 
@@ -38,6 +38,17 @@ class BusinessOut(BaseModel):
     timezone: str
     day_start_hour: int          # M15-T4: the hour the business day starts, 0..23
     require_shift: bool = False  # till-4: no sale at the till without an open shift
+    # till-5a: the café's details on its receipts, and which are still placeholders.
+    address: str | None = None
+    contact_phone: str | None = None
+    instagram: str | None = None
+
+    @computed_field
+    @property
+    def placeholders(self) -> list[str]:
+        from app.services.business_profile import placeholder_fields
+
+        return placeholder_fields(self)
     onboarding_completed_at: datetime | None
 
     model_config = {"from_attributes": True}

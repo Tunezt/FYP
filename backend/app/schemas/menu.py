@@ -77,6 +77,8 @@ class MenuQuoteOut(BaseModel):
     tax_inclusive: bool
     rounding: Decimal
     total: Decimal
+    tax_label: str = "Pajak"          # till-5a: the same words as the receipt
+    tax_rate: Decimal = Decimal(0)
 
 
 class TicketLineOut(BaseModel):

@@ -19,7 +19,7 @@ import {
   type Selection,
   type Variant,
 } from "@/lib/choices";
-import { newRef } from "@/lib/pos";
+import { newRef, taxLineLabel } from "@/lib/pos";
 
 // The QR menu (M11-T1, svc-8, bill-2): the customer's side of the same system.
 // A guest scans the code on the table, chooses, sees the real total, and sends.
@@ -43,7 +43,7 @@ type MenuItem = {
 type Menu = { business_name: string; items: MenuItem[] };
 type CartLine = { uid: string; item: MenuItem; variant: Variant | null; modifiers: Modifier[]; qty: number; notes: string };
 type SavedLine = { item_id: string; variant_id: string | null; modifier_ids: string[]; qty: number; notes: string };
-type Quote = { subtotal: string; service_charge: string; tax_total: string; tax_inclusive: boolean; rounding: string; total: string };
+type Quote = { subtotal: string; service_charge: string; tax_total: string; tax_inclusive: boolean; tax_label?: string; tax_rate?: string; rounding: string; total: string };
 type Ticket = {
   id: string;
   code: string;
@@ -567,7 +567,7 @@ export default function MenuPage() {
                   )}
                   {Number(quote.tax_total) > 0 && (
                     <div className="flex justify-between">
-                      <dt className="ink-soft">{quote.tax_inclusive ? "Pajak (termasuk)" : "Pajak"}</dt>
+                      <dt className="ink-soft">{taxLineLabel(quote.tax_label, quote.tax_rate, quote.tax_inclusive)}</dt>
                       <dd className="tabular-nums">{formatRupiah(quote.tax_total)}</dd>
                     </div>
                   )}

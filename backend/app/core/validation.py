@@ -62,6 +62,11 @@ def validation_message(errors: list[dict]) -> str:
     fields: list[str] = []
     for err in errors:
         label = _label(err.get("loc", ()))
+        if err.get("type") == "value_error":
+            # Our own validators raise their reason in Indonesian: say it.
+            reason = str(err.get("msg", "")).removeprefix("Value error, ").strip()
+            if reason:
+                label = f"{label} ({reason})"
         if label not in fields:
             fields.append(label)
     listed = ", ".join(fields[:4]) + (" dan lainnya" if len(fields) > 4 else "")

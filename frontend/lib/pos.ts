@@ -184,6 +184,31 @@ export function orderLabel(o: Identity): string {
   return `Pesanan ${o.order_no}${o.batch_no ? ` · Tambahan ${o.batch_no}` : ""}`;
 }
 
+/** "PBJT 10% (termasuk)" — the tax by the name and rate the café set
+ *  (till-5a), the same words the printed receipt uses. */
+export function taxLineLabel(label: string | null | undefined, rate: string | number | null | undefined, inclusive: boolean): string {
+  const pct = Math.round(Number(rate ?? 0) * 100 * 100) / 100;
+  const base = `${(label ?? "Pajak").trim() || "Pajak"} ${String(pct).replace(".", ",")}%`;
+  return inclusive ? `${base} (termasuk)` : base;
+}
+
+/** "Matcha Latte · Standar": a size is written whenever the server sends one,
+ *  which it does exactly when the product has sizes (svc-4, till-5a). */
+export function withSize(name: string, size: string | null | undefined): string {
+  return size ? `${name} · ${size}` : name;
+}
+
+/** Notes a cashier is likely to be handed for a bill: the exact amount, then
+ *  the next round amounts above it. */
+export function quickCash(due: number): number[] {
+  const out = [due];
+  for (const step of [10000, 20000, 50000, 100000]) {
+    const v = Math.ceil(due / step) * step;
+    if (v > due && !out.includes(v)) out.push(v);
+  }
+  return out.slice(0, 4);
+}
+
 export function serviceDateLabel(isoDate: string | null): string {
   if (!isoDate) return "";
   const [y, m, d] = isoDate.split("-").map(Number);

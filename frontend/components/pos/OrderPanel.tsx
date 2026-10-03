@@ -2,7 +2,7 @@
 
 import { IconClose, IconLock, IconNote } from "@/components/icons";
 import { formatRupiah } from "@/lib/format";
-import { SERVICE_LABEL } from "@/lib/pos";
+import { SERVICE_LABEL, taxLineLabel } from "@/lib/pos";
 import { FormHint } from "@/components/FormHint";
 
 export type PanelLine = {
@@ -37,6 +37,8 @@ export type PanelQuote = {
   delivery_fee: string;
   tax_total: string;
   tax_inclusive: boolean;
+  tax_label?: string;
+  tax_rate?: string;
   rounding: string;
   total: string;
 } | null;
@@ -307,7 +309,7 @@ export function OrderPanel({
             {Number(quote.promo_total) > 0 && <Row label="Promo" value={`− ${formatRupiah(quote.promo_total)}`} />}
             {Number(quote.service_charge) > 0 && <Row label="Service" value={formatRupiah(quote.service_charge)} />}
             {Number(quote.delivery_fee) > 0 && <Row label="Ongkos kirim" value={formatRupiah(quote.delivery_fee)} />}
-            {Number(quote.tax_total) > 0 && <Row label={quote.tax_inclusive ? "Pajak (termasuk)" : "Pajak"} value={formatRupiah(quote.tax_total)} />}
+            {Number(quote.tax_total) > 0 && <Row label={taxLineLabel(quote.tax_label, quote.tax_rate, quote.tax_inclusive)} value={formatRupiah(quote.tax_total)} />}
             {Number(quote.rounding) !== 0 && <Row label="Pembulatan" value={formatRupiah(quote.rounding)} />}
           </dl>
         )}

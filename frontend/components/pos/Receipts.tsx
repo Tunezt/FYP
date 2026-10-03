@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
-import { orderHeading, orderLabel, serviceDateLabel } from "@/lib/pos";
+import { orderHeading, orderLabel, serviceDateLabel, taxLineLabel, withSize } from "@/lib/pos";
 import { FormHint, missingText } from "@/components/FormHint";
 
 export type Receipt = {
@@ -24,6 +24,7 @@ export type Receipt = {
   lines: {
     name: string;
     variant: string | null;
+    size?: string | null; // till-5a: written only when the product has sizes
     quantity: string;
     unit_price: string;
     line_total: string;
@@ -39,9 +40,14 @@ export type Receipt = {
   service_charge: string;
   tax_total: string;
   tax_inclusive: boolean;
+  tax_label?: string;
+  tax_rate?: string;
   rounding: string;
   total: string;
-  payments: { method: string; amount: string }[];
+  payments: { method: string; amount: string; tendered?: string | null }[];
+  business_address?: string | null;
+  business_phone?: string | null;
+  business_instagram?: string | null;
   parent_number?: string | null;
   order_no: string;
   service_date: string | null;
@@ -227,8 +233,7 @@ export function TransactionsView({
                   .map((l, i) => (
                     <li key={i} className="flex justify-between gap-3">
                       <span className="min-w-0 truncate">
-                        {formatQty(l.quantity)}× {l.name}
-                        {l.variant && l.variant !== "Standar" ? ` (${l.variant})` : ""}
+                        {formatQty(l.quantity)}× {withSize(l.name, l.size)}
                       </span>
                       <span className="tabular-nums">{formatRupiah(l.line_total)}</span>
                     </li>
@@ -374,7 +379,8 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
   const when = new Date(receipt.sold_at).toLocaleString("id-ID", {
     day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
-  const method = (m: string) => (m === "cash" ? "Tunai" : m.toUpperCase());
+  const method = (m: string) => ({ cash: "Tunai", qris: "QRIS", points: "Poin" } as Record<string, string>)[m] ?? m.toUpperCase();
+  const contact = [receipt.business_phone, receipt.business_instagram ? `IG ${receipt.business_instagram}` : null].filter(Boolean).join(" · ");
   return (
     <div className="sheet-scrim z-[60] items-center p-6 print:bg-transparent print:backdrop-blur-none" onClick={onClose}>
       <style>{`@media print { body * { visibility: hidden; } #receipt, #receipt * { visibility: visible; } #receipt { position: absolute; left: 0; top: 0; width: 80mm; box-shadow: none; border-radius: 0; } }`}</style>
@@ -384,28 +390,36 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
         className="w-[320px] rounded-2xl bg-white px-5 py-6 font-mono text-[12px] leading-5 text-black shadow-pop"
       >
         <p className="text-center text-sm font-bold uppercase">{receipt.business_name}</p>
-        <p className="text-center">{when}</p>
-        <p className="mt-2 text-center text-2xl font-bold">{orderHeading(receipt).main}</p>
+        {receipt.business_address && <p className="text-center">{receipt.business_address}</p>}
+        {contact && <p className="text-center">{contact}</p>}
+        {(receipt.business_address || contact) && <hr className="my-2 border-dashed border-black" />}
+        <p className="mt-1 text-center text-2xl font-bold">{orderHeading(receipt).main}</p>
         {orderHeading(receipt).sub && <p className="text-center font-bold">{orderHeading(receipt).sub}</p>}
-        <p className="text-center">
-          Struk #{receipt.number}
-          {receipt.service_date ? ` · ${serviceDateLabel(receipt.service_date)}` : ""}
-          {receipt.staff_name ? ` · ${receipt.staff_name}` : ""}
-          {receipt.customer_name ? ` · utk ${receipt.customer_name}` : ""}
-          {receipt.status !== "completed" ? ` · ${receipt.status === "voided" ? "DIBATALKAN" : "DIKEMBALIKAN"}` : ""}
-        </p>
-        <p className="text-center">
-          {ORDER_TYPE_LABEL[receipt.order_type as OrderType] ?? receipt.order_type}
-          {receipt.table_label ? ` · ${receipt.table_label}` : ""}
-          {receipt.delivery_address ? ` · ${receipt.delivery_address}` : ""}
-        </p>
+        <div className="mt-1 flex justify-between gap-2">
+          <span>
+            {ORDER_TYPE_LABEL[receipt.order_type as OrderType] ?? receipt.order_type}
+            {receipt.table_label ? ` · ${receipt.table_label}` : ""}
+          </span>
+          <span>{when}</span>
+        </div>
+        {receipt.delivery_address && <p>{receipt.delivery_address}</p>}
+        {(receipt.staff_name || receipt.customer_name) && (
+          <p>
+            {receipt.staff_name ? `Kasir ${receipt.staff_name}` : ""}
+            {receipt.staff_name && receipt.customer_name ? " · " : ""}
+            {receipt.customer_name ? `untuk ${receipt.customer_name}` : ""}
+          </p>
+        )}
+        {receipt.status !== "completed" && (
+          <p className="text-center font-bold">{receipt.status === "voided" ? "DIBATALKAN" : "DIKEMBALIKAN"}</p>
+        )}
         <hr className="my-3 border-dashed border-black" />
         {receipt.lines.map((l, i) => (
           <div key={i} className="mb-2">
             <div className="flex justify-between gap-2">
               <span>
                 {formatQty(l.quantity)}× {l.name}
-                {l.variant && l.variant !== "Standar" ? ` (${l.variant})` : ""}
+                {l.size ? ` (${l.size})` : ""}
               </span>
               <span>{formatRupiah(l.line_total)}</span>
             </div>
@@ -463,7 +477,7 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
             )}
             {Number(receipt.tax_total) > 0 && (
               <div className="flex justify-between">
-                <span>{receipt.tax_inclusive ? "Pajak (termasuk)" : "Pajak"}</span>
+                <span>{taxLineLabel(receipt.tax_label, receipt.tax_rate, receipt.tax_inclusive)}</span>
                 <span>{formatRupiah(receipt.tax_total)}</span>
               </div>
             )}
@@ -482,12 +496,28 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
           <span>TOTAL</span>
           <span>{formatRupiah(receipt.total)}</span>
         </div>
-        {receipt.payments.map((p, i) => (
-          <div key={i} className="flex justify-between">
-            <span>{method(p.method)}</span>
-            <span>{formatRupiah(p.amount)}</span>
-          </div>
-        ))}
+        {receipt.payments
+          .filter((p) => Number(p.amount) > 0)
+          .map((p, i) => (
+            <div key={i}>
+              <div className="flex justify-between">
+                <span>{method(p.method)}</span>
+                <span>{formatRupiah(p.amount)}</span>
+              </div>
+              {p.method === "cash" && p.tendered && Number(p.tendered) > Number(p.amount) && (
+                <>
+                  <div className="flex justify-between">
+                    <span>Diterima</span>
+                    <span>{formatRupiah(p.tendered)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Kembali</span>
+                    <span>{formatRupiah(Number(p.tendered) - Number(p.amount))}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
         {(receipt.points_earned > 0 || receipt.points_redeemed > 0) && (
           <p className="mt-2 text-center text-[11px]">
             {receipt.points_redeemed > 0 ? `Poin dipakai: ${receipt.points_redeemed}` : ""}
@@ -495,7 +525,12 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
             {receipt.points_earned > 0 ? `Poin didapat: +${receipt.points_earned}` : ""}
           </p>
         )}
-        <p className="mt-4 text-center">Terima kasih 🙏</p>
+        <hr className="my-3 border-dashed border-black" />
+        <p className="text-center">Sebutkan nomor pesanan saat mengambil. Terima kasih!</p>
+        <p className="text-center text-[11px]">
+          Ref {receipt.number}
+          {receipt.service_date ? ` · ${serviceDateLabel(receipt.service_date)}` : ""}
+        </p>
         <div className="mt-4 flex gap-2 print:hidden">
           <button onClick={() => window.print()} className="btn-accent flex-1 py-2 text-sm">
             Cetak

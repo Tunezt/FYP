@@ -215,6 +215,7 @@ class PaymentSpec:
     method: str
     amount: Decimal
     reference: str | None = None
+    tendered: Decimal | None = None   # till-5a: cash handed over (cash only, >= amount)
 
 
 @dataclass
@@ -562,6 +563,7 @@ async def create_order(
             method=p.method,
             amount=Decimal(p.amount).quantize(TWO_PLACES),
             reference=p.reference,
+            tendered=Decimal(p.tendered).quantize(TWO_PLACES) if p.tendered is not None and p.method == "cash" else None,
         )
         session.add(payment)
         created.payments.append(payment)
@@ -952,13 +954,21 @@ async def load_receipt(session: AsyncSession, *, business_id: uuid.UUID, order_i
             mods_by_line.setdefault(snap.order_line_id, []).append(snap)
     item_names = {}
     variant_names = {}
+    size_names = {}   # till-5a: the size as written for the customer (svc-4 rule)
     for l in lines:
         if l.item_id not in item_names:
             item = await session.get(Item, l.item_id)
             item_names[l.item_id] = item.name if item else "?"
         if l.variant_id and l.variant_id not in variant_names:
             v = await session.get(ItemVariant, l.variant_id)
+            # The size is written whenever the product has sizes, "Standar"
+            # included, and never for a product with only one (svc-4): the same
+            # rule as the till, the kitchen slip and the printed receipt.
+            sizes = (await session.execute(
+                select(func.count(ItemVariant.id)).where(ItemVariant.item_id == l.item_id)
+            )).scalar_one() if v else 0
             variant_names[l.variant_id] = v.name if v else None
+            size_names[l.variant_id] = v.name if v and (not v.is_default or sizes > 1) else None
     payments = (await session.execute(select(Payment).where(Payment.order_id == order_id).order_by(Payment.created_at))).scalars().all()
     return {
         "order": order,
@@ -969,6 +979,7 @@ async def load_receipt(session: AsyncSession, *, business_id: uuid.UUID, order_i
                 "line": l,
                 "item_name": item_names[l.item_id],
                 "variant_name": variant_names.get(l.variant_id) if l.variant_id else None,
+                "size": size_names.get(l.variant_id) if l.variant_id else None,
                 "modifiers": mods_by_line.get(l.id, []),
             }
             for l in lines
