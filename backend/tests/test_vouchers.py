@@ -324,6 +324,10 @@ async def test_pos_quote_and_owner_endpoints(session_factory, shop):
         await _set_tenant(s, c["bid"])
         pos = SimpleNamespace(session=s, business_id=c["bid"], staff_id=c["sari"])
         owner = SimpleNamespace(session=s, business_id=c["bid"], staff_id=None)
+        # The till's endpoints read the real clock, and the fixture's HEMAT5 is valid for
+        # September 2026 only. The owner extends it, as for a promotion that runs on; without
+        # this the test could only pass in the month it was written.
+        await update_voucher(s, await s.get(Voucher, c["hemat"]), expires_at=datetime.now(timezone.utc) + timedelta(days=30))
         good = await pos_quote(QuoteIn(lines=[OrderLineIn(item_id=c["kopi"], quantity=D(1))], voucher_code=" hemat5 "), pos)
         assert (good.voucher_code, good.voucher_total, good.total, good.voucher_error) == ("HEMAT5", D("5000.00"), D("15000.00"), None)
         bad = await pos_quote(QuoteIn(lines=[OrderLineIn(item_id=c["kopi"], quantity=D(1))], voucher_code="NGAWUR"), pos)
