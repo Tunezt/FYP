@@ -18,7 +18,9 @@ import type {
 import { DayGroup, EmptyState, ErrorState, Glass, Plate, Skeleton } from "@/components/ui";
 import { HistoryFilters } from "@/components/HistoryFilters";
 import { HelpTip } from "@/components/HelpTip";
-import { IconCamera, IconChevronLeft, IconChevronRight, IconNote, IconReceipt, IconShield } from "@/components/icons";
+import { IconCamera, IconChevronLeft, IconChevronRight, IconNote, IconPlus, IconReceipt, IconShield } from "@/components/icons";
+import { AddExpenseSheet, EXPENSE_CATEGORIES, NotaScanButton } from "@/components/ExpenseSheets";
+import type { Photo } from "@/lib/photo";
 
 const MONTH_LABEL = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -39,8 +41,6 @@ const CASH_KIND_LABEL: Record<CashMovementRow["kind"], string> = {
 const APPROVAL_LABEL: Record<string, string> = { discount: "diskon", void: "batal", refund: "refund" };
 const ROLE_LABEL: Record<string, string> = { owner: "pemilik", manager: "manajer", staff: "staf" };
 
-const EXPENSE_CATEGORIES = ["bahan baku", "operasional", "lainnya"];
-
 export default function MoneyPage() {
   const [expensePage, setExpensePage] = useState(1);
   const [category, setCategory] = useState("");
@@ -56,6 +56,10 @@ export default function MoneyPage() {
     fn(value);
   };
   const [openExpenseDays, setOpenExpenseDays] = useState<Record<string, boolean>>({});
+  // till-1: recording an expense here, with or without a photo of the nota.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addPhoto, setAddPhoto] = useState<Photo | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
   const pnl = useOwnerData<PnlMonth[]>("/api/pnl?months=6");
   const expenses = useOwnerData<Page<ExpenseRow>>(
     `/api/expenses?page=${expensePage}&page_size=20${expenseQuery}`
@@ -69,6 +73,14 @@ export default function MoneyPage() {
   const dayStart = business.data?.day_start_hour ?? 0;
 
   const current = pnl.data?.[pnl.data.length - 1];
+  const afterSave = (message: string) => {
+    setSaved(message);
+    window.setTimeout(() => setSaved((m) => (m === message ? null : m)), 6000);
+    setExpensePage(1);
+    expenses.reload();
+    receipts.reload();
+    pnl.reload();
+  };
   const expenseTotalPages = expenses.data
     ? Math.max(1, Math.ceil(expenses.data.total / expenses.data.page_size))
     : 1;
@@ -80,16 +92,42 @@ export default function MoneyPage() {
 
   return (
     <div className="animate-fade-up space-y-7">
-      <header>
-        <h1 className="page-title">Keuangan</h1>
-        {current && (
-          <p className="ink-soft mt-1 text-sm">
-            Bulan ini <span className="font-semibold tabular-nums">{formatRupiah(current.revenue)}</span> masuk
-            {" · "}
-            <span className="font-semibold tabular-nums">{formatRupiah(current.expenses)}</span> keluar
-          </p>
-        )}
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="page-title">Keuangan</h1>
+          {current && (
+            <p className="ink-soft mt-1 text-sm">
+              Bulan ini <span className="font-semibold tabular-nums">{formatRupiah(current.revenue)}</span> masuk
+              {" · "}
+              <span className="font-semibold tabular-nums">{formatRupiah(current.expenses)}</span> keluar
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              setAddPhoto(null);
+              setAddOpen(true);
+            }}
+            className="btn-quiet px-4 py-2.5 text-sm"
+          >
+            <IconPlus className="h-4 w-4" /> Tambah pengeluaran
+          </button>
+          <NotaScanButton
+            onSaved={afterSave}
+            onManual={(photo) => {
+              setAddPhoto(photo);
+              setAddOpen(true);
+            }}
+          />
+        </div>
       </header>
+      {saved && (
+        <p className="notice notice-good" role="status">
+          {saved}
+        </p>
+      )}
+      <AddExpenseSheet open={addOpen} initialPhoto={addPhoto} onClose={() => setAddOpen(false)} onSaved={afterSave} />
 
       {/* HERO — P&L */}
       <Glass className="px-5 pb-5 pt-5 md:px-6">
@@ -350,7 +388,7 @@ export default function MoneyPage() {
           <HistoryFilters
             className="mt-3"
             optionLabel="Jenis"
-            options={EXPENSE_CATEGORIES.map((c) => ({ value: c, label: c }))}
+            options={EXPENSE_CATEGORIES}
             value={category}
             onValue={onExpenseFilter(setCategory)}
             since={since}
@@ -383,8 +421,9 @@ export default function MoneyPage() {
                   "Coba ubah tanggal atau pilih jenis lain."
                 ) : (
                   <>
-                    Foto nota belanja ke asisten WhatsApp, atau ketik saja &ldquo;tadi beli gas
-                    88rb&rdquo; — semua tercatat di sini.
+                    Tekan <span className="font-semibold">Foto nota</span> untuk membaca nota belanja, atau{" "}
+                    <span className="font-semibold">Tambah pengeluaran</span> untuk mengetiknya. Semua masuk
+                    pembukuan.
                   </>
                 )}
               </EmptyState>
@@ -410,8 +449,8 @@ export default function MoneyPage() {
                               {expense.description || expense.category || "Pengeluaran"}
                             </p>
                             <p className="ink-faint text-xs">
-                              {expense.category ?? "lainnya"}
-                              {expense.source === "receipt" && " · dari foto nota"}
+                              {EXPENSE_CATEGORIES.find((c) => c.value === expense.category)?.label ?? expense.category ?? "Lainnya"}
+                              {expense.source === "receipt" ? " · dari foto nota" : expense.receipt_id ? " · ada foto" : ""}
                             </p>
                           </div>
                           <span className="shrink-0 text-sm font-semibold tabular-nums">
@@ -459,7 +498,7 @@ export default function MoneyPage() {
           ) : !receipts.data || receipts.data.rows.length === 0 ? (
             <Plate className="mt-3">
               <EmptyState icon={<IconCamera className="h-5 w-5" />} title="Belum ada nota">
-                Nota yang difoto lewat WhatsApp tampil di sini lengkap dengan hasil bacaannya.
+                Nota yang difoto di sini atau lewat WhatsApp tampil di sini lengkap dengan hasil bacaannya.
               </EmptyState>
             </Plate>
           ) : (

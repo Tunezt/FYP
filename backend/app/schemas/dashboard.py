@@ -519,6 +519,60 @@ class ReceiptsPage(Paginated):
     rows: list[ReceiptRow]
 
 
+# ── Expenses and nota photos from the dashboard (till-1) ─────────────────────
+
+PhotoMime = Literal["image/jpeg", "image/png", "image/webp"]
+# A phone photo resized in the browser is well under 1 MB; 8 MB of image is the
+# ceiling (base64 is a third larger than the bytes it carries).
+PHOTO_B64_MAX = 11_000_000
+
+
+class ExpenseCreateIn(BaseModel):
+    amount: Decimal = Field(gt=0, le=Decimal("999999999"))
+    category: str = Field(min_length=1, max_length=40)
+    occurred_on: date | None = None          # business day; empty = now
+    description: str | None = Field(default=None, max_length=200)
+    image_base64: str | None = Field(default=None, max_length=PHOTO_B64_MAX)
+    mime_type: PhotoMime | None = None
+
+
+class NotaScanIn(BaseModel):
+    image_base64: str = Field(min_length=16, max_length=PHOTO_B64_MAX)
+    mime_type: PhotoMime
+
+
+class NotaScanOut(BaseModel):
+    image_path: str
+    parsed: dict
+    draft: dict
+
+
+class NotaLineIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    quantity: Decimal = Field(gt=0, le=Decimal("1000000"))
+    unit: str = Field(default="", max_length=20)
+    unit_price: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))
+    line_total: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))
+    item_id: uuid.UUID | None = None   # the owner's own answer to "which item is this?"
+    skip: bool = False                 # cost only: nothing goes into stock
+
+
+class NotaConfirmIn(BaseModel):
+    image_path: str = Field(min_length=1, max_length=200)
+    supplier: str = Field(default="", max_length=120)
+    nota_date: date | None = None
+    total_amount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999"))
+    lines: list[NotaLineIn] = Field(default_factory=list, max_length=80)
+
+
+class NotaConfirmOut(BaseModel):
+    receipt_id: uuid.UUID
+    goods_receipt_number: int | None
+    stocked: list[str]                 # "3 kg Gula Aren"
+    skipped: list[str]
+    expense_amount: Decimal
+
+
 class BusinessUpdateIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     business_type: str | None = None

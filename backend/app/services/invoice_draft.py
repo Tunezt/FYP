@@ -15,6 +15,10 @@ Rules that are the whole point:
     reply goes through the revision flow and the draft is rebuilt.
   * A unit the photo names that cannot be converted into the item's unit is also
     a question, not a silent "close enough".
+
+The dashboard (till-1) uses the same parse, the same draft and the same
+confirmation: the owner checks the lines on screen instead of replying YA, and
+may answer a question by picking the item (`item_id` on a line).
 """
 from __future__ import annotations
 
@@ -108,7 +112,18 @@ async def build_draft(session: AsyncSession, business: Business, parsed: dict) -
         if not read_name or quantity <= 0:
             questions.append({**base, "reason": "nama atau jumlah tidak terbaca", "candidates": []})
             continue
-        item, candidates = await match_item(session, read_name, items)
+        chosen = entry.get("item_id")
+        if chosen:
+            # The owner picked the item on the dashboard (till-1): their answer
+            # to the question, so no fuzzy match is needed. It still has to be
+            # one of this business's items.
+            item = next((i for i in items if str(i.id) == str(chosen)), None)
+            candidates = []
+            if item is None:
+                questions.append({**base, "reason": "barang yang dipilih tidak ditemukan", "candidates": []})
+                continue
+        else:
+            item, candidates = await match_item(session, read_name, items)
         if item is None:
             reason = "mirip dengan: " + ", ".join(candidates) if candidates else "belum ada di daftar barang"
             questions.append({**base, "reason": reason, "candidates": candidates})

@@ -52,7 +52,13 @@ from app.schemas.dashboard import (
     VoucherUpdateIn,
     PricingSettingsOut,
     PricingSettingsPatch,
+    ExpenseCreateIn,
+    ExpenseRow,
     ExpensesPage,
+    NotaConfirmIn,
+    NotaConfirmOut,
+    NotaScanIn,
+    NotaScanOut,
     InventoryItem,
     ItemCreateIn,
     ItemUpdateIn,
@@ -1049,6 +1055,175 @@ async def expenses(
     return ExpensesPage(total=int(total), page=page, page_size=page_size, rows=rows)
 
 
+# ── Expenses and nota photos from the dashboard (till-1) ─────────────────────
+#
+# Until the café's WhatsApp number is live, the dashboard is the only way to
+# record a grocery or supplier nota. A photo goes through exactly the WhatsApp
+# path: the same parser (app/ai/vision.py), the same draft (invoice_draft
+# build_draft) and the same confirmation (confirm_draft). The owner checks the
+# lines on screen where the WhatsApp owner would reply YA: nothing read by the
+# model is written until a person confirms it.
+
+_PHOTO_EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+
+def _photo_bytes(image_base64: str) -> bytes:
+    import base64
+    import binascii
+
+    data = image_base64.split(",", 1)[1] if image_base64.startswith("data:") else image_base64
+    try:
+        raw = base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=422, detail="Foto tidak terbaca — pilih foto lagi")
+    if len(raw) < 100:
+        raise HTTPException(status_code=422, detail="Foto tidak terbaca — pilih foto lagi")
+    return raw
+
+
+def _vision_failure(exc: Exception) -> HTTPException:
+    """Free-tier Gemini allows 5 requests a minute: say so plainly, so the
+    owner waits a minute instead of concluding the button is broken."""
+    text_ = f"{getattr(exc, 'code', '')} {exc}"
+    if "429" in text_ or "RESOURCE_EXHAUSTED" in text_:
+        return HTTPException(
+            status_code=429,
+            detail="Pembaca foto sedang penuh (maks. 5 foto per menit) — tunggu satu menit lalu coba lagi",
+        )
+    return HTTPException(status_code=502, detail="Foto belum bisa dibaca — periksa koneksi lalu coba lagi")
+
+
+def _plain_qty(value) -> str:
+    q = Decimal(str(value))
+    return str(int(q)) if q == q.to_integral_value() else format(q.normalize(), "f")
+
+
+def _expense_moment(business: Business, day: date | None) -> datetime:
+    """Now for today (or no date); the middle of that business day otherwise.
+    A date in the future is refused: an expense is money already spent."""
+    now = datetime.now(timezone.utc)
+    if day is None:
+        return now
+    today = business_day(now, business.timezone, business.day_start_hour)
+    if day > today:
+        raise HTTPException(status_code=422, detail="Tanggal pengeluaran tidak boleh setelah hari ini")
+    if day == today:
+        return now
+    return day_bounds(day, business.timezone, business.day_start_hour)[0] + timedelta(hours=12)
+
+
+@router.post("/expenses", response_model=ExpenseRow, status_code=201)
+async def create_expense(payload: ExpenseCreateIn, ctx: OwnerCtx):
+    """A plain expense typed by the owner, with an optional photo of its nota.
+    Posts to the ledger in the same transaction (M6-T6), like every expense."""
+    from app.services.expenses import ExpenseInvalid, record_expense
+    from app.whatsapp import storage
+
+    business = await _business(ctx)
+    occurred_at = _expense_moment(business, payload.occurred_on)
+    receipt_id = None
+    if payload.image_base64:
+        if payload.mime_type is None:
+            raise HTTPException(status_code=422, detail="Jenis foto tidak dikenali — pilih foto JPG atau PNG")
+        path = await storage.upload_receipt_image(ctx.business_id, _photo_bytes(payload.image_base64), payload.mime_type)
+        photo = Receipt(
+            business_id=ctx.business_id, image_url=path, total_amount=payload.amount, occurred_at=occurred_at,
+            parsed_data={"document_type": "receipt", "items": [], "source": "manual",
+                         "total_amount": float(payload.amount)},
+        )
+        ctx.session.add(photo)
+        await ctx.session.flush()
+        receipt_id = photo.id
+    try:
+        expense = await record_expense(
+            ctx.session, ctx.business_id, amount=payload.amount, category=payload.category,
+            description=(payload.description or "").strip() or None, source="manual",
+            receipt_id=receipt_id, occurred_at=occurred_at, created_by=ctx.staff_id,
+        )
+    except ExpenseInvalid:
+        raise HTTPException(status_code=422, detail="Jumlah pengeluaran belum benar — harus lebih dari nol")
+    return ExpenseRow.model_validate(expense)
+
+
+@router.post("/receipts/scan", response_model=NotaScanOut)
+async def scan_nota(payload: NotaScanIn, ctx: OwnerCtx):
+    """Photo → stored privately → read → matched to the catalogue. Writes
+    nothing to stock or the books: the result is a draft for the owner to check."""
+    from app.ai import vision
+    from app.services.invoice_draft import build_draft
+    from app.whatsapp import storage
+
+    business = await _business(ctx)
+    raw = _photo_bytes(payload.image_base64)
+    path = await storage.upload_receipt_image(ctx.business_id, raw, payload.mime_type)
+    try:
+        parsed = await vision.parse_business_document(raw, payload.mime_type)
+    except Exception as exc:  # the model's own errors: quota, network, refusal
+        raise _vision_failure(exc)
+    if parsed.get("document_type") == "stock_ledger":
+        raise HTTPException(
+            status_code=422,
+            detail="Foto ini terbaca sebagai catatan stok, bukan nota belanja — hitung stok dicatat di halaman Stok",
+        )
+    if parsed.get("document_type") != "receipt" or not parsed.get("items"):
+        raise HTTPException(
+            status_code=422,
+            detail="Tidak ada daftar belanja yang terbaca di foto ini — foto ulang notanya lebih dekat dan terang, "
+                   "atau catat manual lewat Tambah pengeluaran",
+        )
+    draft = await build_draft(ctx.session, business, parsed)
+    return NotaScanOut(image_path=path, parsed=parsed, draft=draft)
+
+
+@router.post("/receipts/confirm", response_model=NotaConfirmOut, status_code=201)
+async def confirm_nota(payload: NotaConfirmIn, ctx: OwnerCtx):
+    """The owner checked the lines. Exactly what a WhatsApp YA writes: the
+    photo kept as a receipt, a goods receipt for the lines matched to an item
+    (stock in, moving-average cost), and the nota total as an expense of which
+    only the part not already in stock reaches the P&L."""
+    import re
+
+    from app.services.invoice_draft import build_draft, confirm_draft
+
+    business = await _business(ctx)
+    if not re.fullmatch(rf"{ctx.business_id}/[0-9a-f-]{{36}}\.(jpg|png|webp|bin)", payload.image_path):
+        raise HTTPException(status_code=422, detail="Foto nota tidak dikenali — foto ulang notanya")
+    already = (await ctx.session.execute(select(Receipt.id).where(Receipt.image_url == payload.image_path))).first()
+    if already is not None:
+        raise HTTPException(status_code=409, detail="Nota ini sudah dicatat — tidak dicatat dua kali")
+    lines = [l for l in payload.lines if not l.skip]
+    if not lines and payload.total_amount <= 0:
+        raise HTTPException(
+            status_code=422, detail="Belum ada yang bisa dicatat — isi total nota atau cocokkan barangnya dulu"
+        )
+    parsed = {
+        "document_type": "receipt",
+        "supplier": payload.supplier.strip(),
+        "date": payload.nota_date.isoformat() if payload.nota_date else "",
+        "items": [
+            {"name": l.name.strip(), "quantity": float(l.quantity), "unit": l.unit.strip(),
+             "unit_price": float(l.unit_price), "line_total": float(l.line_total),
+             **({"item_id": str(l.item_id)} if l.item_id else {})}
+            for l in lines
+        ],
+        "total_amount": float(payload.total_amount),
+        # Checked line by line by the owner on the dashboard, not a model's guess.
+        "confidence": "high", "ambiguities": [], "source": "dashboard",
+        "cost_only": [l.name.strip() for l in payload.lines if l.skip],
+    }
+    if parsed["date"] and payload.nota_date > business_day(datetime.now(timezone.utc), business.timezone, business.day_start_hour):
+        raise HTTPException(status_code=422, detail="Tanggal nota tidak boleh setelah hari ini")
+    draft = await build_draft(ctx.session, business, parsed)
+    facts = await confirm_draft(ctx.session, business, draft, payload.image_path, parsed, received_by=ctx.staff_id)
+    return NotaConfirmOut(
+        receipt_id=uuid.UUID(facts["receipt_id"]),
+        goods_receipt_number=facts.get("goods_receipt_number"),
+        stocked=[f"{_plain_qty(m['quantity'])} {m['unit_read'] or m['item_unit']} {m['item_name']}" for m in draft["matched"]],
+        skipped=facts["skipped"] + parsed["cost_only"],
+        expense_amount=payload.total_amount,
+    )
+
+
 @router.get("/pnl", response_model=list[PnlMonth])
 async def pnl(ctx: OwnerCtx, months: int = Query(default=6, ge=1, le=12)):
     """Revenue and recorded expenses per business-local month, each the
@@ -1156,7 +1331,9 @@ async def receipts(
                 occurred_at=r.occurred_at,
                 created_at=r.created_at,
                 image_signed_url=url,
-                item_count=len((r.parsed_data or {}).get("items", [])),
+                # Lines the owner marked cost-only on the dashboard (till-1) are
+                # on the nota too, just not in stock.
+                item_count=len((r.parsed_data or {}).get("items", [])) + len((r.parsed_data or {}).get("cost_only", [])),
             )
             for r, url in zip(rows, signed)
         ],
