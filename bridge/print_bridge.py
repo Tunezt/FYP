@@ -387,6 +387,32 @@ def render_block(w: Writer, block: dict, profile: Profile) -> None:
     elif t == "text":
         w.rows(wrap(block.get("text", ""), cols), align="center" if block.get("align") == "center" else "left",
                bold=block.get("style") == "bold")
+    elif t == "row":
+        # prt-12: a row the SERVER styles. Every other block has its look fixed
+        # here, on the tablet, so changing a slip's layout meant visiting the
+        # tablet. With this block the server can lay a slip out row by row
+        # (font, size, bold, indent, a right-hand column) and a layout change is
+        # a deploy, not a trip to the café. Unknown or absurd values fall back
+        # to plain text rather than refusing an order.
+        def _n(key: str, default: int, top: int) -> int:
+            try:
+                return max(0, min(int(block.get(key, default)), top))
+            except (TypeError, ValueError):
+                return default
+        font = 1 if str(block.get("font", "A")).upper() == "B" else 0
+        wide, tall = max(1, _n("w", 1, 3)), max(1, _n("h", 1, 3))
+        room = (cols * 12) // (FONT_DOTS[font] * wide)
+        indent = _n("indent", 0, room // 2)
+        hang = _n("hang", indent, room // 2)
+        style = dict(bold=bool(block.get("bold")), width=wide, height=tall, font=font, inverse=bool(block.get("inverse")))
+        left, right = to_printer_text(block.get("text") or ""), to_printer_text(block.get("right") or "")
+        if right and indent + len(left) + 1 + len(right) <= room:
+            w.row(" " * indent + left + " " * (room - indent - len(left) - len(right)) + right, **style)
+        else:
+            align = block.get("align") if block.get("align") in ("left", "center", "right") else "left"
+            w.rows(wrap(left, room, " " * indent, " " * hang), align=align, **style)
+            if right:
+                w.row(right.rjust(room), **style)
     elif t == "qr":
         # till-7: the WhatsApp receipt link as a QR code under the receipt.
         if block.get("data"):

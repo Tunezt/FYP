@@ -2473,3 +2473,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Tests: the two size assertions of polish-2 now also require Font B and, on 80 mm, the name and size on one row; the "nothing runs off the paper" checks count dots instead of characters.
 **Deviation:** not a roadmap task; owner's instruction in chat.
 **Next:** the owner's photo of the new slip.
+
+
+### [prt-12] A slip's layout can be changed from the server: the `row` block
+**Date:** 2026-10-04
+**Status:** done in software and pushed at the owner's instruction; the bridge half has to reach the tablet once
+**Changed:** bridge/print_bridge.py, frontend/components/pos/PrintDocument.tsx, backend/tests/test_print_bridge.py (+1 test), frontend/public/pasang-bridge.sh (rebuilt)
+**Gates:** print tests pass; tsc OK. Full pytest last run 733 passed, 4 clock-dependent failures at 02.30 WIB.
+**Notes:**
+- Owner, leaving the country tonight: "so I need to finalize the receipt design now?" As built, yes: every block's look (font, size, spacing) is decided by the bridge on the tablet, and nobody at the cafe can replace that file.
+- New block `row`: the server says font (A/B), width and height (1-3), bold, inverse, alignment, indent, hanging indent and an optional right-hand column; the bridge wraps it to the paper and prints it. Bad values fall back to plain text. The slip preview draws it.
+- Nothing on the server uses it yet: slips still send `item`. Once the tablet carries this bridge, a later layout change is made by having the server send `row` blocks, which is a deploy and not a visit.
+- What still needs hands at the printer tonight: seeing that `ESC M` (Font B) works on the IW-J300H at all, since `row` and polish-4 both rely on it for the middle size.
+**Deviation:** not a roadmap task.
+**Next:** the tablet runs the installer once more; photo of a slip.

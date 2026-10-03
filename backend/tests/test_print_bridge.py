@@ -219,6 +219,33 @@ def test_long_names_modifiers_and_notes_wrap_inside_the_paper():
     assert head[0].startswith("12x ") and all(t.startswith("   ") for t in head[1:3])
 
 
+def test_a_row_the_server_styles_needs_no_change_on_the_tablet():
+    """prt-12. The owner leaves the country and the tablet stays in the café: a
+    slip's layout has to be changeable from the server. A `row` block carries
+    its own font, size, weight, indent and right-hand column."""
+    doc = {"v": 1, "blocks": [
+        {"t": "row", "text": "2x Nasi Goreng Spesial", "font": "B", "w": 2, "h": 2, "bold": True},
+        {"t": "row", "text": "Extra telur, sambal dipisah, tanpa bawang goreng sama sekali", "font": "B", "w": 2, "h": 2, "indent": 1, "hang": 3},
+        {"t": "row", "text": "Total", "right": "Rp 70.000", "bold": True},
+        {"t": "row", "text": "BATAL", "w": 2, "h": 2, "inverse": True, "align": "center"},
+        {"t": "row", "text": "apa saja", "font": "Z", "w": 99, "h": "besar", "indent": -4},      # nonsense is survived
+    ]}
+    for columns in (32, 48):
+        lines = sp.decode(pb.render(doc, pb.Profile(columns=columns)))[0].lines
+        assert all(l.dots <= columns * 12 for l in lines)
+        name = lines[0]
+        assert name.text == "2x Nasi Goreng Spesial"[:len(name.text)] and (name.font, name.width, name.height, name.bold) == (1, 2, 2, True)
+        extra = [l for l in lines if l.font == 1 and not l.bold]
+        assert extra[0].text.startswith(" Extra") and all(l.text.startswith("   ") for l in extra[1:]) and len(extra) >= 2
+        assert " ".join(l.text.strip() for l in extra) == "Extra telur, sambal dipisah, tanpa bawang goreng sama sekali"
+        total = next(l for l in lines if l.text.startswith("Total"))
+        assert total.text == "Total" + " " * (columns - 14) + "Rp 70.000" and total.bold and total.font == 0
+        batal = next(l for l in lines if l.text == "BATAL")
+        assert batal.inverse and batal.align == 1 and batal.width == 2
+        last = lines[-1]
+        assert last.text == "apa saja" and last.font == 0 and last.width == 3 and last.height == 1
+
+
 def test_a_document_without_blocks_is_refused_before_any_byte_is_written():
     with pytest.raises(ValueError):
         pb.render({"v": 1}, pb.Profile())

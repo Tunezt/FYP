@@ -8,7 +8,14 @@ import QRCode from "qrcode";
 // white slip for preview and for the browser's own print dialog.
 
 export type PrintBlock = {
-  t: "title" | "logo" | "banner" | "line" | "label" | "kv" | "rule" | "item" | "item_priced" | "total" | "text" | "note" | "qr";
+  t: "title" | "logo" | "banner" | "line" | "label" | "kv" | "rule" | "item" | "item_priced" | "total" | "text" | "note" | "qr" | "row";
+  // row (prt-12): a row the server styles itself
+  font?: string; // "A" | "B"
+  w?: number;
+  h?: number;
+  bold?: boolean;
+  inverse?: boolean;
+  indent?: number;
   data?: string;
   width?: number; // logo (till-12): dots
   height?: number;
@@ -195,6 +202,20 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
             );
           case "qr":
             return b.data ? <QrBlock key={i} data={b.data} /> : null;
+          case "row": {
+            // The printer's two fonts, scaled: A is the slip's 13 px, B three quarters of it.
+            const px = Math.round((b.font === "B" ? 9.75 : 13) * Math.max(1, Math.min(b.w ?? 1, 3)));
+            return (
+              <p
+                key={i}
+                className={`flex justify-between gap-2 ${b.bold ? "font-bold" : ""} ${b.inverse ? "bg-black px-1 text-white" : ""} ${b.align === "center" ? "!justify-center text-center" : ""}`}
+                style={{ fontSize: px, lineHeight: 1.3, paddingLeft: `${(b.indent ?? 0) * 0.6}em` }}
+              >
+                <span>{b.text}</span>
+                {b.right && <span className="shrink-0">{b.right}</span>}
+              </p>
+            );
+          }
           case "note":
             return (
               <p key={i} className="font-bold">
