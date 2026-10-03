@@ -26,7 +26,7 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | GET | `/api/sales-trend?days=7..90` | zero-filled daily series, business-local days |
 | GET | `/api/sales?page=&page_size=` | paginated, item+staff names joined |
 | GET/POST | `/api/items` | inventory incl. batched velocity / create |
-| PATCH | `/api/items/{id}` | partial update |
+| PATCH | `/api/items/{id}` | partial update. till-10: items carry `menu_category` (the menu section, ≤ 40 chars, trimmed; `""` on PATCH removes it; NULL is shown as *Lainnya*); `/pos/items` and the QR menu's items carry it too |
 | GET | `/api/expenses?page=` | paginated |
 | GET | `/api/pnl?months=1..12` | monthly revenue/expenses/net |
 | GET | `/api/alerts?limit=` · POST `/api/alerts/{id}/ack` | |
@@ -52,7 +52,7 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 |---|---|---|---|
 | GET | `/pos/business/{pairing_token}` | pairing token in path | business name + active staff |
 | POST | `/pos/login` | pairing token in body | `{staff_id, pin}` → pos JWT |
-| GET | `/pos/items` | pos | |
+| GET | `/pos/items` | pos | each item's `menu_category` groups the till's grid (till-10) |
 | POST | `/pos/sales` | pos | atomic decrement; 409 on insufficient stock; triggers velocity check |
 | POST | `/pos/orders` | pos | multi-line order + payments (cash/qris/transfer/card/ewallet/other); per-line atomic stock guard, all-or-nothing (409); writes order, lines with `unit_cost_at_sale`, payments, stock movements. M7-T4b: lines take `line_discount` (Rp), the body takes `bill_discount` and `manager_pin`; M8-T1: optional `customer_id` (404 if unknown or inactive); M8-T2: a payment with `method: points` spends `amount / point_value` whole points of that customer (409 when the balance does not cover it — the whole sale rolls back; 422 without a customer, for a fraction of a point, below `min_redeem_points`, or with the programme off), the sale earns `floor(paid_with_money / rupiah_per_point)` points, and the response carries `points_earned` / `points_redeemed`; M8-T3: open promos apply automatically — bonus items are added as real lines (stock, cost of goods) at list price with the whole line as promo discount, `promo_total` is on the response and the receipt (`promo_names`), and the cost posts to `4250 Diskon promo`; M8-T4: optional `voucher_code` — validated (404-shaped 422 with the reason) then the use is taken with an atomic conditional UPDATE so a single-use code redeemed by two tills at once succeeds exactly once (409 for the loser, whole sale rolled back); `voucher_total` on the response and receipt (`voucher_code`), posted as `voucher` to 4250; any discount needs the PIN when `pricing_settings.discount_requires_pin` (403 otherwise); the bill is priced by `services/pricing` (tax, service charge, rounding) and payments must equal the **rounded** total (422); response carries `discount_total`, `service_charge`, `tax_total`, `rounding` |
 | GET | `/pos/customers?q=` · POST `/pos/customers` | pos | find a customer by name or phone to attach to the order, or quick-add one (`{name, phone?}`; a phone already registered is a 409) (M8-T1) |

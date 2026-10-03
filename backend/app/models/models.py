@@ -151,6 +151,9 @@ class Item(Base):
     # Where it is prepared (prt-2, migration 0039): 'bar' | 'kitchen' | 'none';
     # NULL = not decided yet, routed to the front with a warning.
     prep_station: Mapped[str | None] = mapped_column(Text)
+    # The till's and QR menu's section heading (till-10, migration 0047);
+    # NULL = not sorted yet, shown under "Lainnya".
+    menu_category: Mapped[str | None] = mapped_column(Text)
 
 
 class Sale(Base):

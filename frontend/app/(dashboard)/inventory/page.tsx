@@ -7,6 +7,7 @@ import { PREP_STATION_LABEL, type InventoryItem, type PrepStation } from "@/lib/
 import { EmptyState, ErrorState, Glass, ItemIcon, RowChevron, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { FormHint } from "@/components/FormHint";
+import { MENU_CATEGORY_SUGGESTIONS } from "@/lib/pos";
 import { IconBox, IconPlus } from "@/components/icons";
 
 type Draft = {
@@ -17,6 +18,7 @@ type Draft = {
   sell_price: string;
   reorder_threshold: string;
   prep_station: PrepStation | null;
+  menu_category: string; // till-10: "" = not in a section
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -27,6 +29,7 @@ const EMPTY_DRAFT: Draft = {
   sell_price: "0",
   reorder_threshold: "0",
   prep_station: null,
+  menu_category: "",
 };
 
 function isAtRisk(item: InventoryItem): boolean {
@@ -80,6 +83,7 @@ export default function InventoryPage() {
       sell_price: String(Number(item.sell_price)),
       reorder_threshold: String(Number(item.reorder_threshold)),
       prep_station: item.prep_station ?? null,
+      menu_category: item.menu_category ?? "",
     });
     setError(null);
     setEditing(item);
@@ -97,6 +101,8 @@ export default function InventoryPage() {
         sell_price: Number(draft.sell_price) || 0,
         reorder_threshold: Number(draft.reorder_threshold) || 0,
         ...(draft.prep_station ? { prep_station: draft.prep_station } : {}),
+        // "" on an edit takes the product out of its section
+        ...(Number(draft.sell_price) > 0 || editing ? { menu_category: draft.menu_category.trim() } : {}),
       };
       if (editing) {
         await mutate(`/api/items/${editing.id}`, body, "PATCH");
@@ -114,6 +120,15 @@ export default function InventoryPage() {
   }
 
   const sheetOpen = adding || editing !== null;
+  // The sections offered: the usual ones first, then any the owner already made.
+  const categories = useMemo(() => {
+    const seen = new Map(MENU_CATEGORY_SUGGESTIONS.map((c) => [c.toLocaleLowerCase("id-ID"), c]));
+    for (const i of items.data ?? []) {
+      const c = i.menu_category?.trim();
+      if (c && !seen.has(c.toLocaleLowerCase("id-ID"))) seen.set(c.toLocaleLowerCase("id-ID"), c);
+    }
+    return [...seen.values()];
+  }, [items.data]);
   const negative = [draft.current_stock, draft.cost_price, draft.sell_price, draft.reorder_threshold].some((v) => Number(v) < 0);
   const itemMissing = !draft.name.trim() ? "Isi nama barang" : negative ? "Angka stok dan harga tidak boleh negatif" : null;
 
@@ -261,6 +276,38 @@ export default function InventoryPage() {
               )}
             </div>
           )}
+          {Number(draft.sell_price) > 0 && (
+            <div>
+              <label className="mb-1.5 block text-[13px] font-medium" htmlFor="menu-category">
+                Kategori menu{" "}
+                <span className="ink-faint font-normal">— judul bagian di kasir dan menu QR</span>
+              </label>
+              <div className="mb-2 flex flex-wrap gap-2" role="group" aria-label="Pilih kategori">
+                {categories.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setDraft({ ...draft, menu_category: draft.menu_category === c ? "" : c })}
+                    aria-pressed={draft.menu_category.trim().toLocaleLowerCase("id-ID") === c.toLocaleLowerCase("id-ID")}
+                    className="choice-chip min-h-[2.5rem]"
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <input
+                id="menu-category"
+                className="field"
+                maxLength={40}
+                value={draft.menu_category}
+                onChange={(e) => setDraft({ ...draft, menu_category: e.target.value })}
+                placeholder="atau tulis sendiri, mis. Teh"
+              />
+              {!draft.menu_category.trim() && (
+                <p className="ink-faint mt-1.5 text-xs">Tanpa kategori, produk ini tampil di bagian &ldquo;Lainnya&rdquo;.</p>
+              )}
+            </div>
+          )}
           {error && (
             <p className="notice notice-bad">
               {error}
@@ -297,7 +344,7 @@ function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: Inven
                 <p className="truncate text-sm font-medium">{item.name}</p>
                 <p className="ink-faint truncate text-xs">
                   {Number(item.sell_price) > 0
-                    ? `jual ${formatRupiah(item.sell_price)} · ${item.prep_station ? PREP_STATION_LABEL[item.prep_station] : "tujuan belum diatur"}`
+                    ? `jual ${formatRupiah(item.sell_price)}${item.menu_category ? ` · ${item.menu_category}` : ""} · ${item.prep_station ? PREP_STATION_LABEL[item.prep_station] : "tujuan belum diatur"}`
                     : "bahan baku"}
                   {item.avg_daily_usage ? ` · ±${item.avg_daily_usage} ${item.unit}/hari` : ""}
                 </p>

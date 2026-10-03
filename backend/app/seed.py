@@ -90,6 +90,13 @@ PREP_STATIONS = {
     "Teh Tarik": "bar", "Croissant": "bar", "Roti Bakar Coklat": "kitchen", "Nasi Goreng Spesial": "kitchen",
 }
 
+# till-10: the section each product is listed under on the till and the QR menu.
+MENU_CATEGORIES = {
+    "Es Kopi Susu": "Kopi", "Kopi Arabica (cup)": "Kopi", "Americano": "Kopi",
+    "Matcha Latte": "Non-kopi", "Teh Tarik": "Non-kopi",
+    "Nasi Goreng Spesial": "Makanan", "Croissant": "Camilan", "Roti Bakar Coklat": "Dessert",
+}
+
 OWNER_PHONE = "628120001111"
 
 ITEMS = [
@@ -199,6 +206,7 @@ async def seed(confirm: bool = False) -> None:
                 sell_price=Decimal(sell), reorder_threshold=Decimal(reorder),
                 uom_id=uoms[unit].id if unit in uoms else None,
                 prep_station=PREP_STATIONS.get(name),
+                menu_category=MENU_CATEGORIES.get(name),
             )
             session.add(item)
             items.append((item, weight))

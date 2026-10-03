@@ -354,3 +354,12 @@ async def modifier_catalog(session: AsyncSession, item_ids: list[uuid.UUID] | No
     for g in groups:
         out.setdefault(g.item_id, []).append((g, by_group.get(g.id, [])))
     return out
+
+
+def clean_menu_category(value: str | None) -> str | None:
+    """A menu section as typed by the owner (till-10): spaces trimmed and
+    collapsed; blank means no section."""
+    if value is None:
+        return None
+    cleaned = " ".join(value.split())
+    return cleaned[:40] or None

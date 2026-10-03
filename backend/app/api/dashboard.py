@@ -262,6 +262,7 @@ async def inventory(ctx: OwnerCtx):
                 days_remaining=r.get("days_remaining"),
                 below_reorder_threshold=bool(r.get("below_reorder_threshold", item.current_stock <= item.reorder_threshold)),
                 prep_station=item.prep_station,
+                menu_category=item.menu_category,
             )
         )
     return out
@@ -269,7 +270,11 @@ async def inventory(ctx: OwnerCtx):
 
 @router.post("/items", response_model=InventoryItem, status_code=201)
 async def create_item(payload: ItemCreateIn, ctx: OwnerCtx):
-    item = Item(business_id=ctx.business_id, **payload.model_dump())
+    from app.services.catalog import clean_menu_category
+
+    data = payload.model_dump()
+    data["menu_category"] = clean_menu_category(data.get("menu_category"))   # till-10
+    item = Item(business_id=ctx.business_id, **data)
     if item.uom_id is None:  # M4-T3: link the free-text unit to a real one when it matches
         from app.services.units import uom_by_code
 
@@ -299,6 +304,7 @@ async def create_item(payload: ItemCreateIn, ctx: OwnerCtx):
         days_remaining=None,
         below_reorder_threshold=item.current_stock <= item.reorder_threshold,
         prep_station=item.prep_station,
+        menu_category=item.menu_category,
     )
 
 
@@ -308,6 +314,14 @@ async def update_item(item_id: uuid.UUID, payload: ItemUpdateIn, ctx: OwnerCtx):
     if item is None:
         raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
     changes = payload.model_dump(exclude_none=True)
+    if "menu_category" in changes:   # till-10: "" takes the item out of any section
+        from app.services.catalog import clean_menu_category
+
+        changes["menu_category"] = clean_menu_category(changes["menu_category"])
+        if changes["menu_category"] is None:
+            item.menu_category = None
+            del changes["menu_category"]
+            item.updated_at = datetime.now(timezone.utc)
     new_stock = changes.pop("current_stock", None)
     for field, value in changes.items():
         setattr(item, field, value)
@@ -338,6 +352,7 @@ async def update_item(item_id: uuid.UUID, payload: ItemUpdateIn, ctx: OwnerCtx):
         days_remaining=None,
         below_reorder_threshold=item.current_stock <= item.reorder_threshold,
         prep_station=item.prep_station,
+        menu_category=item.menu_category,
     )
 
 

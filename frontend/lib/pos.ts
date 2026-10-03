@@ -14,7 +14,31 @@ export type PosItem = {
   variants: Variant[];
   modifier_groups: ModifierGroup[];
   made_to_order: boolean;
+  menu_category?: string | null; // till-10: the section it is listed under
 };
+
+/* till-10: menu sections. The owner names them; these are offered first and
+ * set the order a menu is read in. Anything else follows alphabetically, and
+ * products not sorted yet come last under "Lainnya". */
+export const MENU_CATEGORY_SUGGESTIONS = ["Kopi", "Non-kopi", "Makanan", "Camilan", "Dessert"];
+export const MENU_CATEGORY_UNSORTED = "Lainnya";
+
+export function groupByCategory<T extends { menu_category?: string | null }>(items: T[]): { name: string; items: T[] }[] {
+  const groups = new Map<string, { name: string; items: T[] }>();
+  for (const item of items) {
+    const name = item.menu_category?.trim() || MENU_CATEGORY_UNSORTED;
+    const key = name.toLocaleLowerCase("id-ID");
+    if (!groups.has(key)) groups.set(key, { name, items: [] });
+    groups.get(key)!.items.push(item);
+  }
+  const rank = (name: string) => {
+    const key = name.toLocaleLowerCase("id-ID");
+    if (key === MENU_CATEGORY_UNSORTED.toLocaleLowerCase("id-ID")) return 1000;
+    const i = MENU_CATEGORY_SUGGESTIONS.findIndex((s) => s.toLocaleLowerCase("id-ID") === key);
+    return i === -1 ? 100 : i;
+  };
+  return [...groups.values()].sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name, "id-ID"));
+}
 
 export type PrepState = "new" | "preparing" | "ready" | "done";
 

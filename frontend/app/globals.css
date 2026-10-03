@@ -222,6 +222,16 @@ textarea {
   scrollbar-color: var(--border) transparent;
 }
 
+/* A row of chips that scrolls sideways (menu categories, till-10): swiped, so
+   no bar under it. */
+.chip-row {
+  scrollbar-width: none;
+}
+
+.chip-row::-webkit-scrollbar {
+  display: none;
+}
+
 /* Numbers in this product are money and stock: they always align. */
 .tabular-nums,
 table {

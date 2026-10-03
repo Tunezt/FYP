@@ -21,6 +21,7 @@ class MenuItemOut(BaseModel):
     sell_price: Decimal
     available: bool
     made_to_order: bool = False
+    menu_category: str | None = None  # till-10: the section it is listed under
     variants: list[PosVariantOut] = []
     modifier_groups: list[PosModifierGroupOut] = []
 

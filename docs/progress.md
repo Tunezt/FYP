@@ -2175,3 +2175,20 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Required fields.** One CSS rule: `.field[aria-required="true"]:placeholder-shown` gets a red-tinted border and a red placeholder, and turns normal as soon as something is typed. The table field now reads "No. meja". Marked: table, ojol code, opening/closing cash, Kas amount and reason, void/cancel reasons and manager PINs, quick-add customer name, split cash part, expense amount, inventory name and unit, voucher code, owner/staff PIN and name in settings, register's café/owner/PIN, the QR menu's table. Login and the kitchen PIN were left plain (single-purpose screens where every field is obviously needed). Verified computed styles in the browser: placeholder rgb(176,56,47) = `--bad`.
 **Deviation:** none from the owner's points; delivery stays in the data model (additive-only rule), only hidden at the till. Not committed, per instruction; snapshot `refs/wip/till-9`.
 **Next:** till-10 menu categories.
+
+
+### [till-10] The menu is read by section — Kopi, Non-kopi, Makanan, Camilan, Dessert — on the till and the QR menu
+**Date:** 2026-10-02
+**Status:** done in software; **uncommitted at the owner's request**
+**Changed:** backend/alembic/versions/0047_menu_category.py (new), backend/app/models/models.py, backend/app/schemas/dashboard.py, backend/app/schemas/pos.py, backend/app/schemas/menu.py, backend/app/api/dashboard.py, backend/app/api/pos.py, backend/app/api/menu.py, backend/app/services/catalog.py, backend/app/core/validation.py, backend/app/seed.py, backend/tests/test_menu_category.py (new, 3 tests), frontend/lib/pos.ts, frontend/lib/types.ts, frontend/components/pos/SellScreen.tsx, frontend/app/(dashboard)/inventory/page.tsx, frontend/app/menu/[token]/page.tsx, frontend/app/globals.css, docs/api-contract.md
+**Gates:** pytest 699 passed, 1 failed (test_vouchers::test_pos_quote_and_owner_endpoints — pre-existing, fixture voucher expired 2026-10-01, fails on HEAD too); next build OK (synced copy); alembic upgrade/downgrade -1/upgrade OK at 0047; seed OK
+**Notes:**
+- Owner's feedback of 2 Oct, point 4.
+- **Data:** migration 0047 adds `items.menu_category text` (NULL = not sorted; check: 1–40 characters, not blank). Additive; `items` already has the tenant_isolation policy; the model mirrors it. Free text, so the café names its own sections; ingredients (no selling price) never show on a menu and need none.
+- **API:** `/api/items` create/update take it (trimmed, inner spaces collapsed; `""` on PATCH removes it; > 40 chars → 422 "Isian belum benar: kategori menu…"); `/pos/items` and the QR menu return it. The till cannot change it (403).
+- **Till:** chips under the search — *Semua* then each section — and, under *Semua*, the grid in sections with a small uppercase heading, a hairline and the count. Order: Kopi, Non-kopi, Makanan, Camilan, Dessert, then any section the owner made (alphabetical), then *Lainnya*. Typing a search shows one flat list across sections. A café with no sections sees the grid as before. Chips are 44 px tall.
+- **QR menu:** the same sections with headings; the chips under the search jump to a section.
+- **Dashboard → Stok:** for a product with a selling price, *Kategori menu* with the five suggestions (plus any the café already uses) as chips and a free-text field; the list row shows the section. Seed: Kopi (Es Kopi Susu, Kopi Arabica, Americano), Non-kopi (Matcha Latte, Teh Tarik), Makanan (Nasi Goreng), Camilan (Croissant), Dessert (Roti Bakar Coklat).
+- Verified in the browser: the till at 1280 x 800 shows the five chips and sections, *Makanan* filters to its one product; the QR menu at 375 px shows the sections; saving "Teh" as a custom section on Teh Tarik in Stok shows "jual Rp 15.000 · Teh · Bar (depan)".
+**Deviation:** none. Not committed, per instruction; snapshot `refs/wip/till-10`.
+**Next:** till-11 tax added on top of the price.

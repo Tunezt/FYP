@@ -37,6 +37,7 @@ export type InventoryItem = {
   days_remaining: number | null;
   below_reorder_threshold: boolean;
   prep_station?: PrepStation | null; // prt-2: null = not decided yet
+  menu_category?: string | null; // till-10: the till's and QR menu's section
 };
 
 export type PrepStation = "bar" | "kitchen" | "none";

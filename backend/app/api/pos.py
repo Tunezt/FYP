@@ -213,6 +213,7 @@ async def pos_items(ctx: PosCtx):
         ItemOut(
             id=i.id, name=i.name, unit=i.unit, current_stock=i.current_stock, sell_price=i.sell_price,
             reorder_threshold=i.reorder_threshold, made_to_order=i.id in made_to_order, prep_station=i.prep_station,
+            menu_category=i.menu_category,
             variants=[PosVariantOut.model_validate(v) for v in by_item.get(i.id, [])],
             modifier_groups=[
                 PosModifierGroupOut(

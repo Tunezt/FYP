@@ -19,6 +19,7 @@ import {
   type Variant,
 } from "@/lib/choices";
 import {
+  groupByCategory,
   needsSending,
   newRef,
   orderHeading,
@@ -195,6 +196,10 @@ export function SellScreen({
     return q ? sellable.filter((i) => i.name.toLocaleLowerCase("id-ID").includes(q)) : sellable;
   }, [sellable, search]);
   const itemById = useMemo(() => new Map((items ?? []).map((i) => [i.id, i])), [items]);
+  // till-10: the menu read by section, like the café's own menu board.
+  const groups = useMemo(() => groupByCategory(sellable), [sellable]);
+  const [category, setCategory] = useState<string | null>(null);
+  const activeCategory = category && groups.some((g) => g.name === category) ? category : null;
 
   // ── The order being built ───────────────────────────────────────────────
   const [ctx, setCtx] = useState<Ctx>({ kind: "new" });
@@ -976,6 +981,40 @@ export function SellScreen({
     lineTotal: Number(l.line_total ?? 0),
     batch: l.sent_batch ?? 1,
   }));
+  /** One product on the till's grid, in a section or in search results. */
+  const productTile = (item: PosItem) => {
+    const stock = Number(item.current_stock);
+    const out = !item.made_to_order && stock <= 0;
+    const low = !item.made_to_order && !out && stock <= Number(item.reorder_threshold);
+    const inCart = cart.filter((l) => l.item.id === item.id).reduce((n, l) => n + l.qty, 0);
+    const asks = !isQuickAdd(item);
+    const minPrice = item.variants.length > 1 ? Math.min(...item.variants.map((v) => Number(v.sell_price))) : Number(item.sell_price);
+    return (
+      <button
+        key={item.id}
+        disabled={out}
+        onClick={() => openProduct(item)}
+        className="glass-card group relative flex min-h-[5.75rem] flex-col items-start px-3.5 py-3 text-left transition-[transform,box-shadow] duration-150 hover:shadow-key active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100"
+      >
+        {inCart > 0 && (
+          <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[color:var(--accent-fill)] px-1.5 text-xs font-semibold tabular-nums text-[color:var(--on-accent)]">
+            {inCart}
+          </span>
+        )}
+        <span className="line-clamp-2 pr-6 text-[15px] font-semibold leading-snug">{item.name}</span>
+        <span className="mt-auto flex w-full flex-wrap items-baseline justify-between gap-x-2 pt-1.5">
+          <span className="whitespace-nowrap text-sm font-medium tabular-nums">
+            {item.variants.length > 1 ? <span className="ink-faint font-normal">dari </span> : null}
+            {formatRupiah(item.variants.length > 1 ? minPrice : item.sell_price)}
+          </span>
+          <span className={`whitespace-nowrap text-[11.5px] font-medium ${low || out ? "" : "ink-faint"}`} style={low || out ? { color: "var(--warn)" } : undefined}>
+            {out ? "habis" : low ? `sisa ${formatQty(stock)}` : asks ? "ada pilihan" : ""}
+          </span>
+        </span>
+      </button>
+    );
+  };
+
   const panel = (onClose?: () => void) => (
     <OrderPanel
       context={panelCtx}
@@ -1149,41 +1188,37 @@ export function SellScreen({
                 </div>
               ) : visible.length === 0 ? (
                 <p className="ink-soft mt-10 text-center text-sm">{search ? `Tidak ada menu "${search}".` : "Menu belum diisi — tambahkan barang di dashboard."}</p>
+              ) : search.trim() || groups.length < 2 ? (
+                <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2.5">{visible.map(productTile)}</div>
               ) : (
-                <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2.5">
-                  {visible.map((item) => {
-                    const stock = Number(item.current_stock);
-                    const out = !item.made_to_order && stock <= 0;
-                    const low = !item.made_to_order && !out && stock <= Number(item.reorder_threshold);
-                    const inCart = cart.filter((l) => l.item.id === item.id).reduce((n, l) => n + l.qty, 0);
-                    const asks = !isQuickAdd(item);
-                    const minPrice = item.variants.length > 1 ? Math.min(...item.variants.map((v) => Number(v.sell_price))) : Number(item.sell_price);
-                    return (
+                <>
+                  {/* till-10: jump to one section, or read them all in order */}
+                  <div className="chip-row -mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Kategori menu">
+                    {[null, ...groups.map((g) => g.name)].map((name) => (
                       <button
-                        key={item.id}
-                        disabled={out}
-                        onClick={() => openProduct(item)}
-                        className="glass-card group relative flex min-h-[5.75rem] flex-col items-start px-3.5 py-3 text-left transition-[transform,box-shadow] duration-150 hover:shadow-key active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100"
+                        key={name ?? "*"}
+                        type="button"
+                        onClick={() => setCategory(name)}
+                        aria-pressed={activeCategory === name}
+                        className="choice-chip min-h-[2.75rem] shrink-0 whitespace-nowrap px-4"
                       >
-                        {inCart > 0 && (
-                          <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[color:var(--accent-fill)] px-1.5 text-xs font-semibold tabular-nums text-[color:var(--on-accent)]">
-                            {inCart}
-                          </span>
-                        )}
-                        <span className="line-clamp-2 pr-6 text-[15px] font-semibold leading-snug">{item.name}</span>
-                        <span className="mt-auto flex w-full flex-wrap items-baseline justify-between gap-x-2 pt-1.5">
-                          <span className="whitespace-nowrap text-sm font-medium tabular-nums">
-                            {item.variants.length > 1 ? <span className="ink-faint font-normal">dari </span> : null}
-                            {formatRupiah(item.variants.length > 1 ? minPrice : item.sell_price)}
-                          </span>
-                          <span className={`whitespace-nowrap text-[11.5px] font-medium ${low || out ? "" : "ink-faint"}`} style={low || out ? { color: "var(--warn)" } : undefined}>
-                            {out ? "habis" : low ? `sisa ${formatQty(stock)}` : asks ? "ada pilihan" : ""}
-                          </span>
-                        </span>
+                        {name ?? "Semua"}
                       </button>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                  {groups
+                    .filter((g) => activeCategory === null || g.name === activeCategory)
+                    .map((g) => (
+                      <section key={g.name} className="mt-4" aria-labelledby={`cat-${g.name}`}>
+                        <h2 id={`cat-${g.name}`} className="mb-2 flex items-center gap-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-[color:var(--ink-soft)]">
+                          {g.name}
+                          <span className="h-px flex-1 bg-[color:var(--border)]" aria-hidden />
+                          <span className="ink-faint font-medium normal-case tracking-normal tabular-nums">{g.items.length}</span>
+                        </h2>
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2.5">{g.items.map(productTile)}</div>
+                      </section>
+                    ))}
+                </>
               )}
             </div>
 

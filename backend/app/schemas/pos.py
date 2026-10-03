@@ -69,6 +69,7 @@ class ItemOut(BaseModel):
     modifier_groups: list[PosModifierGroupOut] = []  # active groups (M4-T2)
     made_to_order: bool = False  # has a recipe: components are consumed, not this stock (M4-T4)
     prep_station: str | None = None  # prt-2
+    menu_category: str | None = None  # till-10: the section it is listed under
 
     model_config = {"from_attributes": True}
 

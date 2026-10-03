@@ -136,6 +136,7 @@ async def menu(menu_token: str):
                     id=i.id, name=i.name, unit=i.unit, sell_price=i.sell_price,
                     available=i.id in made_to_order or i.current_stock > 0,
                     made_to_order=i.id in made_to_order,
+                    menu_category=i.menu_category,
                     variants=[PosVariantOut.model_validate(v) for v in by_item.get(i.id, [])],
                     modifier_groups=[
                         PosModifierGroupOut(

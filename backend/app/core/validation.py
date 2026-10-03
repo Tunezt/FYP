@@ -40,6 +40,7 @@ FIELD_LABELS = {
     "order_type": "jenis pesanan",
     "tendered": "uang diterima",
     "unit": "satuan",
+    "menu_category": "kategori menu",
     "sell_price": "harga jual",
     "cost_price": "harga modal",
     "current_stock": "stok",

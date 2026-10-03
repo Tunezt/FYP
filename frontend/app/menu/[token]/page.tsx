@@ -19,7 +19,7 @@ import {
   type Selection,
   type Variant,
 } from "@/lib/choices";
-import { newRef, taxLineLabel } from "@/lib/pos";
+import { groupByCategory, newRef, taxLineLabel } from "@/lib/pos";
 
 // The QR menu (M11-T1, svc-8, bill-2): the customer's side of the same system.
 // A guest scans the code on the table, chooses, sees the real total, and sends.
@@ -37,6 +37,7 @@ type MenuItem = {
   sell_price: string;
   available: boolean;
   made_to_order: boolean;
+  menu_category?: string | null; // till-10: the section it is listed under
   variants: Variant[];
   modifier_groups: ModifierGroup[];
 };
@@ -360,6 +361,9 @@ export default function MenuPage() {
   const estimate = cart.reduce((s, l) => s + linePrice(l) * l.qty, 0);
   const q = search.trim().toLocaleLowerCase("id-ID");
   const items = (menu?.items ?? []).filter((i) => !q || i.name.toLocaleLowerCase("id-ID").includes(q));
+  // till-10: read by section like a printed menu; a search shows one flat list.
+  const grouped = groupByCategory(items);
+  const sections: { name: string | null; items: MenuItem[] }[] = q || grouped.length < 2 ? [{ name: null, items }] : grouped;
 
   return (
     <main className="mx-auto min-h-[100dvh] max-w-lg px-4 pb-32">
@@ -382,6 +386,20 @@ export default function MenuPage() {
           <IconSearch className="ink-faint pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2" />
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} className="field py-2.5 pl-10" placeholder="Cari menu" />
         </label>
+        {sections.length > 1 && (
+          <nav className="chip-row -mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-0.5" aria-label="Kategori menu">
+            {sections.map((sec) => (
+              <button
+                key={sec.name}
+                type="button"
+                onClick={() => document.getElementById(`menu-${sec.name}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className="choice-chip min-h-[2.75rem] shrink-0 whitespace-nowrap px-4"
+              >
+                {sec.name}
+              </button>
+            ))}
+          </nav>
+        )}
       </div>
 
       {notice && (
@@ -402,8 +420,16 @@ export default function MenuPage() {
       ) : items.length === 0 ? (
         <p className="ink-soft mt-10 text-center text-sm">{q ? `Tidak ada menu "${search}".` : "Menu belum diisi. Tanya kasir ya."}</p>
       ) : (
-        <ul className="glass-card mt-3 overflow-hidden p-0">
-          {items.map((item, i) => {
+        sections.map((sec) => (
+        <section key={sec.name ?? "*"} id={sec.name ? `menu-${sec.name}` : undefined} className="scroll-mt-32">
+        {sec.name && (
+          <h2 className="mb-2 mt-6 flex items-center gap-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-[color:var(--ink-soft)]">
+            {sec.name}
+            <span className="h-px flex-1 bg-[color:var(--border)]" aria-hidden />
+          </h2>
+        )}
+        <ul className={`glass-card overflow-hidden p-0 ${sec.name ? "" : "mt-3"}`}>
+          {sec.items.map((item, i) => {
             const inCart = cart.filter((l) => l.item.id === item.id).reduce((n, l) => n + l.qty, 0);
             const sized = item.variants.length > 1;
             const from = sized ? Math.min(...item.variants.map((v) => Number(v.sell_price))) : Number(item.sell_price);
@@ -437,6 +463,8 @@ export default function MenuPage() {
             );
           })}
         </ul>
+        </section>
+        ))
       )}
 
       {cart.length > 0 && !checkout && (
