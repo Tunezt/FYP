@@ -164,7 +164,7 @@ async def test_the_paper_receipt_has_the_cafe_the_tax_and_the_change(client, ses
     assert RECEIPT_PLACEHOLDERS["address"] in joined
     assert "0812-0000-0000 - IG @poernama.cafe" in joined                       # "·" is "-" on paper (ASCII only)
     assert "PESANAN" in joined                                                     # the big number stays
-    assert "Kasir Sari" in joined
+    assert any(l.startswith("Kasir") and l.endswith("Sari") for l in paper)   # till-12: label and value
     assert any(l.startswith("Subtotal") and l.endswith("Rp 48.000") for l in paper)
     assert any(l.startswith("PB1 10%") and l.endswith("Rp 4.800") for l in paper)   # on top: 48.000 x 10%
     assert "termasuk" not in joined

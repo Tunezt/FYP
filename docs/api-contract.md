@@ -26,6 +26,7 @@ missing/invalid → 401. Interactive docs at `/docs` (FastAPI/OpenAPI).
 | GET | `/api/sales-trend?days=7..90` | zero-filled daily series, business-local days |
 | GET | `/api/sales?page=&page_size=` | paginated, item+staff names joined |
 | GET/POST | `/api/items` | inventory incl. batched velocity / create |
+| PATCH | `/api/business` | owner | till-12 adds `receipt_logo` (true prints the café's wordmark bitmap at the top of receipts and notas, false the name in text; `BusinessOut.receipt_logo` is a boolean) and `receipt_footer` (≤ 200 chars, spaces collapsed, `""` removes it; printed above *Terima kasih!*). Receipts (`/pos/orders/{id}/receipt`, `/public/struk/{code}`) carry `business_logo` and `receipt_footer` |
 | PATCH | `/api/items/{id}` | partial update. till-10: items carry `menu_category` (the menu section, ≤ 40 chars, trimmed; `""` on PATCH removes it; NULL is shown as *Lainnya*); `/pos/items` and the QR menu's items carry it too |
 | GET | `/api/expenses?page=` | paginated |
 | GET | `/api/pnl?months=1..12` | monthly revenue/expenses/net |

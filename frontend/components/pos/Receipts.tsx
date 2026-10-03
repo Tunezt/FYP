@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 import { orderHeading, orderLabel, paymentLabel, serviceDateLabel, taxLineLabel, withSize } from "@/lib/pos";
+import { Wordmark } from "@/components/Wordmark";
 import { FormHint, missingText } from "@/components/FormHint";
 import { ReceiptChoiceSheet } from "@/components/pos/ReceiptChoice";
 import { IconChevronLeft, IconPrinter } from "@/components/icons";
@@ -50,6 +51,8 @@ export type Receipt = {
   business_address?: string | null;
   business_phone?: string | null;
   business_instagram?: string | null;
+  business_logo?: boolean; // till-12: the café prints its wordmark
+  receipt_footer?: string | null; // till-12: the café's own closing line
   parent_number?: string | null;
   order_no: string;
   service_date: string | null;
@@ -432,50 +435,50 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
         onClick={(e) => e.stopPropagation()}
         className="w-[320px] rounded-2xl bg-white px-5 py-6 font-mono text-[12px] leading-5 text-black shadow-pop"
       >
-        <p className="text-center text-sm font-bold uppercase">{receipt.business_name}</p>
-        {receipt.business_address && <p className="text-center">{receipt.business_address}</p>}
-        {contact && <p className="text-center">{contact}</p>}
-        {(receipt.business_address || contact) && <hr className="my-2 border-dashed border-black" />}
-        <p className="mt-1 text-center text-2xl font-bold">{orderHeading(receipt).main}</p>
-        {orderHeading(receipt).sub && <p className="text-center font-bold">{orderHeading(receipt).sub}</p>}
-        <div className="mt-1 flex justify-between gap-2">
-          <span>
-            {ORDER_TYPE_LABEL[receipt.order_type as OrderType] ?? receipt.order_type}
-            {receipt.table_label ? ` · ${receipt.table_label}` : ""}
-          </span>
-          <span>{when}</span>
-        </div>
-        {receipt.delivery_address && <p>{receipt.delivery_address}</p>}
-        {(receipt.staff_name || receipt.customer_name) && (
-          <p>
-            {receipt.staff_name ? `Kasir ${receipt.staff_name}` : ""}
-            {receipt.staff_name && receipt.customer_name ? " · " : ""}
-            {receipt.customer_name ? `untuk ${receipt.customer_name}` : ""}
-          </p>
+        {/* till-12: laid out like the paper — logo, details, number between double rules */}
+        {receipt.business_logo ? (
+          <Wordmark className="mx-auto w-[68%]" title={receipt.business_name} />
+        ) : (
+          <p className="text-center text-sm font-bold uppercase">{receipt.business_name}</p>
         )}
+        {receipt.business_address && <p className="mt-1 text-center">{receipt.business_address}</p>}
+        {contact && <p className="text-center">{contact}</p>}
+        <hr className="my-2 h-[5px] border-x-0 border-y border-solid border-black" />
+        <p className="text-center text-2xl font-bold">{orderHeading(receipt).main}</p>
+        {orderHeading(receipt).sub && <p className="text-center font-bold">{orderHeading(receipt).sub}</p>}
+        <hr className="my-2 h-[5px] border-x-0 border-y border-solid border-black" />
+        <Kv label="Tanggal" value={when} />
+        <Kv label="Jenis" value={ORDER_TYPE_LABEL[receipt.order_type as OrderType] ?? receipt.order_type} />
+        {receipt.staff_name && <Kv label="Kasir" value={receipt.staff_name} />}
+        {receipt.customer_name && <Kv label="Pelanggan" value={receipt.customer_name} />}
+        {receipt.delivery_address && <p>{receipt.delivery_address}</p>}
         {receipt.status !== "completed" && (
           <p className="text-center font-bold">{receipt.status === "voided" ? "DIBATALKAN" : "DIKEMBALIKAN"}</p>
         )}
-        <hr className="my-3 border-dashed border-black" />
+        <hr className="my-2 border-dashed border-black" />
         {receipt.lines.map((l, i) => (
-          <div key={i} className="mb-2">
-            <div className="flex justify-between gap-2">
+          <div key={i} className="mb-1.5">
+            <p className="font-bold">
+              {l.name}
+              {l.size ? ` (${l.size})` : ""}
+            </p>
+            <div className="flex justify-between gap-2 pl-3">
               <span>
-                {formatQty(l.quantity)}× {l.name}
-                {l.size ? ` (${l.size})` : ""}
+                {formatQty(l.quantity)} x @{formatRupiah(l.unit_price).replace("Rp", "").trim()}
               </span>
-              <span>{formatRupiah(l.line_total)}</span>
+              <span>{formatRupiah(l.line_total).replace("Rp", "").trim()}</span>
             </div>
             {l.modifiers.map((m, j) => (
-              <div key={j} className="flex justify-between gap-2 pl-4 text-[11px]">
-                <span>+ {m.name}</span>
-                <span>{Number(m.price_delta) > 0 ? formatRupiah(m.price_delta) : ""}</span>
+              <div key={j} className="pl-3 text-[11px]">
+                + {m.name}
+                {Number(m.price_delta) > 0 ? ` +${formatRupiah(m.price_delta)}` : ""}
               </div>
             ))}
-            {l.notes && <div className="pl-4 text-[11px] italic">{l.notes}</div>}
+            {l.notes && <div className="pl-3 text-[11px]">* {l.notes}</div>}
           </div>
         ))}
-        <hr className="my-3 border-dashed border-black" />
+        <hr className="my-2 border-dashed border-black" />
+        <Kv label="Total item" value={formatQty(receipt.lines.reduce((n, l) => n + Math.max(0, Number(l.quantity)), 0))} />
         {(Number(receipt.discount_total) > 0 ||
           Number(receipt.promo_total) > 0 ||
           Number(receipt.voucher_total) > 0 ||
@@ -535,10 +538,12 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
             )}
           </div>
         )}
-        <div className="flex justify-between font-bold">
+        <hr className="my-2 h-[5px] border-x-0 border-y border-solid border-black" />
+        <div className="flex justify-between text-[15px] font-bold">
           <span>TOTAL</span>
           <span>{formatRupiah(receipt.total)}</span>
         </div>
+        <hr className="my-2 h-[5px] border-x-0 border-y border-solid border-black" />
         {receipt.payments
           .filter((p) => Number(p.amount) > 0)
           .map((p, i) => (
@@ -569,7 +574,9 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
           </p>
         )}
         <hr className="my-3 border-dashed border-black" />
-        <p className="text-center">Sebutkan nomor pesanan saat mengambil. Terima kasih!</p>
+        {receipt.order_type !== "dine_in" && <p className="text-center">Sebutkan nomor pesanan saat mengambil.</p>}
+        {receipt.receipt_footer && <p className="text-center">{receipt.receipt_footer}</p>}
+        <p className="text-center font-bold">Terima kasih!</p>
         <p className="text-center text-[11px]">
           Ref {receipt.number}
           {receipt.service_date ? ` · ${serviceDateLabel(receipt.service_date)}` : ""}
@@ -587,3 +594,11 @@ export function ReceiptSheet({ receipt, onClose }: { receipt: Receipt; onClose: 
   );
 }
 
+function Kv({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <span>{label}</span>
+      <span className="text-right">{value}</span>
+    </div>
+  );
+}

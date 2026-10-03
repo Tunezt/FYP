@@ -7,6 +7,7 @@ import { formatQty, formatRupiah } from "@/lib/format";
 import { orderHeading, paymentLabel, serviceDateLabel, taxLineLabel } from "@/lib/pos";
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 import type { Receipt } from "@/components/pos/Receipts";
+import { Wordmark } from "@/components/Wordmark";
 
 /** The receipt a customer opens by scanning the QR the till showed (till-5b,
  *  decision 4). No login: the unguessable code in the address is the key. The
@@ -57,7 +58,13 @@ export default function ReceiptPage() {
     <main className="min-h-screen px-4 py-8">
       <article className="glass-card mx-auto w-full max-w-sm px-5 pb-6 pt-6" aria-label={`Struk ${r.business_name}`}>
         <header className="text-center">
-          <h1 className="text-[22px] font-semibold uppercase tracking-[0.04em]">{r.business_name}</h1>
+          {r.business_logo ? (
+            <h1>
+              <Wordmark className="mx-auto w-[72%]" title={r.business_name} />
+            </h1>
+          ) : (
+            <h1 className="text-[22px] font-semibold uppercase tracking-[0.04em]">{r.business_name}</h1>
+          )}
           {r.business_address && <p className="ink-soft mt-1 text-sm">{r.business_address}</p>}
           {contact && <p className="ink-soft text-sm">{contact}</p>}
         </header>
@@ -80,8 +87,11 @@ export default function ReceiptPage() {
               <li key={i} className="flex justify-between gap-3 text-[15px]">
                 <div className="min-w-0">
                   <p className="font-medium">
-                    {formatQty(l.quantity)}× {l.name}
+                    {l.name}
                     {l.size ? <span className="font-normal"> · {l.size}</span> : null}
+                  </p>
+                  <p className="ink-soft text-[13px] tabular-nums">
+                    {formatQty(l.quantity)} × {formatRupiah(l.unit_price)}
                   </p>
                   {l.modifiers.map((m, j) => (
                     <p key={j} className="ink-soft text-[13px]">
@@ -121,6 +131,7 @@ export default function ReceiptPage() {
         </dl>
 
         <footer className="hairline-t mt-4 pt-4 text-center">
+          {r.receipt_footer && <p className="ink-soft mb-1 text-sm">{r.receipt_footer}</p>}
           <p className="text-sm">Terima kasih sudah mampir!</p>
           <p className="ink-faint mt-1 text-xs">
             Ref {r.number}
@@ -139,7 +150,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
       <dt className="ink-soft">{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
+      <dd className="shrink-0 whitespace-nowrap tabular-nums">{value}</dd>
     </div>
   );
 }

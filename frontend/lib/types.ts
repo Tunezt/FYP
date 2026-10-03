@@ -96,6 +96,8 @@ export type Business = {
   instagram?: string | null;
   placeholders?: string[];
   receipt_mode?: "always" | "ask"; // till-5b: the customer's receipt only when asked
+  receipt_logo?: boolean; // till-12: the wordmark prints at the top of receipts
+  receipt_footer?: string | null; // till-12: the café's own closing line
   onboarding_completed_at: string | null;
 };
 

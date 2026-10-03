@@ -95,6 +95,31 @@ def qr_command(data: str, module: int = 6) -> bytes:
     )
 
 
+def logo_command(width: int, height: int, bits: str) -> bytes:
+    """till-12: the café's logo, dot for dot. GS v 0 (print raster bit image),
+    normal density, centred: `width` dots (a multiple of 8, at most the 576 of
+    an 80 mm head), `height` rows, `bits` base64 of rows of width/8 bytes, most
+    significant bit first, 1 = ink. Standard ESC/POS, but NOT yet seen on the
+    café's IW-J300H; a document whose bitmap does not add up prints nothing
+    here rather than garbage."""
+    import base64
+    import binascii
+
+    try:
+        data = base64.b64decode(bits, validate=True)
+    except (binascii.Error, ValueError):
+        return b""
+    width_bytes = width // 8
+    if width <= 0 or width % 8 or width > 576 or height <= 0 or height > 2000 or len(data) != width_bytes * height:
+        return b""
+    return (
+        _align(1)
+        + GS + b"v0\x00" + bytes([width_bytes % 256, width_bytes // 256, height % 256, height // 256])
+        + data
+        + LF + _align(0)
+    )
+
+
 def cut_command(mode: str, feed: int) -> bytes:
     """GS V function B: feed to the cutter plus `feed` lines, then cut."""
     if mode == "none":
@@ -269,6 +294,14 @@ def render_block(w: Writer, block: dict, profile: Profile) -> None:
     cols = w.columns
     if t == "title":
         w.rows(wrap(block.get("text", ""), cols), align="center", bold=True)
+    elif t == "logo":
+        # till-12: the logo as a bitmap; a bitmap that does not add up falls
+        # back to the café's name in bold, so the receipt still says whose it is.
+        raster = logo_command(int(block.get("width") or 0), int(block.get("height") or 0), str(block.get("bits") or ""))
+        if raster:
+            w.buf += raster
+        elif block.get("text"):
+            w.rows(wrap(block["text"], cols), align="center", bold=True)
     elif t == "label":
         # An inverse bar across the paper: TAMBAHAN, BATAL, CETAK ULANG, BELUM DIBAYAR, TERLAMBAT.
         half = cols // 2
@@ -283,7 +316,7 @@ def render_block(w: Writer, block: dict, profile: Profile) -> None:
     elif t == "kv":
         w.kv(block.get("left") or "", block.get("right") or "")
     elif t == "rule":
-        w.row("-" * cols)
+        w.row(("=" if block.get("style") == "double" else "-") * cols)
     elif t == "item":
         if block.get("flag"):
             w.rows(wrap(f"[{block['flag']}]", cols), bold=True)
@@ -294,6 +327,18 @@ def render_block(w: Writer, block: dict, profile: Profile) -> None:
             w.rows(wrap(f"- {m}", cols, "   ", "     "), height=2)
         if block.get("notes"):
             w.rows(wrap(f"* {block['notes']}", cols, "   ", "     "), bold=True, height=2)
+    elif t == "item_priced" and block.get("unit_price"):
+        # till-12: the name on its own line, then "2 x @15.000" and the amount
+        # on the right, the way café receipts set an item.
+        name = to_printer_text(block.get("name") or "")
+        if block.get("size"):
+            name += f" ({to_printer_text(block['size'])})"
+        w.rows(wrap(name, cols), bold=True)
+        w.kv(f"  {to_printer_text(block.get('qty') or '')} x @{to_printer_text(block['unit_price'])}", to_printer_text(block.get("amount") or ""))
+        for m in block.get("modifiers") or []:
+            w.rows(wrap(f"+ {m}", cols, "  ", "    "))
+        if block.get("notes"):
+            w.rows(wrap(f"* {block['notes']}", cols, "  ", "    "))
     elif t == "item_priced":
         amount = to_printer_text(block.get("amount") or "")
         room = max(cols - len(amount) - 1, cols // 2)

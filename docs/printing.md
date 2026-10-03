@@ -200,8 +200,26 @@ back as if nothing happened. `held` leaves out jobs already called uncertain for
 
 `document.blocks` is printer-neutral: `title`, `label` (inverse, e.g. `TAMBAHAN`/`BATAL`/`CETAK
 ULANG`/`BELUM DIBAYAR`), `banner` (large heading), `line`, `kv` (left/right), `rule`, `item`
-(qty, name, size, modifiers, notes, flag), `item_priced`, `total`, `text`, `note`. Whatever sits
-on the device side maps these to its printer's commands.
+(qty, name, size, modifiers, notes, flag), `item_priced`, `total`, `text`, `note`, `qr` (till-7,
+`GS ( k`). Whatever sits on the device side maps these to its printer's commands.
+
+till-12 additions, each of which an older bridge still prints sensibly:
+
+- `logo` `{text, width, height, bits}`: the café's logo as a 1-bit bitmap (`bits` = base64 rows of
+  `width/8` bytes, MSB first, 1 = ink), sent with `GS v 0`, centred. Poernama's is its signage
+  wordmark, 384 × 81 dots, made by `scripts/receipt_logo.py` from `frontend/components/Wordmark.tsx`
+  into `backend/app/assets/receipt_logo.json` (a test fails if the two drift). A bitmap that does
+  not add up prints `text` (the name) instead; an older bridge prints `text` too. **`GS v 0` has
+  not yet been seen on the café's IW-J300H** — check it on the first real receipt.
+- `rule` with `style: "double"`: a line of `=`; older bridges print `-`.
+- `item_priced` with `unit_price`: the name on its own line, then `  2 x @15.000 … 30.000`; without
+  `unit_price` (older documents, the nota) the one-line form.
+
+The receipt reads: logo or name · address · contacts · `=====` · order number · `=====` · Tanggal,
+Jenis, Kasir, Pelanggan · items · Total item · Subtotal, discounts, tax ("PB1 10%") · `=====` ·
+TOTAL · `=====` · payment and change · "Sebutkan nomor pesanan…" (not for dine-in) · the café's
+own closing line (`businesses.receipt_footer`) · Terima kasih! · WhatsApp QR when live · Ref. The
+owner turns the logo on/off and writes the closing line in Pengaturan → Data di struk.
 
 ## What the café's setup constrains
 

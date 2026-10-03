@@ -192,12 +192,14 @@ async def render_ticket(session: AsyncSession, order: Order, station: str, *, ca
 async def render_receipt(session: AsyncSession, order: Order) -> dict:
     """The customer's receipt: everything bought, with prices and payment.
 
-    till-5a: under the name, the café's address and how to reach it (from its
-    settings, placeholders until the owner types the real ones); the tax by its
-    own name and rate ("PBJT 10% (termasuk)"); for cash, what was handed over
-    and the change. The big order number stays: it is what the customer listens
-    for. The internal reference moves to the foot, small, where staff can still
-    find it."""
+    till-12 (owner's feedback, 2 Oct 2026), laid out the way established cafés
+    print theirs: the café's logo (its signage lettering, when turned on) or
+    name, the address and contacts; the order number large between double
+    rules — what the customer listens for; the details as label and value;
+    each item on its own line with "2 x @15.000" and the amount; the count of
+    items; Subtotal, the tax by its own name ("PB1 10%"), the TOTAL set apart
+    between double rules; the payment and change; the café's own closing line;
+    thanks; the WhatsApp QR when live; the internal reference small at the foot."""
     from app.services.business_profile import tax_line_label
     from app.services.orders import load_receipt, order_number
     from app.services.pricing import pricing_config
@@ -206,29 +208,35 @@ async def render_receipt(session: AsyncSession, order: Order) -> dict:
     business = await session.get(Business, order.business_id)
     config = await pricing_config(session, order.business_id)
     when = await _local(session, order.business_id, order.sold_at)
-    blocks: list[dict] = [{"t": "title", "text": (business.name if business else "").upper()}]
-    blocks += _cafe_details(business)
+    blocks: list[dict] = brand_blocks(business)
+    blocks.append({"t": "rule", "style": "double"})
     blocks += heading_blocks(order)
-    blocks.append({"t": "kv", "left": SERVICE_LABEL.get(order.order_type, order.order_type), "right": when.strftime("%d/%m/%Y %H.%M")})
-    who = [f"Kasir {data['staff_name']}" if data["staff_name"] else None,
-           f"untuk {data['customer_name']}" if data.get("customer_name") else None]
-    if any(who):
-        blocks.append({"t": "text", "text": " · ".join(w for w in who if w)})
+    blocks.append({"t": "rule", "style": "double"})
+    blocks.append({"t": "kv", "left": "Tanggal", "right": when.strftime("%d/%m/%Y %H.%M")})
+    blocks.append({"t": "kv", "left": "Jenis", "right": SERVICE_LABEL.get(order.order_type, order.order_type)})
+    if data["staff_name"]:
+        blocks.append({"t": "kv", "left": "Kasir", "right": data["staff_name"]})
+    if data.get("customer_name"):
+        blocks.append({"t": "kv", "left": "Pelanggan", "right": data["customer_name"]})
     blocks.append({"t": "rule"})
     from app.services.kitchen import _lines_of
 
     sized = {l.line_id: l for l in await _lines_of(session, order)}
+    count = Decimal(0)
     for entry in data["lines"]:
         line = entry["line"]
         if Decimal(line.quantity) <= 0:
             continue
+        count += Decimal(line.quantity)
         k = sized.get(line.id)
         blocks.append({
             "t": "item_priced", "qty": _qty(line.quantity), "name": entry["item_name"], "size": k.size if k else None,
+            "unit_price": _num(line.unit_price),
             "modifiers": [m.name + (f" +{_rp(m.price_delta)}" if Decimal(m.price_delta) else "") for m in entry["modifiers"]],
-            "notes": line.notes, "amount": _rp(line.line_total),
+            "notes": line.notes, "amount": _num(line.line_total),
         })
     blocks.append({"t": "rule"})
+    blocks.append({"t": "kv", "left": "Total item", "right": _qty(count)})
     tax_label = tax_line_label(config.tax_label, config.tax_rate, config.tax_inclusive)
     for label, value, sign in (
         ("Subtotal", order.subtotal, ""), ("Diskon", order.discount_total, "-"), ("Promo", order.promo_total, "-"),
@@ -238,12 +246,18 @@ async def render_receipt(session: AsyncSession, order: Order) -> dict:
     ):
         if Decimal(value or 0) != 0 and (label != "Subtotal" or Decimal(order.subtotal) != Decimal(order.total)):
             blocks.append({"t": "kv", "left": label, "right": f"{sign}{_rp(value)}"})
-    blocks.append({"t": "total", "left": "TOTAL", "right": _rp(order.total)})
-    blocks += payment_blocks(data["payments"])
     blocks += [
-        {"t": "rule"},
-        {"t": "text", "text": "Sebutkan nomor pesanan saat mengambil. Terima kasih!", "align": "center"},
+        {"t": "rule", "style": "double"},
+        {"t": "total", "left": "TOTAL", "right": _rp(order.total)},
+        {"t": "rule", "style": "double"},
     ]
+    blocks += payment_blocks(data["payments"])
+    blocks.append({"t": "rule"})
+    if order.order_type != "dine_in":
+        blocks.append({"t": "text", "text": "Sebutkan nomor pesanan saat mengambil.", "align": "center"})
+    if business is not None and (business.receipt_footer or "").strip():
+        blocks.append({"t": "text", "text": business.receipt_footer.strip(), "align": "center"})
+    blocks.append({"t": "text", "text": "Terima kasih!", "align": "center", "style": "bold"})
     # till-7, route A: once the bot's number is live, the paper carries the QR
     # that opens WhatsApp with "STRUK <code>" ready, so the customer can keep
     # the receipt on their phone too.
@@ -257,6 +271,25 @@ async def render_receipt(session: AsyncSession, order: Order) -> dict:
         ]
     blocks.append({"t": "text", "text": f"Ref {order_number(order.id)}", "align": "center"})
     return {"v": 1, "kind": "receipt", "blocks": blocks}
+
+
+def _num(amount) -> str:
+    """Money without "Rp", for item lines: "15.000"."""
+    return f"{Decimal(amount):,.0f}".replace(",", ".")
+
+
+def brand_blocks(business: Business | None) -> list[dict]:
+    """The top of anything the customer takes away (till-12): the café's logo
+    when it has one turned on — the name rides along for a printer that cannot
+    draw it — else the name; then the address and contacts."""
+    name = (business.name if business else "").upper()
+    logo = business.receipt_logo if business is not None else None
+    if isinstance(logo, dict) and logo.get("bits"):
+        blocks: list[dict] = [{"t": "logo", "text": name, "width": logo.get("width"), "height": logo.get("height"),
+                               "bits": logo.get("bits")}]
+    else:
+        blocks = [{"t": "title", "text": name}]
+    return blocks + _cafe_details(business)
 
 
 PAYMENT_LABEL = {"cash": "Tunai", "qris": "QRIS", "points": "Poin", "transfer": "Transfer", "card": "Kartu", "ewallet": "E-wallet",
@@ -299,8 +332,6 @@ def _cafe_details(business: Business | None) -> list[dict]:
         out.append({"t": "text", "text": " · ".join(
             c if not c.startswith("@") else f"IG {c}" for c in contact
         ), "align": "center"})
-    if out:
-        out.append({"t": "rule"})
     return out
 
 
@@ -743,7 +774,8 @@ async def render_nota(session: AsyncSession, order: Order, lines: list[dict], *,
     """What the staff put on the table after a send: the new items with their
     prices and the bill so far. Not a receipt: nothing has been paid."""
     business = await session.get(Business, order.business_id)
-    blocks: list[dict] = [{"t": "title", "text": (business.name if business else "").upper()}]
+    blocks: list[dict] = brand_blocks(business)   # till-12: the same top as the receipt
+    blocks.append({"t": "rule", "style": "double"})
     if batch:
         blocks.append({"t": "label", "text": "TAMBAHAN"})
     blocks += heading_blocks(order, batch)

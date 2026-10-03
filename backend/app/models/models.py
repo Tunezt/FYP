@@ -107,6 +107,11 @@ class Business(Base):
     # till-5b, migration 0046: 'always' prints the customer's receipt at payment;
     # 'ask' waits for the cashier's choice (Kertas / QR / WhatsApp / Tidak perlu).
     receipt_mode: Mapped[str] = mapped_column(Text, nullable=False, server_default="always")
+    # till-12 (migration 0048): the logo printed at the top of a receipt, as a
+    # 1-bit bitmap {width, height, bits}; NULL prints the name. And a closing
+    # line of the café's own (Wi-Fi, thanks), up to 200 characters.
+    receipt_logo: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))   # None is SQL NULL, not JSON null
+    receipt_footer: Mapped[str | None] = mapped_column(Text)
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
 

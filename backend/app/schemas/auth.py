@@ -43,6 +43,13 @@ class BusinessOut(BaseModel):
     contact_phone: str | None = None
     instagram: str | None = None
     receipt_mode: str = "always"     # till-5b
+    receipt_logo: bool = False       # till-12: the wordmark prints at the top of receipts
+    receipt_footer: str | None = None
+
+    @field_validator("receipt_logo", mode="before")
+    @classmethod
+    def _has_logo(cls, value):
+        return bool(value)
 
     @computed_field
     @property

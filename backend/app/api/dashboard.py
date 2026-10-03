@@ -1363,7 +1363,14 @@ async def get_business(ctx: OwnerCtx):
 @router.patch("/business", response_model=BusinessOut)
 async def update_business(payload: BusinessUpdateIn, ctx: OwnerCtx):
     business = await _business(ctx)
-    for field, value in payload.model_dump(exclude_none=True).items():
+    changes = payload.model_dump(exclude_none=True)
+    if "receipt_logo" in changes:   # till-12: the café's wordmark on its receipts, or its name in text
+        from app.services.business_profile import wordmark_logo
+
+        business.receipt_logo = wordmark_logo() if changes.pop("receipt_logo") else None
+    if "receipt_footer" in changes:
+        business.receipt_footer = " ".join(changes.pop("receipt_footer").split()) or None
+    for field, value in changes.items():
         setattr(business, field, value)
     await ctx.session.flush()
     return BusinessOut.model_validate(business)

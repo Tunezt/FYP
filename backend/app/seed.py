@@ -38,7 +38,7 @@ from app.services.catalog import (
 from app.services.accounts import ensure_standard_chart
 from app.services.posting_rules import ensure_standard_rules
 from app.services.points import award_points_for_order, ensure_loyalty_settings
-from app.services.business_profile import apply_placeholders, apply_tax_placeholder
+from app.services.business_profile import apply_placeholders, apply_tax_placeholder, wordmark_logo
 from app.services.pricing import ensure_pricing_settings
 from app.services.customers import create_customer
 from app.services.promos import create_promo
@@ -163,6 +163,8 @@ async def seed(confirm: bool = False) -> None:
             receipt_mode="ask",   # till-5b: the customer's receipt only when asked
         )
         apply_placeholders(business)   # till-5a
+        business.receipt_logo = wordmark_logo()   # till-12: the signage lettering on the receipt
+        business.receipt_footer = "WiFi: Poernama-Tamu - kata sandi ada di kasir"   # till-12: demo closing line
         # The demo café has 30 days of invented history, so its row has to be at
         # least that old or the story does not hold together: M15-T10 refuses a
         # paper sale dated before the business existed, and a business created

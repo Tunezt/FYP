@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 
 // A print job's frozen document (prt-3), drawn as the slip it will be on paper.
@@ -8,8 +8,12 @@ import QRCode from "qrcode";
 // white slip for preview and for the browser's own print dialog.
 
 export type PrintBlock = {
-  t: "title" | "banner" | "line" | "label" | "kv" | "rule" | "item" | "item_priced" | "total" | "text" | "note" | "qr";
+  t: "title" | "logo" | "banner" | "line" | "label" | "kv" | "rule" | "item" | "item_priced" | "total" | "text" | "note" | "qr";
   data?: string;
+  width?: number; // logo (till-12): dots
+  height?: number;
+  bits?: string; // logo: base64 rows of width/8 bytes, MSB first, 1 = ink
+  unit_price?: string; // item_priced (till-12): "15.000", shown as "2 x @15.000"
   text?: string;
   left?: string;
   right?: string;
@@ -37,6 +41,47 @@ function QrBlock({ data }: { data: string }) {
   return src ? <img src={src} alt="Kode QR struk WhatsApp" className="mx-auto my-2 h-36 w-36" /> : null;
 }
 
+/** till-12: the logo bitmap exactly as the printer gets it, drawn dot for dot
+ *  (576 dots = the slip's 302 px, so a 384-dot logo is two thirds across). */
+function LogoBlock({ width, height, bits, text }: { width: number; height: number; bits: string; text?: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const [ok, setOk] = useState(true);
+  useEffect(() => {
+    const canvas = ref.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    try {
+      const raw = atob(bits);
+      const rowBytes = width / 8;
+      if (!width || width % 8 || raw.length !== rowBytes * height) throw new Error("bitmap");
+      const img = ctx.createImageData(width, height);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const on = (raw.charCodeAt(y * rowBytes + (x >> 3)) >> (7 - (x & 7))) & 1;
+          const o = (y * width + x) * 4;
+          img.data[o] = img.data[o + 1] = img.data[o + 2] = on ? 0 : 255;
+          img.data[o + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    } catch {
+      setOk(false);
+    }
+  }, [width, height, bits]);
+  if (!ok) return <p className="text-center text-[13px] font-bold tracking-wide">{text}</p>;
+  return (
+    <canvas
+      ref={ref}
+      width={width}
+      height={height}
+      role="img"
+      aria-label={text ? `Logo ${text}` : "Logo"}
+      className="mx-auto my-1 block [image-rendering:pixelated]"
+      style={{ width: `${(width / 576) * 100}%`, height: "auto" }}
+    />
+  );
+}
+
 export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
   return (
     <div id={id} className="print-slip w-[302px] bg-white px-4 py-5 font-mono text-[13px] leading-[1.35] text-black">
@@ -44,6 +89,14 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
         switch (b.t) {
           case "title":
             return (
+              <p key={i} className="text-center text-[13px] font-bold tracking-wide">
+                {b.text}
+              </p>
+            );
+          case "logo":
+            return b.width && b.height && b.bits ? (
+              <LogoBlock key={i} width={b.width} height={b.height} bits={b.bits} text={b.text} />
+            ) : (
               <p key={i} className="text-center text-[13px] font-bold tracking-wide">
                 {b.text}
               </p>
@@ -74,7 +127,11 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
               </p>
             );
           case "rule":
-            return <hr key={i} className="my-2 border-dashed border-black" />;
+            return b.style === "double" ? (
+              <hr key={i} className="my-2 h-[5px] border-x-0 border-y border-solid border-black" />
+            ) : (
+              <hr key={i} className="my-2 border-dashed border-black" />
+            );
           case "item":
             return (
               <div key={i} className="mb-2">
@@ -92,6 +149,27 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
               </div>
             );
           case "item_priced":
+            if (b.unit_price)
+              return (
+                <div key={i} className="mb-1.5">
+                  <p className="font-bold">
+                    {b.name}
+                    {b.size ? ` (${b.size})` : ""}
+                  </p>
+                  <p className="flex justify-between gap-2 pl-3">
+                    <span>
+                      {b.qty} x @{b.unit_price}
+                    </span>
+                    <span className="shrink-0">{b.amount}</span>
+                  </p>
+                  {(b.modifiers ?? []).map((m, j) => (
+                    <p key={j} className="pl-3 text-[12px]">
+                      + {m}
+                    </p>
+                  ))}
+                  {b.notes && <p className="pl-3 text-[12px]">* {b.notes}</p>}
+                </div>
+              );
             return (
               <div key={i} className="mb-1.5">
                 <p className="flex justify-between gap-2">
@@ -111,7 +189,7 @@ export function PrintDocument({ doc, id }: { doc: PrintDoc; id?: string }) {
             );
           case "total":
             return (
-              <p key={i} className="flex justify-between gap-2 text-[15px] font-bold">
+              <p key={i} className="flex justify-between gap-2 text-[17px] font-bold">
                 <span>{b.left}</span>
                 <span>{b.right}</span>
               </p>

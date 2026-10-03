@@ -315,6 +315,8 @@ class ReceiptOut(BaseModel):
     business_address: str | None = None      # till-5a: the café's details, from its settings
     business_phone: str | None = None
     business_instagram: str | None = None
+    business_logo: bool = False        # till-12: the café prints its wordmark; screens draw the same lettering
+    receipt_footer: str | None = None  # till-12: the café's own closing line
     parent_number: str | None = None   # svc-3: printed as "Tambahan untuk #..."
     order_no: str = ""                 # prt-1: "042"
     service_date: date | None = None

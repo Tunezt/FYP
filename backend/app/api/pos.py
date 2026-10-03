@@ -1141,6 +1141,8 @@ async def receipt_view(session, business_id: uuid.UUID, order_id: uuid.UUID) -> 
         business_address=business.address if business else None,
         business_phone=business.contact_phone if business else None,
         business_instagram=business.instagram if business else None,
+        business_logo=bool(business and business.receipt_logo),
+        receipt_footer=business.receipt_footer if business else None,
         parent_number=order_number(order.parent_order_id) if order.parent_order_id else None,
         order_no=service_label(order), service_date=order.service_date, batch_no=order.batch_no or 0,
         external_ref=order.external_ref,

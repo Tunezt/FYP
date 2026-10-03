@@ -41,6 +41,8 @@ FIELD_LABELS = {
     "tendered": "uang diterima",
     "unit": "satuan",
     "menu_category": "kategori menu",
+    "receipt_footer": "catatan di bawah struk",
+    "receipt_logo": "logo di struk",
     "sell_price": "harga jual",
     "cost_price": "harga modal",
     "current_stock": "stok",

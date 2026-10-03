@@ -1,5 +1,6 @@
 "use client";
 
+import { Wordmark } from "@/components/Wordmark";
 import { useState } from "react";
 import QRCode from "qrcode";
 import { Select } from "@/components/Select";
@@ -1007,10 +1008,12 @@ export default function SettingsPage() {
 }
 
 
-const DETAIL_FIELDS: { key: "address" | "contact_phone" | "instagram"; label: string; hint: string; max: number }[] = [
+const DETAIL_FIELDS: { key: "address" | "contact_phone" | "instagram" | "receipt_footer"; label: string; hint: string; max: number }[] = [
   { key: "address", label: "Alamat", hint: "mis. Jl. Merdeka 12, Bandung", max: 120 },
   { key: "contact_phone", label: "Nomor telepon / WhatsApp", hint: "mis. 0811-2233-4455", max: 40 },
   { key: "instagram", label: "Instagram", hint: "mis. @namakafe", max: 60 },
+  // till-12: printed above "Terima kasih!"
+  { key: "receipt_footer", label: "Catatan di bawah struk (opsional)", hint: "mis. WiFi: Poernama · sandi: kopienak", max: 200 },
 ];
 
 /** Address, phone and Instagram under the café's name on every receipt
@@ -1025,6 +1028,7 @@ function ReceiptDetails({ business, loading, onSaved }: { business: Business | n
     address: business?.address ?? "",
     contact_phone: business?.contact_phone ?? "",
     instagram: business?.instagram ?? "",
+    receipt_footer: business?.receipt_footer ?? "",
   };
   const placeholders = business?.placeholders ?? [];
 
@@ -1036,6 +1040,7 @@ function ReceiptDetails({ business, loading, onSaved }: { business: Business | n
         address: current.address.trim(),
         contact_phone: current.contact_phone.trim(),
         instagram: current.instagram.trim(),
+        receipt_footer: current.receipt_footer.trim(),
       }, "PATCH");
       setDraft(null);
       onSaved();
@@ -1064,6 +1069,37 @@ function ReceiptDetails({ business, loading, onSaved }: { business: Business | n
               Masih contoh — ganti dengan data asli sebelum struk pertama dicetak.
             </p>
           )}
+          {/* till-12: the signage lettering at the top of every receipt */}
+          <label className="flex items-start gap-3 pb-1">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={!!business?.receipt_logo}
+              disabled={busy}
+              onChange={async (e) => {
+                setBusy(true);
+                setError(null);
+                try {
+                  await mutate("/api/business", { receipt_logo: e.target.checked }, "PATCH");
+                  onSaved();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Gagal menyimpan — coba lagi.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">Cetak logo di atas struk</span>
+              <span className="ink-faint block text-xs">
+                Huruf papan nama Poernama, dicetak hitam-putih selebar dua pertiga kertas. Tidak dicentang: nama usaha
+                dalam huruf biasa.
+              </span>
+              <span className="mt-2 block w-48 rounded-lg bg-white px-3 py-2 text-black ring-1 ring-[color:var(--border)]">
+                <Wordmark className="w-full" title="Pratinjau logo struk" />
+              </span>
+            </span>
+          </label>
           {DETAIL_FIELDS.map((f) => {
             const isPlaceholder = !draft && placeholders.includes(f.key);
             return (

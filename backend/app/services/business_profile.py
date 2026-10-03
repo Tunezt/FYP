@@ -25,7 +25,10 @@ Bapenda confirmed; the demo seed uses the 10% placeholder so the layout shows.
 """
 from __future__ import annotations
 
+import json
 from decimal import Decimal
+from functools import lru_cache
+from pathlib import Path
 
 RECEIPT_PLACEHOLDERS: dict[str, str] = {
     "address": "Jl. Lorem Ipsum No. 1, Kota Dolor",
@@ -48,6 +51,24 @@ def apply_placeholders(business) -> None:
     for field, value in RECEIPT_PLACEHOLDERS.items():
         if not getattr(business, field, None):
             setattr(business, field, value)
+
+
+# till-12: the Poernama wordmark ("Horizon Swash", the signage lettering) as
+# the printer's bitmap, made by scripts/receipt_logo.py from
+# frontend/components/Wordmark.tsx. The only logo the product ships.
+WORDMARK_ASSET = Path(__file__).resolve().parents[1] / "assets" / "receipt_logo.json"
+RECEIPT_FOOTER_MAX = 200
+
+
+@lru_cache(maxsize=1)
+def _wordmark() -> dict:
+    data = json.loads(WORDMARK_ASSET.read_text(encoding="utf-8"))
+    return {k: data[k] for k in ("width", "height", "bits")}
+
+
+def wordmark_logo() -> dict:
+    """A fresh copy of the wordmark bitmap, to store on a business."""
+    return dict(_wordmark())
 
 
 def apply_tax_placeholder(pricing_row, rate: Decimal = TAX_RATE_PLACEHOLDER) -> None:
