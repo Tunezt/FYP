@@ -7,6 +7,7 @@ import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 import { orderHeading, orderLabel, serviceDateLabel, taxLineLabel, withSize } from "@/lib/pos";
 import { FormHint, missingText } from "@/components/FormHint";
 import { ReceiptChoiceSheet } from "@/components/pos/ReceiptChoice";
+import { IconChevronLeft } from "@/components/icons";
 
 export type Receipt = {
   order_id: string;
@@ -173,13 +174,38 @@ export function TransactionsView({
   return (
     <div>
       <div className="glass-card px-5 pb-6 pt-5 sm:px-6">
-        <div>
-          <h1 className="text-[21px] font-semibold tracking-[-0.02em]">Riwayat transaksi hari ini</h1>
-          <p className="ink-soft mt-0.5 text-sm">
-            Salah pencet setelah dibayar? Buka transaksinya, lalu batalkan atau kembalikan. Perlu PIN pemilik atau
-            manajer. Pesanan yang belum dibayar dibatalkan dari Pesanan aktif.
-          </p>
-        </div>
+        {open && !done ? (
+          /* till-6: a header row like the rest of the till — a 44 px back button
+             beside what is open — instead of a bare arrow floating above it. */
+          <div className="-ml-2 flex items-center gap-2">
+            <button
+              onClick={() => setOpen(null)}
+              aria-label="Kembali ke daftar transaksi"
+              title="Kembali ke daftar transaksi"
+              className="icon-btn ink-soft h-11 w-11 shrink-0 rounded-full"
+            >
+              <IconChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[21px] font-semibold tracking-[-0.02em]">{orderLabel(open)}</h1>
+              <p className="ink-soft truncate text-[13px] tabular-nums">
+                {time(open.sold_at)}
+                {open.staff_name ? ` · ${open.staff_name}` : ""}
+                {open.customer_name ? ` · untuk ${open.customer_name}` : ""}
+                <span className="ink-faint"> · Ref {open.number}</span>
+              </p>
+            </div>
+            <p className="shrink-0 text-[21px] font-semibold tabular-nums tracking-[-0.02em]">{formatRupiah(open.total)}</p>
+          </div>
+        ) : (
+          <div>
+            <h1 className="text-[21px] font-semibold tracking-[-0.02em]">Riwayat transaksi hari ini</h1>
+            <p className="ink-soft mt-0.5 text-sm">
+              Salah pencet setelah dibayar? Buka transaksinya, lalu batalkan atau kembalikan. Perlu PIN pemilik atau
+              manajer. Pesanan yang belum dibayar dibatalkan dari Pesanan aktif.
+            </p>
+          </div>
+        )}
 
         {error && <p className="mt-3 text-sm text-[color:var(--bad)]">{error}</p>}
 
@@ -218,22 +244,8 @@ export function TransactionsView({
         ) : open ? (
           /* 2 — look at it, then choose */
           <div className="mt-4">
-            <button onClick={() => setOpen(null)} className="ink-soft text-sm">
-              ← kembali ke daftar
-            </button>
-            <div className="surface-inset rounded-2xl mt-3 px-4 py-3">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="text-lg font-bold tracking-[-0.02em]">
-                  {orderLabel(open)} <span className="ink-faint text-sm font-medium">#{open.number}</span>
-                </p>
-                <p className="text-lg font-bold tabular-nums">{formatRupiah(open.total)}</p>
-              </div>
-              <p className="ink-soft text-xs">
-                {time(open.sold_at)}
-                {open.staff_name ? ` · ${open.staff_name}` : ""}
-                {open.customer_name ? ` · utk ${open.customer_name}` : ""}
-              </p>
-              <ul className="mt-2 space-y-0.5 text-sm">
+            <div className="surface-inset rounded-2xl px-4 py-3">
+              <ul className="space-y-0.5 text-sm">
                 {open.lines
                   .filter((l) => Number(l.quantity) > 0)
                   .map((l, i) => (

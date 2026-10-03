@@ -2116,3 +2116,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - **Verified in the browser:** Nasi Goreng Spesial paid with Rp 50.000 → the sheet showed "Pesanan 001 · lunas Rp 35.000 · Kembalian Rp 15.000" with WhatsApp disabled "Belum aktif"; QR showed a scannable code; that code's page at 375 px rendered the full receipt with no horizontal scroll.
 **Deviation:** owner's plan of 1 Oct, work item 5 (second half) and decisions 4–5. Additive schema. Not committed, per instruction; snapshot `refs/wip/till-5b`.
 **Next:** [till-6] a proper back control in *Riwayat transaksi*.
+
+
+### [till-6] A real back control in *Riwayat transaksi*
+**Date:** 2026-10-01
+**Status:** done in software; **uncommitted at the owner's request**
+**Changed:** frontend/components/pos/Receipts.tsx
+**Gates:** pytest 688 passed, 1 failed, 0 skipped (689 collected); the failure is the pre-existing voucher fixture date (see till-1) - migrations round-trip ok (0046 -> 0045 -> 0046) - frontend build ok (synced copy) - seed ok
+**Notes:**
+- The bare "← kembali ke daftar" floating above the card is gone. With a transaction open, the card's own header becomes a row like the rest of the till: a round back button (44 × 44 px, chevron, labelled "Kembali ke daftar transaksi"), the order's name, "22.44 · Sari · Ref 4EAEFB3A" under it, and the total on the right. Back to the list, the header is again *Riwayat transaksi hari ini* with its explanation.
+- Verified in the browser at 1280 × 800: the button measures 44 × 44, the old link text is nowhere on the page, and tapping it returns to the list.
+**Deviation:** owner's plan of 1 Oct, work item 6. Not committed, per instruction; snapshot `refs/wip/till-6`.
+**Next:** [till-7] receipts on the customer's WhatsApp, route A (bot side), blocked only on the bot SIM.
