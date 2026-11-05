@@ -1,9 +1,9 @@
 "use client";
 
-import { FormHint } from "@/components/FormHint";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { PinPad, StaffPicker, type PosBusiness, type StaffLite } from "@/components/pos/StaffDoor";
 import { IconAlert, IconCheck, IconLock, IconNote, IconPlugOff } from "@/components/icons";
 import { formatQty } from "@/lib/format";
 import { clockTime, minutesSince, orderHeading, orderLabel, waitLabel, type KitchenBoard, type KitchenLine, type KitchenTicket, type PrepState } from "@/lib/pos";
@@ -17,9 +17,6 @@ import { clockTime, minutesSince, orderHeading, orderLabel, waitLabel, type Kitc
 
 const KITCHEN_TOKEN_KEY = "wp_kitchen_token";
 
-type StaffLite = { id: string; name: string; role: string };
-type PosBusiness = { business_name: string; staff: StaffLite[] };
-
 export default function KitchenPage() {
   const params = useParams<{ businessToken: string }>();
   const pairingToken = params.businessToken;
@@ -27,7 +24,9 @@ export default function KitchenPage() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [staff, setStaff] = useState<StaffLite | null>(null);
   const [pin, setPin] = useState("");
-  const [loginError, setLoginError] = useState<string | null>(null);
+  const [shake, setShake] = useState(false);
+  // Why the last try failed when it was not simply the wrong PIN (a cooldown).
+  const [loginNotice, setLoginNotice] = useState<string | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
   const [staffName, setStaffName] = useState("");
 
@@ -50,21 +49,31 @@ export default function KitchenPage() {
       .catch((e: unknown) => setBootError(e instanceof ApiError ? e.detail : "Tidak bisa terhubung ke server."));
   }, [pairingToken]);
 
-  async function login() {
-    if (!staff || pin.length < 4) return;
-    setLoginError(null);
+  async function login(who: StaffLite, entered: string) {
     try {
       const res = await api<{ token: string; staff_name: string; business_name: string }>("/pos/login", {
-        body: { pairing_token: pairingToken, staff_id: staff.id, pin },
+        body: { pairing_token: pairingToken, staff_id: who.id, pin: entered },
       });
       localStorage.setItem(KITCHEN_TOKEN_KEY, res.token);
       localStorage.setItem(`${KITCHEN_TOKEN_KEY}:name`, res.staff_name);
       setToken(res.token);
       setStaffName(res.staff_name);
       setPin("");
+      setLoginNotice(undefined);
     } catch (e: unknown) {
-      setLoginError(e instanceof ApiError ? e.detail : "PIN salah — coba lagi");
+      if (e instanceof ApiError && e.status === 401 && e.detail.startsWith("Perangkat ini")) {
+        // Re-paired while open: no PIN will work here again (as on the till).
+        setBootError(e.detail);
+        return;
+      }
+      if (!(e instanceof ApiError)) {
+        setLoginNotice("Tidak bisa terhubung ke server — periksa Wi-Fi, lalu coba lagi.");
+      } else {
+        setLoginNotice(e.status === 429 ? e.detail : undefined);
+      }
       setPin("");
+      setShake(true);
+      window.setTimeout(() => setShake(false), 500);
     }
   }
 
@@ -73,6 +82,7 @@ export default function KitchenPage() {
     localStorage.removeItem(`${KITCHEN_TOKEN_KEY}:name`);
     setToken(null);
     setStaff(null);
+    setPin("");
   }
 
   if (bootError) {
@@ -93,48 +103,49 @@ export default function KitchenPage() {
     return <Board token={token} businessName={business?.business_name ?? ""} staffName={staffName} onLock={lock} onExpired={lock} />;
   }
 
+  if (!business) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="ink-soft animate-pulse text-lg">Menyiapkan layar dapur…</p>
+      </main>
+    );
+  }
+
+  // The same door as the till: who is on, then their PIN on the pad.
+  if (!staff) {
+    return (
+      <StaffPicker
+        business={business}
+        title="Siapa yang jaga dapur?"
+        note="Layar dapur · masuk dengan PIN kasir"
+        onPick={(s) => {
+          setStaff(s);
+          setPin("");
+          setLoginNotice(undefined);
+        }}
+      />
+    );
+  }
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
-      <p className="ink-faint text-[13px] font-medium">{business?.business_name ?? "…"}</p>
-      <h1 className="mt-1 text-[1.75rem] font-semibold tracking-[-0.025em]">Layar dapur</h1>
-      <p className="ink-soft mt-1 text-sm">Siapa yang jaga dapur? Pilih nama, masukkan PIN kasir.</p>
-      <div className="mt-5 grid grid-cols-2 gap-2">
-        {(business?.staff ?? []).map((s) => (
-          <button
-            key={s.id}
-            onClick={() => {
-              setStaff(s);
-              setPin("");
-              setLoginError(null);
-            }}
-            aria-pressed={staff?.id === s.id}
-            className="choice-card px-4 py-3.5 text-[15px]"
-          >
-            {s.name}
-          </button>
-        ))}
-      </div>
-      {staff && (
-        <div className="mt-5 flex gap-2">
-          <input
-            autoFocus
-            type="password"
-            inputMode="numeric"
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
-            onKeyDown={(e) => e.key === "Enter" && login()}
-            aria-label="PIN kasir"
-            className="field flex-1 py-3 text-center text-2xl font-semibold tracking-[0.5em] placeholder:tracking-normal"
-            placeholder="PIN"
-          />
-          <button onClick={login} disabled={pin.length < 4} className="btn-accent px-6 py-3">
-            Masuk
-          </button>
-        </div>
-      )}
-      {staff ? <FormHint missing={pin.length < 4 ? "Masukkan PIN 4 angka" : null} /> : <FormHint missing="Pilih nama dulu" />}
-      {loginError && <p className="notice notice-bad mt-4">{loginError}</p>}
-    </main>
+    <PinPad
+      staff={staff}
+      pin={pin}
+      shake={shake}
+      notice={loginNotice}
+      onBack={() => {
+        setStaff(null);
+        setPin("");
+        setLoginNotice(undefined);
+      }}
+      onDigit={(d) => {
+        if (pin.length >= 4) return;
+        const next = pin + d;
+        setPin(next);
+        if (next.length === 4) void login(staff, next);
+      }}
+      onDelete={() => setPin((p) => p.slice(0, -1))}
+    />
   );
 }
 

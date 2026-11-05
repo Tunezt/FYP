@@ -2,13 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, POS_PAIRING_KEY, POS_TOKEN_KEY } from "@/lib/api";
-import { IconBackspace, IconPlugOff } from "@/components/icons";
-import { initials } from "@/lib/format";
+import { IconPlugOff } from "@/components/icons";
 import { SellScreen } from "@/components/pos/SellScreen";
-import { Wordmark } from "@/components/Wordmark";
-
-type StaffLite = { id: string; name: string; role: string };
-type PosBusiness = { business_name: string; staff: StaffLite[] };
+import { Center, PinPad, StaffPicker, type PosBusiness, type StaffLite } from "@/components/pos/StaffDoor";
 type Screen =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -106,34 +102,11 @@ export function Till({ pairingToken, onReset }: { pairingToken: string; onReset?
 
   if (screen.kind === "pick-staff") {
     return (
-      <Center>
-        <div className="w-full max-w-2xl animate-fade-up px-6">
-          <Wordmark className="mx-auto w-[168px]" title={screen.business.business_name} />
-          <h1 className="mt-9 text-center text-[2rem] font-semibold tracking-[-0.025em]">Siapa yang jaga?</h1>
-          <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {screen.business.staff.map((s, i) => (
-              <button
-                key={s.id}
-                onClick={() =>
-                  setScreen({ kind: "pin", business: screen.business, staff: s, pin: "", shake: false })
-                }
-                className="glass-card flex flex-col items-center gap-3 px-4 py-8 transition-[transform,box-shadow] duration-150 hover:shadow-key active:scale-[0.98]"
-                style={{ animationDelay: `${i * 60}ms` }}
-              >
-                <span className="surface-inset ink-soft flex h-16 w-16 items-center justify-center rounded-full text-xl font-semibold" style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}>
-                  {initials(s.name)}
-                </span>
-                <span className="text-[17px] font-semibold">{s.name}</span>
-                {s.role === "owner" && (
-                  <span className="pill-good">
-                    pemilik
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      </Center>
+      <StaffPicker
+        business={screen.business}
+        title="Siapa yang jaga?"
+        onPick={(s) => setScreen({ kind: "pin", business: screen.business, staff: s, pin: "", shake: false })}
+      />
     );
   }
 
@@ -146,6 +119,7 @@ export function Till({ pairingToken, onReset }: { pairingToken: string; onReset?
         notice={screen.notice}
         onBack={() => setScreen({ kind: "pick-staff", business: screen.business })}
         onDigit={(d) => {
+          if (screen.pin.length >= 4) return;
           const pin = screen.pin + d;
           if (pin.length === 4) {
             void tryPin(screen.staff, screen.business, pin);
@@ -184,96 +158,3 @@ export function Till({ pairingToken, onReset }: { pairingToken: string; onReset?
   );
 }
 
-function Center({ children }: { children: React.ReactNode }) {
-  return <main className="flex min-h-screen items-center justify-center">{children}</main>;
-}
-
-function PinPad({
-  staff,
-  pin,
-  shake,
-  notice,
-  onDigit,
-  onDelete,
-  onBack,
-}: {
-  staff: StaffLite;
-  pin: string;
-  shake: boolean;
-  notice?: string;
-  onDigit: (d: string) => void;
-  onDelete: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <Center>
-      <div className="w-full max-w-sm animate-scale-in px-6 text-center">
-        <span className="surface-inset ink-soft mx-auto flex h-16 w-16 items-center justify-center rounded-full text-xl font-semibold" style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}>
-          {initials(staff.name)}
-        </span>
-        <h1 className="mt-4 text-2xl font-semibold tracking-[-0.02em]">Halo, {staff.name}</h1>
-        {notice ? (
-          <p
-            className="mx-auto mt-3 max-w-xs notice notice-bad"
-          >
-            {notice}
-          </p>
-        ) : (
-          <p className="ink-soft mt-1">Masukkan PIN 4 angka</p>
-        )}
-
-        <div
-          className={`mt-6 flex justify-center gap-4 ${shake ? "animate-[shake_0.4s_ease-in-out]" : ""}`}
-          style={
-            shake
-              ? { animation: "shake 0.4s ease-in-out" }
-              : undefined
-          }
-        >
-          {[0, 1, 2, 3].map((i) => (
-            <span
-              key={i}
-              className={`h-3.5 w-3.5 rounded-full border-[1.5px] transition-all duration-150 ${
-                i < pin.length
-                  ? "border-[color:var(--accent)] bg-[color:var(--accent-fill)]"
-                  : "border-[color:var(--ink-faint)]"
-              }`}
-            />
-          ))}
-        </div>
-        <style>{`@keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-10px)} 40%{transform:translateX(10px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }`}</style>
-
-        <div className="mx-auto mt-8 grid max-w-[18rem] grid-cols-3 gap-x-5 gap-y-4">
-          {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-            <PinKey key={d} label={d} onPress={() => onDigit(d)} />
-          ))}
-          <button
-            onClick={onBack}
-            className="rounded-2xl py-5 text-[15px] font-medium text-[color:var(--ink-soft)] transition-colors hover:text-[color:var(--ink)] active:opacity-60"
-          >
-            batal
-          </button>
-          <PinKey label="0" onPress={() => onDigit("0")} />
-          <button
-            onClick={onDelete}
-            aria-label="hapus"
-            className="ink-soft flex items-center justify-center rounded-2xl py-5 transition-colors hover:text-[color:var(--ink)] active:opacity-60"
-          >
-            <IconBackspace className="h-7 w-7" />
-          </button>
-        </div>
-      </div>
-    </Center>
-  );
-}
-
-function PinKey({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <button
-      onClick={onPress}
-      className="rounded-full bg-[color:var(--surface)] py-5 text-[26px] font-normal tabular-nums shadow-key transition-[transform,background-color] duration-100 hover:bg-[color:var(--surface-inset)] active:scale-95 active:bg-[color:var(--row-press)]"
-    >
-      {label}
-    </button>
-  );
-}

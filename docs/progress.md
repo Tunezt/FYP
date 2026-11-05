@@ -2526,3 +2526,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Printer, bridge, pairing, slip and print-job code untouched.
 **Deviation:** not a roadmap task; owner's instruction in chat.
 **Next:** owner looks at it on the live site and on the tablet.
+
+
+### [kasir-5] The kitchen screen opens the way the till does
+**Date:** 2026-11-05 (work done 2026-10-27, in another session)
+**Status:** done and pushed at the owner's instruction
+**Changed:** frontend/components/pos/StaffDoor.tsx (new), frontend/components/pos/Till.tsx, frontend/app/kitchen/[businessToken]/page.tsx
+**Gates:** pytest 738 passed, 0 skipped, 0 failed (15.30 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; npm run build OK; seed OK; impeccable detect clean.
+**Notes:**
+- The till's staff picker and PIN pad move into components/pos/StaffDoor.tsx; the kitchen screen uses the same two instead of its own name list and password field.
+- The kitchen PIN is now entered on the pad (4 digits, as staff PINs are) and tried on the fourth digit; a refused PIN shakes, a cooldown shows its message.
+- The kitchen screen stays hidden in Pengaturan (bill-3). Pairing and kitchen-token storage unchanged.
+**Deviation:** not a roadmap task; written in another session on 2026-10-27, committed at the owner's instruction ("push all of em").
+**Next:** none.
