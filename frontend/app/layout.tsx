@@ -13,7 +13,14 @@ export const metadata: Metadata = {
   description: "Sistem Poernama",
   // Meta Business domain verification for the Poernama portfolio: must sit in
   // the server-rendered <head>, so it lives here and not in client code.
-  other: { "facebook-domain-verification": "w6inzuyav8bdljzf4r98z0tvii4wfv" },
+  // One code per domain Meta checks: poernama-zeta.vercel.app, then poernama.com.
+  // Both stay; removing one un-verifies that domain.
+  other: {
+    "facebook-domain-verification": [
+      "w6inzuyav8bdljzf4r98z0tvii4wfv",
+      "zwh76t284pgh878lwv545099eqkvqr",
+    ],
+  },
 };
 
 export const viewport: Viewport = {

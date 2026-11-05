@@ -2554,3 +2554,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Printer, bridge, pairing, slip and print-job code untouched.
 **Deviation:** not a roadmap task; owner's instruction in chat (M12, Meta setup).
 **Next:** owner clicks Verify domain in Meta once the deploy is live.
+
+### [meta-2] Meta can verify poernama.com: its own tag beside the first
+**Date:** 2026-11-05
+**Status:** done and pushed at the owner's instruction
+**Changed:** frontend/app/layout.tsx
+**Gates:** pytest 738 passed, 0 skipped, 0 failed (23.25 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; npm run build OK; seed OK.
+**Notes:**
+- The owner bought poernama.com on Vercel (apex 308 -> www.poernama.com, Vercel DNS), because Meta's business-details form refuses vercel.app as a website.
+- Meta gives each domain its own code, so the poernama.com check failed against the vercel.app code ("did not match the expected value"). The layout now renders both facebook-domain-verification tags; both are in the built index.html <head>. Neither may be removed: that un-verifies its domain.
+- A first test run had 1 error in test_bootstrap because the alembic downgrade gate ran while the suite was using the database; the file alone passed 14/14 and a clean full rerun passed 738.
+- Printer, bridge, pairing, slip and print-job code untouched.
+**Deviation:** not a roadmap task; owner's instruction in chat (M12, Meta setup).
+**Next:** owner clicks Verify domain for poernama.com, then submits business verification with the NPWP.
