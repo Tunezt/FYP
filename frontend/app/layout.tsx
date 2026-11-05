@@ -11,6 +11,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 export const metadata: Metadata = {
   title: "Poernama",
   description: "Sistem Poernama",
+  // Meta Business domain verification for the Poernama portfolio: must sit in
+  // the server-rendered <head>, so it lives here and not in client code.
+  other: { "facebook-domain-verification": "w6inzuyav8bdljzf4r98z0tvii4wfv" },
 };
 
 export const viewport: Viewport = {

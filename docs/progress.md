@@ -2539,3 +2539,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - The kitchen screen stays hidden in Pengaturan (bill-3). Pairing and kitchen-token storage unchanged.
 **Deviation:** not a roadmap task; written in another session on 2026-10-27, committed at the owner's instruction ("push all of em").
 **Next:** none.
+
+
+### [meta-1] Meta can verify the site: the domain tag in the page header
+**Date:** 2026-11-05
+**Status:** done and pushed at the owner's instruction
+**Changed:** frontend/app/layout.tsx
+**Gates:** pytest 738 passed, 0 skipped, 0 failed (17.10 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; npm run build OK; seed OK.
+**Notes:**
+- Meta's WhatsApp number onboarding stopped with error #2494070 ("your business doesn't meet WhatsApp's policy requirements") for the unverified Poernama portfolio; Business Support Home shows no restriction on the account or the portfolio, so the way through is business verification.
+- Domain verification is one way Meta accepts to confirm the business owns its website. Meta gave a meta-tag for poernama-zeta.vercel.app; it is now in the root layout's metadata, so Next renders it in the server-sent <head> of every page (checked in the built index.html).
+- Separately, Meta's business-details form refuses vercel.app as a "common website domain"; the owner has added poernama.com to the Vercel project (DNS not yet valid). The same tag serves it once it points at Vercel.
+- Owner side, still to do: the NIB from OSS (registered as perorangan, legal name to match it), then the verification upload.
+- Printer, bridge, pairing, slip and print-job code untouched.
+**Deviation:** not a roadmap task; owner's instruction in chat (M12, Meta setup).
+**Next:** owner clicks Verify domain in Meta once the deploy is live.
