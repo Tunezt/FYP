@@ -2500,3 +2500,29 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - prt-11's temporary installer is removed from the site now that the tablet has run it. `bridge/dist/pasang-bridge.sh` stays on the laptop.
 **Deviation:** not a roadmap task.
 **Next:** on the tablet: Chrome -> /kasir -> menu -> "Tambahkan ke layar utama".
+
+
+### [polish-5] The owner's UI polish: motion, charts, money fields, receipt
+**Date:** 2026-11-05 (work done 2026-10-11 to 2026-10-22)
+**Status:** done and pushed at the owner's instruction
+**Changed:** frontend/app/globals.css, frontend/tailwind.config.ts, frontend/app/layout.tsx, frontend/app/page.tsx, frontend/app/login/page.tsx, frontend/app/register/page.tsx, frontend/app/menu/[token]/page.tsx, frontend/app/struk/[code]/page.tsx, frontend/app/(dashboard)/* (layout, overview, sales, inventory, money, customers, promos, alerts, settings), frontend/components/motion.tsx (new), frontend/components/charts.tsx (new), frontend/components/SectionIndex.tsx (new), frontend/components/ui.tsx, StatCard, ThemeToggle, Wordmark, icons, DateRangePicker, ExpenseSheets, pos/OrderPanel, pos/SellScreen, pos/ReceiptChoice, frontend/lib/hooks.ts, frontend/package.json (+@number-flow/react, -recharts)
+**Gates:** pytest 738 passed, 0 skipped, 0 failed (15.30 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; npm run build OK; seed OK; impeccable detect clean.
+**Notes:**
+- Owner: "polish the whole ui again, give me animations, interactive ... premium, elegant", then twice more "do ur best again". One request, built and checked in three rounds; committed together because the rounds share globals.css and ui.tsx.
+- Palette, glass cards and copy kept (A1 Porcelain & ink). Impeccable skill 4.5.2 then 4.7.0; its detector is clean over frontend/app and frontend/components.
+- Motion: login and logout carry the sign: the login's ink pane becomes the sidebar (View Transitions; plain page change without them or with reduced motion). Money figures roll digit by digit (NumberFlow); on the till and the menu order bar they settle in 320 ms.
+- Charts are drawn in components/charts.tsx instead of recharts (removed): the sales line draws itself, a cursor and lit point follow mouse, finger or arrow keys, today's unfinished stretch is dotted, profit bars grow in with a hover readout.
+- Moon: tonight's real phase beside the date on Ringkasan; a waxing moon as the busy mark.
+- Sheets animate out, and drag shut by the header on a phone. Sheets no longer take focus from an autofocus field.
+- Rupiah fields group while typed (150.000) everywhere money is entered: till (opening and counted cash, cash in/out, discounts, cash part, cash received), expenses, stock prices, promos, vouchers, delivery fee, points. Prices saved with cents keep a decimal field so nothing is rounded.
+- Stock: "±3.571 cup/hari" read as three thousand; now "±3,6". New items start blank; a line shows the profit per unit or warns when the price is under cost.
+- Reloads keep the old content, dimmed, instead of skeletons; Ringkasan names the period its figures belong to while another loads.
+- Alerts: "beres" folds the row at once (back with a note if saving fails); each alert kind has its own icon (a sales dip was drawn as a rising arrow).
+- Settings: one column with a contents rail that follows the reading (chips on a phone), instead of two masonry columns that read out of order.
+- Expense and nota dates use the app's date picker (the browser showed 10/22/2026), future days blocked.
+- Promos on a phone: names wrap; vouchers are a list instead of a sideways table.
+- Customer receipt (/struk): feeds out like paper and ends in a torn edge; "Simpan struk" opens the share sheet or copies the link. Till: the paid tick draws itself.
+- Register's fallback screen said "start with your WhatsApp number" at /login, which is phone + PIN only; it now says what the login page says.
+- Printer, bridge, pairing, slip and print-job code untouched.
+**Deviation:** not a roadmap task; owner's instruction in chat.
+**Next:** owner looks at it on the live site and on the tablet.

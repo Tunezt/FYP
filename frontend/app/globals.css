@@ -3,33 +3,34 @@
 @tailwind utilities;
 
 /* ── Poernama design system — A1 "Porcelain & ink" ─────────────────────────────
-   Approved direction. Everything visual in the app reads from the tokens in
-   this block; components never hard-code a colour.
+   The approved palette, unchanged: ink on porcelain, an ink shell, status
+   colours kept apart from the brand. Everything visual in the app reads from
+   the tokens in this block; components never hard-code a colour.
 
    Materials, in order of height:
      canvas   porcelain ground with one warm source: a soft wash near the top of
-              the sidebar, as if the lit sign were hanging there. The rest of
-              the page stays neutral.
+              the sidebar, as if the lit sign were hanging there.
      card     porcelain surface with a hairline border and the faintest lift.
      inset    a neutral fill inside a card (receipt lines, segmented track).
-     shell    the sidebar and phone tab bar — solid ink, floating and
-              rounded, so the way around the app never reads as content.
-     float    popovers and sheets — opaque, above everything.
+     shell    the sidebar and phone tab bar, and the one ink card a page may
+              have: solid ink, floating and rounded.
+     float    popovers and sheets: opaque, above everything.
 
    Colour carries meaning, not mood. Brand is ink on porcelain; green, amber
-   and red appear only as status (success/connected, warning, error) and are
-   kept apart from the brand tokens below. The one sanctioned exception is
-   light: the illuminated wordmark and the warm air around it (--lit-*,
-   --ambient-*). Warmth never reaches data surfaces.
+   and red appear only as status. There is no accent hue: what marks "now" in
+   data (today's bar, the live point) is the strongest tone of its surface.
+
+   What the 2026-10 pass changed is shape and type, not colour: full-width
+   responsive layouts, pill controls, larger radii, Outfit as the typeface.
 
    The POS, kitchen and menu routes force light via data-theme="pos-light"
-   on <html> — a counter in daylight. */
+   on <html>: a counter in daylight. */
 
 :root {
   /* Brand — light */
   --canvas: #f0f0ed; /* page background */
   --surface: #fcfcfa; /* cards and content */
-  --surface-float: #fcfcfa; /* sheets, popovers */
+  --surface-float: rgba(252, 252, 250, 0.84);
   --fill: #e3e3df; /* subtle neutral fill */
   --surface-inset: #f3f3f0; /* recessed area inside a card (fill → surface) */
   --border: #d9dad5; /* card edges, fields, dividers */
@@ -73,8 +74,8 @@
   --bad: #b0382f;
   --bad-bg: rgba(176, 56, 47, 0.09);
 
-  --shadow-card: 0 0 0 1px var(--border), 0 1px 2px rgba(36, 36, 38, 0.04),
-    0 12px 28px -18px rgba(36, 36, 38, 0.2);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.55),
+    0 0 0 1px rgba(36, 36, 38, 0.05), 0 1px 2px rgba(36, 36, 38, 0.04), 0 18px 36px -24px rgba(36, 36, 38, 0.26);
   --shadow-raised: 0 0 0 1px var(--border), 0 1px 2px rgba(36, 36, 38, 0.05);
 
   /* Atmosphere: one warm source near the upper sidebar, a faint cool floor. */
@@ -91,19 +92,37 @@
   --lit-halo-far: rgba(255, 150, 52, 0.26);
   --shell-spill: rgba(255, 170, 80, 0.085);
   --shell-edge: rgba(255, 222, 176, 0.07);
+  --ink-light: rgba(255, 196, 128, 0.1); /* pointer light on an ink pane */
   --shadow-float: 0 0 0 1px var(--border), 0 4px 12px rgba(36, 36, 38, 0.06),
     0 24px 48px -16px rgba(36, 36, 38, 0.2);
   --scrim: rgba(25, 25, 27, 0.32);
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   color-scheme: light;
+
+  /* Added with the 2026-10 layout pass (same palette, new components) */
+  --field-bg: rgba(255, 255, 255, 0.7);
+  --glass: linear-gradient(180deg, rgba(253, 253, 251, 0.74) 0%, rgba(253, 253, 251, 0.5) 100%);
+  --glass-flat: rgba(253, 253, 251, 0.42);
+  --glass-blur: blur(26px) saturate(1.5);
+  --float-blur: blur(28px) saturate(1.7);
+  --shadow-plate: inset 0 0 0 1px rgba(255, 255, 255, 0.6), 0 0 0 1px rgba(36, 36, 38, 0.06);
+  --shell-glass: #242426;
+  --glow: var(--ink); /* the "now" mark: today's bar, the live point, a count */
+  --glow-deep: var(--ink);
+  --glow-soft: rgba(36, 36, 38, 0.12);
+  --on-glow: var(--on-accent);
+  --chart-hi: var(--chart-1);
+  --light-fill: rgba(255, 255, 255, 0.95); /* pointer light on glass */
+  --scrim-blur: blur(8px) saturate(1.2); /* the page steps back behind a sheet */
+  --light-rim: rgba(36, 36, 38, 0.34);
 }
 
 /* Dark is opt-in (the theme toggle writes data-theme="dark"). */
 :root[data-theme="dark"] {
   --canvas: #19191b;
   --surface: #242426;
-  --surface-float: #2b2b2d;
+  --surface-float: rgba(43, 43, 45, 0.86);
   --fill: #363638;
   --surface-inset: #2c2c2e;
   --border: #414145;
@@ -144,8 +163,8 @@
   --bad: #f08c7e;
   --bad-bg: rgba(240, 140, 126, 0.13);
 
-  --shadow-card: 0 0 0 1px var(--border), inset 0 1px 0 rgba(255, 255, 255, 0.025),
-    0 14px 32px -18px rgba(0, 0, 0, 0.7);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 26px 50px -30px rgba(0, 0, 0, 0.9);
   --shadow-raised: 0 0 0 1px var(--border), 0 1px 2px rgba(0, 0, 0, 0.3);
 
   --ambient-warm: rgba(255, 164, 72, 0.075);
@@ -163,6 +182,37 @@
   --shadow-float: 0 0 0 1px var(--border), 0 24px 48px -12px rgba(0, 0, 0, 0.65);
   --scrim: rgba(0, 0, 0, 0.55);
   color-scheme: dark;
+
+  --field-bg: rgba(255, 255, 255, 0.055);
+  --glass: linear-gradient(180deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.045) 100%);
+  --glass-flat: rgba(255, 255, 255, 0.04);
+  --shadow-plate: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shell-glass: #101012;
+  --glow-soft: rgba(241, 241, 238, 0.14);
+  --light-fill: rgba(255, 255, 255, 0.1);
+  --light-rim: rgba(255, 255, 255, 0.62);
+}
+
+:root[data-theme="pos-light"] {
+  --scrim-blur: none;
+  --glass: #fcfcfa;
+  --glass-flat: #fcfcfa;
+  --glass-blur: none;
+  --float-blur: none;
+  --field-bg: #fcfcfa;
+  --surface-float: #fcfcfa;
+  --shadow-card: 0 0 0 1px var(--border), 0 1px 2px rgba(36, 36, 38, 0.04), 0 12px 28px -18px rgba(36, 36, 38, 0.2);
+  --shadow-plate: 0 0 0 1px var(--border);
+}
+
+:root[data-surface="pos"][data-theme="dark"] {
+  --scrim-blur: none;
+  --glass: #242426;
+  --glass-flat: #242426;
+  --glass-blur: none;
+  --float-blur: none;
+  --field-bg: #242426;
+  --surface-float: #2b2b2d;
 }
 
 html,
@@ -182,26 +232,36 @@ body {
   font-feature-settings: "cv11", "ss03";
 }
 
-/* The warm source. A fixed layer so it stays anchored to the sidebar's top
-   while content scrolls; it fades out well before the data area's middle. */
-body::before {
+/* The warm source is the lit sign, so the wash on the page is attached to
+   the thing that carries the sign, never to a corner of the screen: the
+   sidebar casts it from behind its own wordmark (.shell-aside), and the
+   login's sign lights its own card (.ink-card-lit). Wherever the sidebar
+   sits, at any window width, the light sits with it. */
+.shell-aside::before {
   content: "";
-  position: fixed;
-  inset: 0;
+  position: absolute;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(26rem 20rem at 150px 70px, var(--ambient-warm), transparent 72%),
-    radial-gradient(60rem 30rem at 0% 0%, var(--ambient-warm-far), transparent 70%);
+  /* centred on the panel (the aside's left padding shifts it), at the
+     wordmark's height */
+  left: calc(50% + 0.5rem - 8rem);
+  top: -4rem;
+  width: 16rem;
+  height: 14rem;
+  background: radial-gradient(closest-side, var(--ambient-warm), transparent);
 }
 
-:root[data-theme="pos-light"] body::before,
-:root[data-surface="pos"] body::before {
-  display: none;
+@media (min-width: 1280px) {
+  .shell-aside::before {
+    left: calc(50% + 0.625rem - 15rem);
+    top: -6rem;
+    width: 30rem;
+    height: 22rem;
+  }
 }
 
 ::selection {
-  background: var(--fill);
+  background: var(--glow-soft);
   color: var(--ink);
 }
 
@@ -236,19 +296,44 @@ textarea {
 /* Numbers in this product are money and stock: they always align. */
 .tabular-nums,
 table {
+  font-family: var(--font-inter), sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
 @layer components {
   /* ── Type roles ──────────────────────────────────────────────────────── */
+  /* One voice, Outfit (--font-display): geometric and light, and lighter
+     still as it gets bigger. Inter is kept only for numbers that have to line
+     up in a column (see .tabular-nums above). */
   .page-title {
-    @apply text-[1.625rem] font-semibold leading-tight md:text-[1.875rem];
-    letter-spacing: -0.024em;
+    font-family: var(--font-display), var(--font-inter), sans-serif;
+    font-size: clamp(1.75rem, 1.35rem + 1.5vw, 2.625rem);
+    font-weight: 400;
+    line-height: 1.08;
+    letter-spacing: -0.018em;
+    text-wrap: balance;
   }
 
   .section-title {
-    @apply text-[15px] font-semibold leading-snug;
-    letter-spacing: -0.012em;
+    font-family: var(--font-display), var(--font-inter), sans-serif;
+    @apply text-[1.125rem] font-medium leading-snug;
+    letter-spacing: -0.005em;
+  }
+
+  /* The display voice on its own, for a line that is neither a page title
+     nor a figure. */
+  .display-voice {
+    font-family: var(--font-display), var(--font-inter), sans-serif;
+  }
+
+  /* A figure worth stopping on: today's takings, the month's profit. */
+  .figure {
+    font-family: var(--font-display), var(--font-inter), sans-serif;
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: lining-nums;
+    white-space: nowrap;
   }
 
   .ink-soft {
@@ -268,11 +353,13 @@ table {
   }
 
   /* ── Surfaces ────────────────────────────────────────────────────────── */
-  /* The card. Historically named "glass"; it is porcelain now — opaque, a
-     hairline border, the faintest lift. */
+  /* The card: a pane of glass in the room's light. The bright upper edge is
+     the lamp catching it; the shadow is warm because the light is. */
   .glass-card {
     @apply rounded-3xl;
-    background: var(--surface);
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     box-shadow: var(--shadow-card);
   }
 
@@ -280,15 +367,123 @@ table {
     background: var(--surface);
   }
 
-  /* A quieter card: the same porcelain, border only. */
+  /* A quieter pane: thinner, edge only, no lift. */
   .plate {
     @apply rounded-3xl;
-    background: var(--surface);
-    box-shadow: 0 0 0 1px var(--border);
+    background: var(--glass-flat);
+    box-shadow: var(--shadow-plate);
   }
 
   .surface-inset {
     background: var(--surface-inset);
+  }
+
+  /* The ink card: the one dark pane a page may have, for the figure the owner
+     opened the app to see. The same ink as the shell; everything inside reads
+     from the shell tokens. */
+  .ink-card {
+    @apply relative overflow-hidden rounded-3xl;
+    background: var(--shell-bg);
+    color: var(--shell-ink);
+    box-shadow: inset 0 1px 0 var(--shell-edge), var(--shell-shadow);
+  }
+
+  /* An ink card that carries the lit sign: the sign's light pools on the
+     card behind it and spills a little past the card's edge onto the page,
+     so the glow is always where the sign is. */
+  .ink-card-lit {
+    background-image: radial-gradient(22rem 15rem at 50% 40%, var(--shell-spill), transparent 72%);
+    box-shadow: inset 0 1px 0 var(--shell-edge), var(--shell-shadow), 0 0 9rem 0 var(--ambient-warm);
+  }
+
+  /* Re-point the tokens, so anything placed inside (a help mark, a delta, a
+     link) reads correctly on charcoal without knowing where it is. */
+  .ink-card {
+    --ink: var(--shell-ink);
+    --ink-soft: var(--shell-ink-soft);
+    --ink-faint: var(--shell-ink-soft);
+    --accent: var(--shell-ink);
+    --hairline: var(--shell-divider);
+    --glow: var(--shell-ink);
+    --on-glow: var(--shell-bg);
+    --good: #86d3a6;
+    --bad: #f59a8c;
+    --warn: #f0b473;
+  }
+
+  .ink-card .ink-soft,
+  .ink-card .ink-faint {
+    color: var(--shell-ink-soft);
+  }
+
+  /* A pane that is itself a link (quick actions). It lifts toward the lamp
+     when pointed at and its arrow leans the way it goes. */
+  .tile-link {
+    @apply relative flex flex-col justify-between rounded-3xl p-4;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow-card);
+    transition: transform 220ms var(--ease-out), background-color 200ms ease-out;
+  }
+
+  .tile-link:hover {
+    transform: translateY(-2px);
+  }
+
+  .tile-link:active {
+    transform: translateY(0) scale(0.99);
+  }
+
+  .tile-link .tile-arrow {
+    color: var(--ink-faint);
+    transition: transform 220ms var(--ease-out), color 160ms ease-out;
+  }
+
+  .tile-link:hover .tile-arrow {
+    color: var(--ink);
+    transform: translate(2px, -2px);
+  }
+
+  .ink-card :focus-visible {
+    outline-color: var(--shell-ink);
+  }
+
+  /* Ink catches light too, the sign's colour: a faint warm pool under the
+     pointer (GlassLight sets --lx / --ly and data-lit). */
+  .ink-card {
+    isolation: isolate;
+  }
+
+  .ink-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 600ms ease-out;
+    background: radial-gradient(20rem circle at var(--lx, 50%) var(--ly, 50%), var(--ink-light), transparent 68%);
+  }
+
+  /* The lamp as a mark: a small lit pill or dot. */
+  .glow-pill {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums;
+    background: var(--glow);
+    color: var(--on-glow);
+  }
+
+  .glow-dot {
+    @apply inline-block h-1.5 w-1.5 shrink-0 rounded-full;
+    background: var(--glow);
+  }
+
+  /* A round icon seat: quick actions, list leads. */
+  .icon-seat {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--shadow-raised);
   }
 
   /* Grouped section (iOS inset-grouped list): a day, a category. The header is
@@ -296,7 +491,9 @@ table {
      and an open one reads as one object. */
   .group-card {
     @apply overflow-hidden rounded-3xl;
-    background: var(--surface);
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     box-shadow: var(--shadow-card);
   }
 
@@ -392,17 +589,24 @@ table {
     color: var(--ink-soft);
   }
 
+  .list-row-action:hover .row-chevron-go {
+    transform: translateX(2px);
+  }
+
   /* ── Controls ────────────────────────────────────────────────────────── */
   .btn-accent {
-    @apply inline-flex select-none items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[15px] font-semibold;
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-full px-5 py-3 text-[15px] font-semibold;
     background: var(--accent-fill);
     color: var(--on-accent);
     box-shadow: 0 1px 2px rgba(20, 20, 22, 0.16);
-    transition: background-color 150ms ease-out, transform 120ms var(--ease-out), opacity 150ms ease-out;
+    transition: background-color 150ms ease-out, transform 120ms var(--ease-out), opacity 150ms ease-out,
+      box-shadow 200ms ease-out;
   }
 
-  .btn-accent:hover {
+  /* Pointed at, the primary action comes a little off the page. */
+  .btn-accent:hover:not(:disabled) {
     background: var(--accent-fill-hover);
+    box-shadow: 0 1px 2px rgba(20, 20, 22, 0.16), 0 10px 22px -12px rgba(20, 20, 22, 0.55);
   }
 
   .btn-accent:active {
@@ -416,7 +620,7 @@ table {
   }
 
   .btn-quiet {
-    @apply inline-flex select-none items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[15px] font-medium;
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-full px-5 py-3 text-[15px] font-medium;
     background: var(--surface);
     color: var(--ink);
     box-shadow: var(--shadow-raised);
@@ -424,8 +628,7 @@ table {
   }
 
   .btn-quiet:hover {
-    background: var(--surface-inset);
-    box-shadow: 0 0 0 1px var(--hairline-strong), 0 1px 2px rgba(36, 36, 38, 0.05);
+    box-shadow: 0 0 0 1px var(--hairline-strong), 0 1px 2px rgba(50, 36, 10, 0.07);
   }
 
   .btn-quiet:active {
@@ -440,7 +643,7 @@ table {
 
   /* Destructive confirmation — tinted, never a loud red fill. */
   .btn-danger {
-    @apply inline-flex select-none items-center justify-center gap-2 rounded-2xl font-semibold;
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-full font-semibold;
     background: var(--bad-bg);
     color: var(--bad);
     transition: filter 150ms ease-out, transform 120ms var(--ease-out);
@@ -459,8 +662,8 @@ table {
   }
 
   .field {
-    @apply w-full rounded-2xl px-3.5 py-2.5 text-[15px] outline-none;
-    background: var(--surface);
+    @apply w-full rounded-2xl px-4 py-2.5 text-[15px] outline-none;
+    background: var(--field-bg);
     color: var(--ink);
     border: 1px solid var(--border);
     transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
@@ -506,7 +709,7 @@ table {
 
   /* Filter-bar size of the same grammar. */
   .control-field {
-    @apply h-10 w-full cursor-pointer rounded-xl px-3 text-sm;
+    @apply h-10 w-full cursor-pointer rounded-full px-4 text-sm;
     background: var(--surface);
     color: var(--ink);
     box-shadow: var(--shadow-raised);
@@ -514,7 +717,7 @@ table {
   }
 
   .control-field:hover {
-    background: var(--surface-inset);
+    box-shadow: 0 0 0 1px var(--hairline-strong), 0 1px 2px rgba(50, 36, 10, 0.07);
   }
 
   .control-field:focus-visible {
@@ -542,7 +745,7 @@ table {
     margin: 0;
     display: inline-grid;
     place-content: center;
-    background: var(--surface);
+    background: var(--field-bg);
     border: 1.5px solid var(--hairline-strong);
     border-radius: 0.3125rem;
     transition: background-color 150ms ease-out, border-color 150ms ease-out, box-shadow 150ms ease-out;
@@ -622,12 +825,13 @@ table {
 
   /* Segmented control: a recessed track, the chosen segment is raised paper. */
   .segmented {
-    @apply inline-flex rounded-xl p-[3px];
+    @apply inline-flex rounded-full p-[3px];
     background: var(--fill);
+    box-shadow: inset 0 1px 1px rgba(36, 36, 38, 0.05);
   }
 
   .segmented-item {
-    @apply rounded-[9px] px-3.5 py-1.5 text-sm font-medium;
+    @apply rounded-full px-4 py-1.5 text-sm font-medium;
     color: var(--ink-soft);
     transition: background-color 180ms var(--ease-out), color 150ms ease-out, box-shadow 180ms var(--ease-out);
   }
@@ -640,17 +844,17 @@ table {
   .segmented-item[aria-pressed="true"] {
     background: var(--surface);
     color: var(--ink);
-    box-shadow: 0 0 0 0.5px rgba(36, 36, 38, 0.08), 0 1px 3px rgba(36, 36, 38, 0.12);
+    box-shadow: 0 0 0 0.5px rgba(36, 36, 38, 0.08), 0 1px 3px rgba(50, 36, 10, 0.14);
   }
 
   :root[data-theme="dark"] .segmented-item[aria-selected="true"],
   :root[data-theme="dark"] .segmented-item[aria-pressed="true"] {
-    background: #4a4a4e;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    background: rgba(255, 255, 255, 0.17);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 
   .icon-btn {
-    @apply flex h-8 w-8 items-center justify-center rounded-lg;
+    @apply flex h-8 w-8 items-center justify-center rounded-full;
     color: var(--ink-soft);
     transition: background-color 150ms ease-out, color 150ms ease-out;
   }
@@ -665,9 +869,9 @@ table {
   }
 
   .chip-btn {
-    @apply rounded-lg px-2.5 py-1.5 text-xs font-semibold;
-    background: var(--surface-inset);
-    box-shadow: inset 0 0 0 1px var(--hairline);
+    @apply rounded-full px-3 py-1.5 text-xs font-semibold;
+    background: var(--surface);
+    box-shadow: var(--shadow-raised);
     color: var(--ink-soft);
     transition: background-color 150ms ease-out, color 150ms ease-out;
   }
@@ -681,7 +885,7 @@ table {
      chip, so it reads as a control and not as a caption. Once it carries a
      value it fills in and shows that value. */
   .line-action {
-    @apply inline-flex h-11 min-w-0 items-center gap-1.5 rounded-xl px-3 text-[13px] font-medium;
+    @apply inline-flex h-11 min-w-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium;
     color: var(--ink-soft);
     box-shadow: inset 0 0 0 1px var(--border);
     transition: background-color 150ms ease-out, color 150ms ease-out, box-shadow 150ms ease-out;
@@ -776,6 +980,8 @@ table {
   .popover-panel {
     @apply fixed z-[60] max-h-72 overflow-auto rounded-2xl p-1.5;
     background: var(--surface-float);
+    -webkit-backdrop-filter: var(--float-blur);
+    backdrop-filter: var(--float-blur);
     box-shadow: var(--shadow-float);
     animation: popover-in 160ms var(--ease-out);
   }
@@ -790,12 +996,16 @@ table {
   .sheet-scrim {
     @apply fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6;
     background: var(--scrim);
-    animation: scrim-in 200ms ease-out;
+    -webkit-backdrop-filter: var(--scrim-blur);
+    backdrop-filter: var(--scrim-blur);
+    animation: scrim-in 240ms ease-out;
   }
 
   .sheet-panel {
     @apply flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-4xl sm:max-h-[min(88dvh,760px)] sm:rounded-4xl;
     background: var(--surface-float);
+    -webkit-backdrop-filter: var(--float-blur);
+    backdrop-filter: var(--float-blur);
     box-shadow: var(--shadow-float);
     animation: sheet-up 320ms var(--ease-out);
   }
@@ -825,11 +1035,54 @@ table {
     }
   }
 
+  /* Leaving is quicker than arriving. A sheet dragged down by its handle
+     leaves from wherever the finger let go (the keyframe has no start). */
+  .sheet-scrim[data-closing] {
+    pointer-events: none;
+    animation: scrim-out 220ms ease-in forwards;
+  }
+
+  .sheet-scrim[data-closing] .sheet-panel {
+    animation: sheet-down 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+
+  @media (min-width: 640px) {
+    .sheet-scrim[data-closing] .sheet-panel {
+      animation: sheet-unpop 160ms ease-in forwards;
+    }
+  }
+
+  @keyframes scrim-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes sheet-down {
+    to {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes sheet-unpop {
+    to {
+      opacity: 0;
+      transform: translateY(6px) scale(0.985);
+    }
+  }
+
+  /* The handle is real: on a phone the sheet's header drags it shut. */
+  .sheet-grab {
+    touch-action: none;
+  }
+
   /* The shell: sidebar panel and phone tab bar. Solid ink, rounded, floating
-     a step above the canvas. No blur, no gradient — the contrast does the
+     a step above the canvas. No blur, no gradient: the contrast does the
      work. Everything inside reads from the --shell-* tokens. */
   .shell-panel,
   .float-bar {
+    --glow: var(--shell-ink);
+    --on-glow: var(--shell-bg);
     background: var(--shell-bg);
     color: var(--shell-ink);
     box-shadow: var(--shell-shadow);
@@ -846,8 +1099,7 @@ table {
 
   /* The illuminated wordmark. The letters paint crisp in warm ivory; the
      drop-shadows stack behind them (a near core, an amber halo, a far spill),
-     so fine strokes and the eclipse O keep their edges. The brand zone around
-     it leaves room for the halo, so nothing clips. */
+     so fine strokes and the eclipse O keep their edges. */
   .wordmark-lit {
     color: var(--lit-ink);
     filter: drop-shadow(0 0 0.6px var(--lit-core)) drop-shadow(0 0 5px var(--lit-halo))
@@ -880,10 +1132,12 @@ table {
   }
 
   /* A dock: a floating bar that carries *content* (the POS cart, a sale
-     confirmation) — porcelain, not the ink shell, so controls inside it keep
-     the ordinary light-surface grammar. */
+     confirmation) — light float glass, not the ink shell, so controls
+     inside it keep the ordinary light-surface grammar. */
   .dock {
     background: var(--surface-float);
+    -webkit-backdrop-filter: var(--float-blur);
+    backdrop-filter: var(--float-blur);
     color: var(--ink);
     box-shadow: var(--shadow-float);
   }
@@ -893,7 +1147,7 @@ table {
   }
 
   .nav-item {
-    @apply relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium;
+    @apply relative flex h-11 items-center gap-3 rounded-full px-4 text-[15px];
     color: var(--shell-ink-soft);
     transition: background-color 160ms ease-out, color 160ms ease-out;
   }
@@ -917,6 +1171,12 @@ table {
     opacity: 1;
   }
 
+  .nav-count {
+    @apply ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums;
+    background: var(--glow);
+    color: var(--on-glow);
+  }
+
   /* The contained account area at the foot of the shell. */
   .shell-well {
     background: var(--shell-active);
@@ -925,9 +1185,13 @@ table {
 
   /* Phone tab bar items */
   .tab-item {
-    @apply flex flex-col items-center gap-1 rounded-2xl py-1.5 text-[11px] font-medium;
+    @apply relative flex flex-col items-center gap-1 rounded-[1.125rem] py-1.5 text-[11px] font-medium;
     color: var(--shell-ink-soft);
-    transition: background-color 160ms ease-out, color 160ms ease-out;
+    transition: background-color 160ms ease-out, color 160ms ease-out, transform 140ms var(--ease-out);
+  }
+
+  .tab-item:active {
+    transform: scale(0.95);
   }
 
   .tab-item[aria-current="page"],
@@ -970,6 +1234,13 @@ table {
     background: var(--row-press);
   }
 
+  .cal-day:disabled {
+    cursor: not-allowed;
+    color: var(--ink-faint);
+    opacity: 0.4;
+    background: transparent;
+  }
+
   .cal-day-on {
     background: var(--accent-fill);
     color: var(--on-accent);
@@ -1002,7 +1273,7 @@ table {
   .pill-warn,
   .pill-bad,
   .pill-quiet {
-    @apply inline-flex items-center whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11.5px] font-semibold leading-4;
+    @apply inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11.5px] font-semibold leading-4;
   }
 
   .pill-good {
@@ -1048,8 +1319,17 @@ table {
   /* The opened receipt under a transaction row: set in from the row's text
      column on a recessed ground, so the items read as belonging to it. */
   .receipt-lines {
-    @apply mb-3 ml-[4.25rem] mr-4 rounded-xl px-3 py-2 md:mr-5;
+    @apply mb-3 ml-[4.25rem] mr-4 rounded-2xl px-3.5 py-2.5 md:mr-5;
     background: var(--surface-inset);
+  }
+
+  /* A chart's tooltip: a small float pane following the cursor. */
+  .chart-tip {
+    @apply rounded-2xl px-3.5 py-2.5 text-xs;
+    background: var(--surface-float);
+    -webkit-backdrop-filter: var(--float-blur);
+    backdrop-filter: var(--float-blur);
+    box-shadow: var(--shadow-float);
   }
 
   /* Data table header. */
@@ -1058,25 +1338,879 @@ table {
     color: var(--ink-faint);
   }
 
-  /* Page entrance: opacity only, and never left applied (fill "backwards"),
-     so no transformed ancestor can ever trap a fixed-position sheet. */
-  .animate-fade-up {
-    animation: page-in 260ms ease-out backwards;
+  /* ── Motion ──────────────────────────────────────────────────────────
+     Three ideas, used everywhere and nowhere else:
+       arrive   content rises a few pixels into place, in reading order
+       travel   one pill moves to where you are (nav, tabs, segmented)
+       light    glass answers the pointer; the sign switches on
+     Routine changes stay under 450ms. Only the loading sheen loops. Nothing is left
+     transformed afterwards (fill "backwards"), so no ancestor can ever trap
+     a fixed-position sheet. */
+
+  /* Page entrance: the page's blocks arrive one after another, top to
+     bottom. The stagger is capped at six steps so a long page never makes
+     anyone wait. */
+  .animate-fade-up > * {
+    animation: rise-in 420ms var(--ease-out) backwards;
   }
 
-  @keyframes page-in {
+  .animate-fade-up > *:nth-child(2) {
+    animation-delay: 45ms;
+  }
+  .animate-fade-up > *:nth-child(3) {
+    animation-delay: 90ms;
+  }
+  .animate-fade-up > *:nth-child(4) {
+    animation-delay: 135ms;
+  }
+  .animate-fade-up > *:nth-child(5) {
+    animation-delay: 180ms;
+  }
+  .animate-fade-up > *:nth-child(n + 6) {
+    animation-delay: 225ms;
+  }
+
+  /* The same arrival for the panes of a bento; each pane sets --i. */
+  .pane-in {
+    animation: rise-in 460ms var(--ease-out) backwards;
+    animation-delay: calc(min(var(--i, 0), 7) * 45ms);
+  }
+
+  @keyframes rise-in {
     from {
       opacity: 0;
+      transform: translateY(10px);
     }
+  }
+
+  /* Something that appears in place: a notice, the opened receipt. */
+  .notice,
+  .receipt-lines {
+    animation: settle-in 280ms var(--ease-out) backwards;
+  }
+
+  @keyframes settle-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  /* The travelling pill (see SlideIndicator in components/motion.tsx). */
+  .has-slide {
+    position: relative;
+  }
+
+  .has-slide > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .has-slide > .slide-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .slide-indicator[data-settled="true"] {
+    transition:
+      transform 420ms var(--ease-out),
+      width 420ms var(--ease-out),
+      height 420ms var(--ease-out),
+      opacity 200ms ease-out;
+  }
+
+  /* With a pill travelling, the active item gives up its own fill. */
+  .has-slide > [data-slide-active="true"] {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .nav-pill {
+    @apply rounded-full;
+    background: var(--shell-active);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+
+  .tab-pill {
+    @apply rounded-[1.125rem];
+    background: var(--shell-active);
+  }
+
+  .segmented-thumb {
+    @apply rounded-full;
+    background: var(--surface);
+    box-shadow: 0 0 0 0.5px rgba(36, 36, 38, 0.08), 0 1px 3px rgba(36, 36, 38, 0.14);
+  }
+
+  :root[data-theme="dark"] .segmented-thumb {
+    background: rgba(255, 255, 255, 0.17);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+
+  /* A group that opens and closes. The grid row animates from 0fr to 1fr,
+     so the height is real and nothing has to be measured. */
+  .fold {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 360ms var(--ease-out);
+  }
+
+  .fold[data-open="true"] {
+    grid-template-rows: 1fr;
+  }
+
+  .fold > * {
+    min-height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 220ms ease-out, visibility 0s linear 360ms;
+  }
+
+  .fold[data-open="true"] > * {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 320ms ease-out 60ms, visibility 0s;
+  }
+
+  .group-card .fold:not([data-open="true"]) > .group-body {
+    border-top-color: transparent;
+  }
+
+  /* Glass catches light (see GlassLight in components/motion.tsx). A soft
+     highlight under the content and a brighter rim, both centred on the
+     pointer. They fade in when the pointer arrives and out when it leaves. */
+  .glass-card,
+  .group-card,
+  .tile-link,
+  .plate {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .glass-card::before,
+  .group-card::before,
+  .tile-link::before,
+  .plate::before,
+  .glass-card::after,
+  .group-card::after,
+  .tile-link::after,
+  .plate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 500ms ease-out;
+  }
+
+  .glass-card::before,
+  .group-card::before,
+  .tile-link::before,
+  .plate::before {
+    z-index: -1;
+    background: radial-gradient(26rem circle at var(--lx, 50%) var(--ly, 50%), var(--light-fill), transparent 62%);
+  }
+
+  .glass-card::after,
+  .group-card::after,
+  .tile-link::after,
+  .plate::after {
+    padding: 1px;
+    background: radial-gradient(22rem circle at var(--lx, 50%) var(--ly, 50%), var(--light-rim), transparent 70%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+  }
+
+  [data-lit]::before,
+  [data-lit]::after {
+    opacity: 1;
+    transition-duration: 220ms;
+  }
+
+  /* Loading: a slow sheen across the placeholder instead of a blink. */
+  .skeleton {
+    @apply rounded-2xl;
+    background: linear-gradient(
+      100deg,
+      var(--row-press) 0%,
+      var(--row-press) 38%,
+      var(--row-hover) 50%,
+      var(--row-press) 62%,
+      var(--row-press) 100%
+    );
+    background-size: 220% 100%;
+    animation: sheen 1.5s ease-in-out infinite;
+  }
+
+  @keyframes sheen {
+    from {
+      background-position: 120% 0;
+    }
+    to {
+      background-position: -100% 0;
+    }
+  }
+
+  /* The sign switches on: the letters go from unlit porcelain to warm ivory
+     and the halo swells around them. Played once, when the wordmark first
+     appears on an ink surface. */
+  .wordmark-lit {
+    animation: sign-on 1400ms cubic-bezier(0.16, 1, 0.3, 1) 180ms backwards;
+  }
+
+  @keyframes sign-on {
+    0% {
+      color: rgba(245, 245, 239, 0.34);
+      filter: drop-shadow(0 0 0 transparent) drop-shadow(0 0 0 transparent) drop-shadow(0 0 0 transparent);
+    }
+    55% {
+      color: var(--lit-ink);
+    }
+  }
+
+  /* The login's two panes arrive as a pair. */
+  .pair-in > * {
+    animation: rise-in 620ms var(--ease-out) backwards;
+  }
+
+  .pair-in > *:nth-child(n + 3) {
+    animation-delay: 90ms;
+  }
+}
+
+/* ── Charts ────────────────────────────────────────────────────────────────
+   Drawn by components/charts.tsx. One series of ink, a hairline grid, and a
+   reading layer: a cursor and a lit point that glide to the nearest day. The
+   line draws itself once when it arrives; the geometry underneath is always
+   complete, so nothing depends on the animation having run. */
+.chart {
+  outline: none;
+  cursor: crosshair;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chart:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+
+.chart-grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.chart-tick {
+  font-family: var(--font-inter), sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  fill: var(--ink-faint);
+}
+
+.chart-tick-lg {
+  font-size: 12px;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--chart-1);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: line-draw 1200ms cubic-bezier(0.3, 0.7, 0.2, 1) backwards;
+}
+
+@keyframes line-draw {
+  from {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+.chart-line-today {
+  fill: none;
+  stroke: var(--chart-1);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 1 6;
+  opacity: 0.7;
+  animation: fade-in 500ms ease-out 760ms backwards;
+}
+
+.chart-area {
+  animation: fade-in 900ms ease-out 320ms backwards;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Today, the live end of the line: the lamp, and its light going out from it. */
+.chart-now-dot,
+.chart-now-halo {
+  fill: var(--glow);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.chart-now-dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+  animation: dot-in 460ms var(--ease-out) 820ms backwards;
+}
+
+@keyframes dot-in {
+  from {
+    transform: scale(0);
+  }
+}
+
+.chart-now-halo {
+  opacity: 0;
+  animation: halo 2800ms cubic-bezier(0.2, 0.6, 0.3, 1) 1400ms infinite;
+}
+
+@keyframes halo {
+  0% {
+    opacity: 0.26;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(3.4);
+  }
+}
+
+.chart-cursor {
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.chart-point {
+  fill: var(--chart-1);
+  stroke: var(--surface);
+  stroke-width: 2.5;
+}
+
+.chart-cursor,
+.chart-point {
+  transition: transform 150ms var(--ease-out);
+}
+
+.chart-tip-float {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  pointer-events: none;
+  white-space: nowrap;
+  transition: transform 180ms var(--ease-out);
+  animation: fade-in 140ms ease-out;
+}
+
+.chart-bar {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: bar-grow 760ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  transition: opacity 180ms ease-out;
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+.chart-bar-in {
+  fill: var(--chart-1);
+}
+
+.chart-bar-out {
+  fill: var(--chart-2);
+}
+
+.chart-month[data-dim="true"] .chart-bar {
+  opacity: 0.4;
+}
+
+.chart-band {
+  fill: var(--row-hover);
+  animation: fade-in 140ms ease-out;
+}
+
+.chart-net {
+  font-family: var(--font-inter), sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-net-up {
+  fill: var(--good);
+}
+
+.chart-net-down {
+  fill: var(--bad);
+}
+
+.chart-key {
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+}
+
+.chart-key-in {
+  background: var(--chart-1);
+}
+
+.chart-key-out {
+  background: var(--chart-2);
+}
+
+.spark path {
+  fill: none;
+  stroke: var(--chart-1);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: fade-in 700ms ease-out 240ms backwards;
+}
+
+/* ── The moon ──────────────────────────────────────────────────────────────
+   "Poernama" is the full moon: tonight's phase sits beside the date, and the
+   product's waiting mark is a moon that waxes (components/motion.tsx). Both
+   take the colour of the text they sit in. */
+.moon-phase {
+  display: inline-flex;
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  vertical-align: -0.14em;
+}
+
+.moon-phase svg,
+.moon-spinner {
+  width: 100%;
+  height: 100%;
+}
+
+.moon-disc {
+  fill: currentColor;
+  opacity: 0.17;
+}
+
+.moon-lit,
+.moon-shade {
+  fill: currentColor;
+}
+
+.moon-spinner {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+}
+
+.moon-spinner .moon-disc {
+  opacity: 0.26;
+}
+
+.moon-shade {
+  animation: moon-wax 1500ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes moon-wax {
+  from {
+    transform: translateX(-18px);
+  }
+  to {
+    transform: translateX(18px);
+  }
+}
+
+/* ── Small answers ─────────────────────────────────────────────────────────
+   A refused PIN shakes its head; an icon that changes meaning turns into the
+   new one. */
+.shake {
+  animation: shake 380ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes shake {
+  15% {
+    transform: translateX(-7px);
+  }
+  35% {
+    transform: translateX(6px);
+  }
+  55% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(2px);
+  }
+}
+
+/* The till answers each tap: the count on a menu tile presses in as it
+   changes, and a new line settles into the order. */
+.badge-pop {
+  animation: badge-pop 320ms var(--ease-out);
+}
+
+@keyframes badge-pop {
+  from {
+    transform: scale(0.55);
+  }
+  60% {
+    transform: scale(1.12);
+  }
+}
+
+/* The customer's receipt (app/struk). Paper, not a card: an opaque sheet
+   whose foot is torn along the perforation, fed out from the top the way a
+   printer feeds it. The tear is a mask of small half-circles cut from the
+   bottom edge. */
+.receipt-paper {
+  --tear: 7px;
+  position: relative;
+  background: var(--surface);
+  border-radius: 1.25rem 1.25rem 0 0;
+  -webkit-mask:
+    radial-gradient(circle var(--tear) at 50% 100%, transparent 98%, #000) 50% 100% / calc(var(--tear) * 2.6) 100% repeat-x;
+  mask:
+    radial-gradient(circle var(--tear) at 50% 100%, transparent 98%, #000) 50% 100% / calc(var(--tear) * 2.6) 100% repeat-x;
+}
+
+/* The shadow sits on a wrapper: a mask on the paper itself would cut its
+   own shadow away. It follows the torn edge, since drop-shadow traces the
+   shape. */
+.receipt-shadow {
+  filter: drop-shadow(0 1px 1px rgba(36, 36, 38, 0.06)) drop-shadow(0 14px 22px rgba(36, 36, 38, 0.1));
+  animation: paper-feed 900ms cubic-bezier(0.22, 1, 0.36, 1) 120ms backwards;
+}
+
+@keyframes paper-feed {
+  from {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-14px);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.receipt-after {
+  animation: fade-in 500ms ease-out 900ms backwards;
+}
+
+@media print {
+  .receipt-shadow {
+    filter: none;
+    animation: none;
+  }
+
+  .receipt-after {
+    display: none;
+  }
+}
+
+/* A long page's contents (components/SectionIndex.tsx). Sections land a
+   little below the top edge, clear of the sticky chip row on a phone. */
+.settings-flow > * {
+  margin-bottom: 2.25rem;
+  scroll-margin-top: 4.75rem;
+}
+
+@media (min-width: 1280px) {
+  .settings-flow > * {
+    scroll-margin-top: 2rem;
+  }
+}
+
+.settings-flow > *:focus {
+  outline: none;
+}
+
+.index-link {
+  position: relative;
+  border-radius: 999px;
+  padding: 0.4rem 0.875rem;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--ink-faint);
+  transition: color 160ms ease-out;
+}
+
+.index-link:hover {
+  color: var(--ink);
+}
+
+.index-link[aria-current="location"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.index-mark {
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.index-chips {
+  background: color-mix(in srgb, var(--canvas) 84%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+}
+
+.index-chip {
+  flex-shrink: 0;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 0.5rem 0.95rem;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+  transition: color 180ms ease-out;
+}
+
+.index-chip[aria-current="location"] {
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.index-chip-mark {
+  border-radius: 999px;
+  background: var(--accent-fill);
+}
+
+/* While a new answer loads, the old one stays where it is, a little
+   dimmed: no skeleton flash, no jump in the layout. */
+.refetch {
+  transition: opacity 220ms ease-out;
+}
+
+.refetch[data-stale="true"] {
+  opacity: 0.5;
+}
+
+/* A row that is done (an alert marked "beres") folds away where it stood,
+   and the rows under it close the gap. */
+[data-leaving] {
+  overflow: hidden;
+  pointer-events: none;
+  animation: row-leave 340ms var(--ease-out) forwards;
+}
+
+@keyframes row-leave {
+  from {
+    max-height: 8rem;
+  }
+  40% {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(10px);
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+/* The order bar comes up from the edge the thumb is at. */
+.bar-rise {
+  animation: bar-rise 420ms var(--ease-out) backwards;
+}
+
+@keyframes bar-rise {
+  from {
+    opacity: 0;
+    transform: translateY(110%);
+  }
+}
+
+.line-in {
+  animation: settle-in 260ms var(--ease-out) backwards;
+}
+
+/* Paid: the green disc settles and the tick is written into it, once. The
+   tick is complete without the animation; the dash only draws it in. */
+.paid-check {
+  animation: paid-in 380ms var(--ease-out) backwards;
+}
+
+.paid-check path {
+  animation: tick-draw 420ms cubic-bezier(0.65, 0, 0.35, 1) 180ms backwards;
+}
+
+@keyframes paid-in {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+@keyframes tick-draw {
+  from {
+    stroke-dasharray: 21;
+    stroke-dashoffset: 21;
+  }
+  to {
+    stroke-dasharray: 21;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* A PIN's four places: each fills with a small press as its digit lands. */
+.pin-dot {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--ink-faint);
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, transform 260ms var(--ease-out);
+}
+
+.pin-dot[data-filled="true"] {
+  border-color: var(--accent-fill);
+  background: var(--accent-fill);
+  transform: scale(1.14);
+}
+
+.icon-swap {
+  animation: icon-swap 460ms var(--ease-out);
+}
+
+@keyframes icon-swap {
+  from {
+    opacity: 0;
+    transform: rotate(-80deg) scale(0.5);
+  }
+}
+
+/* ── Travel ────────────────────────────────────────────────────────────────
+   Logging in walks through the door: the login's ink pane becomes the
+   sidebar and the sign glides to the top of it; logging out plays it back
+   (travel() in components/motion.tsx adds the class for the length of one
+   view transition). The names exist only under that class, so the theme
+   switch's circle still sweeps the whole page as one picture. */
+html.travel .ink-card-lit,
+html.travel .shell-panel {
+  view-transition-name: shell;
+}
+
+html.travel .travel-sign {
+  view-transition-name: sign;
+}
+
+/* The sign is already lit when it travels; it does not switch on again. */
+html.travel .wordmark-lit {
+  animation: none;
+}
+
+html.travel::view-transition-group(shell),
+html.travel::view-transition-group(sign) {
+  animation-duration: 760ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The pane itself is the ink: it changes shape as one solid piece while what
+   was written on it fades and the new contents come up. */
+html.travel::view-transition-group(shell) {
+  overflow: clip;
+  border-radius: 1.75rem;
+  background: var(--shell-bg);
+  box-shadow: var(--shell-shadow);
+}
+
+html.travel::view-transition-old(shell) {
+  animation: travel-out 180ms ease-out both;
+}
+
+html.travel::view-transition-new(shell) {
+  animation: travel-in 360ms ease-out 400ms both;
+}
+
+html.travel::view-transition-old(sign),
+html.travel::view-transition-new(sign) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+html.travel::view-transition-old(root) {
+  animation: travel-out 240ms ease-out both;
+}
+
+html.travel::view-transition-new(root) {
+  animation: travel-in 460ms ease-out 220ms both;
+}
+
+@keyframes travel-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes travel-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Light and dark change places as a circle opening from the switch that
+   was pressed (ThemeToggle sets --vt-x / --vt-y / --vt-r and the class). */
+html.theme-vt::view-transition-old(root),
+html.theme-vt::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html.theme-vt::view-transition-old(root) {
+  z-index: 0;
+}
+
+html.theme-vt::view-transition-new(root) {
+  z-index: 1;
+  animation: theme-reveal 640ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0 at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+  to {
+    clip-path: circle(var(--vt-r, 150vmax) at var(--vt-x, 50%) var(--vt-y, 50%));
   }
 }
 
 /* driver.js tour popover — restyled to the float material. */
 .driver-popover {
   background: var(--surface-float) !important;
+  -webkit-backdrop-filter: var(--float-blur);
+  backdrop-filter: var(--float-blur);
   color: var(--ink) !important;
   border: none;
-  border-radius: 1rem !important;
+  border-radius: 1.25rem !important;
   box-shadow: var(--shadow-float) !important;
   font-family: inherit;
   padding: 18px 18px 14px !important;
@@ -1113,7 +2247,7 @@ table {
 }
 
 .driver-popover-navigation-btns button {
-  border-radius: 0.625rem !important;
+  border-radius: 999px !important;
   padding: 0.4rem 0.9rem !important;
   font-weight: 600;
   text-shadow: none !important;
@@ -1135,6 +2269,35 @@ table {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  /* Entrances are skipped outright: content is simply there. State changes
+     (the pill, a fold, light and dark) still happen, they just arrive. */
+  .pane-in,
+  .animate-fade-up > *,
+  .pair-in > *,
+  .wordmark-lit,
+  .skeleton,
+  .chart-line,
+  .chart-line-today,
+  .chart-area,
+  .chart-bar,
+  .chart-now-dot,
+  .chart-now-halo,
+  .spark path,
+  .moon-shade,
+  .bar-rise,
+  .paid-check,
+  .paid-check path,
+  .receipt-shadow,
+  .receipt-after,
+  .badge-pop,
+  .line-in,
+  .shake {
+    animation: none !important;
   }
 }

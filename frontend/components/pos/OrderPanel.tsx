@@ -2,6 +2,7 @@
 
 import { IconClose, IconLock, IconNote, IconTag } from "@/components/icons";
 import { formatRupiah } from "@/lib/format";
+import { Figure } from "@/components/motion";
 import { SERVICE_HINT, SERVICE_LABEL, taxLineLabel } from "@/lib/pos";
 import { FormHint } from "@/components/FormHint";
 
@@ -290,7 +291,7 @@ export function OrderPanel({
                 )}
                 <ul className="hairline-t">
                   {lines.map((l) => (
-                    <li key={l.uid} className="hairline-b py-2.5">
+                    <li key={l.uid} className="line-in hairline-b py-2.5">
                       <div className="flex items-start gap-3">
                         <button onClick={() => onEdit(l.uid)} className="min-w-0 flex-1 rounded-lg text-left" aria-label={`Ubah ${l.title}`}>
                           <p className="text-[15px] font-semibold leading-snug">
@@ -385,7 +386,10 @@ export function OrderPanel({
         )}
         <div className="flex items-baseline justify-between gap-3">
           <span className="ink-soft text-sm">{bill && !empty ? "Total tagihan" : "Total"}</span>
-          <span className={`text-[24px] font-semibold leading-none tabular-nums tracking-[-0.02em] transition-opacity ${quoting ? "opacity-60" : ""}`}>{formatRupiah(total)}</span>
+          <span className={`text-[24px] font-semibold leading-none tabular-nums tracking-[-0.02em] transition-opacity ${quoting ? "opacity-60" : ""}`}>
+            {/* The till's counter: digits roll as the order grows. */}
+            <Figure value={total} quick />
+          </span>
         </div>
         {error && (
           <p role="alert" className="notice notice-bad mt-2 text-sm">

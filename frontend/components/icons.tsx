@@ -107,6 +107,13 @@ export const IconChat = (p: IconProps) => (
   </Svg>
 );
 
+export const IconArrowUpRight = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 17 17 7" />
+    <path d="M8.5 7H17v8.5" />
+  </Svg>
+);
+
 export const IconArrowUp = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 19V5M6 11l6-6 6 6" />

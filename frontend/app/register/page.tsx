@@ -69,18 +69,15 @@ export default function RegisterPage() {
             <BrandMark size="md" />
           </span>
           <h1 className="mt-5 text-xl font-semibold tracking-[-0.015em]">Daftar ke Poernama</h1>
-          <ol className="mx-auto mt-5 max-w-xs space-y-3 text-left text-sm">
-            {["Masukkan nomor WhatsApp usahamu", "Terima kode masuk di WhatsApp", "Isi profil usaha & PIN kasir — selesai, ±2 menit"].map((text, i) => (
-              <li key={text} className="flex items-start gap-3">
-                <span className="surface-inset ink-soft flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums" style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}>
-                  {i + 1}
-                </span>
-                <span className="ink-soft pt-0.5">{text}</span>
-              </li>
-            ))}
-          </ol>
+          {/* Sign-up by WhatsApp code waits on Meta's business verification;
+              until then a café is registered by Poernama, as the login page
+              says. This screen only says the same, and points back there. */}
+          <p className="ink-soft mx-auto mt-2 max-w-xs text-sm leading-relaxed">
+            Akun usaha baru dibuat oleh tim Poernama. Hubungi Poernama untuk didaftarkan, lalu masuk dengan
+            nomor HP dan PIN pemilik.
+          </p>
           <Link href="/login" className="btn-accent mt-6 inline-flex px-6 py-3">
-            Mulai dengan nomor WhatsApp
+            Ke halaman masuk
           </Link>
         </div>
       </main>
@@ -133,12 +130,15 @@ export default function RegisterPage() {
 
   async function makePairing() {
     setBusy(true);
+    setError(null);
     try {
       const res = await api<{ pos_path: string }>("/auth/pos-pairing", {
         token: localStorage.getItem(OWNER_TOKEN_KEY),
         body: {},
       });
       setPairing(`${window.location.origin}${res.pos_path}`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.detail : "Tautan kasir belum bisa dibuat — coba lagi ya.");
     } finally {
       setBusy(false);
     }

@@ -9,6 +9,7 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: [
+          "var(--font-display)",
           "var(--font-inter)",
           "-apple-system",
           "BlinkMacSystemFont",
@@ -16,6 +17,8 @@ const config: Config = {
           "Segoe UI",
           "sans-serif",
         ],
+        // Titles and the big figures (see .page-title / .figure in globals.css).
+        display: ["var(--font-display)", "var(--font-inter)", "-apple-system", "sans-serif"],
       },
       // Inter is variable: "bold" sits a little under 700 so headings and
       // figures stay firm without turning heavy.
@@ -43,14 +46,15 @@ const config: Config = {
           600: "#9d5530",
         },
       },
-      // One radius scale for the whole product: cards 16, sheets 20,
-      // buttons and fields 12, small controls 10.
+      // One radius scale for the whole product: panes 24, sheets 28,
+      // fields and inner blocks 16, tiles 12. Buttons, chips and segmented
+      // controls are full pills.
       borderRadius: {
-        lg: "0.5rem",
-        xl: "0.625rem",
-        "2xl": "0.75rem",
-        "3xl": "1rem",
-        "4xl": "1.25rem",
+        lg: "0.625rem",
+        xl: "0.75rem",
+        "2xl": "1rem",
+        "3xl": "1.5rem",
+        "4xl": "1.75rem",
       },
       boxShadow: {
         glass: "var(--shadow-card)",

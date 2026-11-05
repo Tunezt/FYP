@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { formatRupiah } from "@/lib/format";
+import { Figure } from "@/components/motion";
 import { ProductPicker } from "@/components/ProductPicker";
 import { IconCheck, IconClose, IconNote, IconSearch } from "@/components/icons";
 import {
@@ -420,8 +421,13 @@ export default function MenuPage() {
       ) : items.length === 0 ? (
         <p className="ink-soft mt-10 text-center text-sm">{q ? `Tidak ada menu "${search}".` : "Menu belum diisi. Tanya kasir ya."}</p>
       ) : (
-        sections.map((sec) => (
-        <section key={sec.name ?? "*"} id={sec.name ? `menu-${sec.name}` : undefined} className="scroll-mt-32">
+        sections.map((sec, si) => (
+        <section
+          key={sec.name ?? "*"}
+          id={sec.name ? `menu-${sec.name}` : undefined}
+          className="pane-in scroll-mt-32"
+          style={{ ["--i" as string]: si }}
+        >
         {sec.name && (
           <h2 className="mb-2.5 mt-6 flex items-center gap-4 text-[12px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-soft)]">
             <span className="h-px flex-1 bg-[color:var(--border)]" aria-hidden />
@@ -453,8 +459,9 @@ export default function MenuPage() {
                     <span className="pill-quiet">Habis</span>
                   ) : (
                     <span
+                      key={inCart}
                       aria-hidden
-                      className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full px-2.5 text-sm font-semibold tabular-nums ${inCart > 0 ? "toggle-on" : "toggle-off"}`}
+                      className={`${inCart > 0 ? "badge-pop " : ""}flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full px-2.5 text-sm font-semibold tabular-nums ${inCart > 0 ? "toggle-on" : "toggle-off"}`}
                     >
                       {inCart > 0 ? inCart : "+"}
                     </span>
@@ -469,7 +476,7 @@ export default function MenuPage() {
       )}
 
       {cart.length > 0 && !checkout && (
-        <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="bar-rise fixed inset-x-0 bottom-0 z-20 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             onClick={() => {
               setSubmitError(null);
@@ -478,7 +485,7 @@ export default function MenuPage() {
             className="btn-accent mx-auto flex w-full max-w-lg items-center justify-between px-5 py-4 text-base"
           >
             <span className="tabular-nums">
-              {count} item · {formatRupiah(estimate)}
+              {count} item · <Figure value={Number(estimate)} quick />
             </span>
             <span>Lihat pesanan</span>
           </button>

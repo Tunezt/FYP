@@ -6,7 +6,7 @@ import { Select } from "@/components/Select";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import type { InventoryItem, PromoCondition, PromoRow, VoucherRow } from "@/lib/types";
-import { EmptyState, ErrorState, Glass, Plate, Sheet, Skeleton, TimeField } from "@/components/ui";
+import { EmptyState, ErrorState, Glass, MoneyInput, Plate, Sheet, Skeleton, TimeField } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { FormHint } from "@/components/FormHint";
 import { IconCheck, IconPlus, IconSearch, IconSpark, IconTicket } from "@/components/icons";
@@ -240,7 +240,7 @@ export default function PromosPage() {
         </button>
       </header>
 
-      {promos.loading ? (
+      {promos.loading && !promos.data ? (
         <Skeleton className="h-56" />
       ) : promos.error && !promos.data ? (
         <Glass>
@@ -253,15 +253,15 @@ export default function PromosPage() {
           </EmptyState>
         </Plate>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className="grid gap-4 md:grid-cols-2 min-[1500px]:grid-cols-3">
           {promos.data.map((p) => (
             <li key={p.id} className="min-w-0">
               <Glass className="flex h-full flex-col px-5 py-4">
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className={`flex min-w-0 items-center gap-2 text-[15px] font-semibold ${p.is_active ? "" : "ink-soft"}`}>
-                      <span className="truncate">{p.name}</span>
-                      {!p.is_active && <span className="pill-quiet shrink-0">mati</span>}
+                    <p className={`flex min-w-0 items-start gap-2 text-[15px] font-semibold leading-snug ${p.is_active ? "" : "ink-soft"}`}>
+                      <span className="line-clamp-2 [overflow-wrap:anywhere]">{p.name}</span>
+                      {!p.is_active && <span className="pill-quiet mt-px shrink-0">mati</span>}
                     </p>
                     <p className="ink-soft mt-0.5 text-[13px] leading-snug">
                       {KIND_LABEL[p.kind]}
@@ -327,14 +327,43 @@ export default function PromosPage() {
             <p className="surface-inset mt-3 break-words rounded-xl px-3 py-2 font-mono text-xs leading-relaxed">{made.map((m) => m.code).join("  ")}</p>
           </Glass>
         )}
-        {vouchers.loading ? (
+        {vouchers.loading && !vouchers.data ? (
           <Skeleton className="h-32" />
         ) : !vouchers.data || vouchers.data.length === 0 ? (
           <Plate>
             <EmptyState icon={<IconTicket className="h-5 w-5" />} title="Belum ada voucher">Buat satu kode, atau sekaligus banyak untuk dibagikan.</EmptyState>
           </Plate>
         ) : (
-          <Glass className="overflow-x-auto">
+          <>
+          <ul className="group-card group-body md:hidden">
+            {vouchers.data.map((v) => {
+              const spent = v.uses >= v.max_uses;
+              const expired = v.expires_at ? new Date(v.expires_at) <= new Date() : false;
+              const dead = !v.is_active || spent || expired;
+              return (
+                <li key={v.id} className="list-row items-start">
+                  <div className={`min-w-0 flex-1 ${dead ? "ink-faint" : ""}`}>
+                    <p className="whitespace-nowrap font-mono text-[13px] font-semibold">{v.code}</p>
+                    <p className="mt-0.5 text-[13px] tabular-nums">
+                      {v.kind === "percent_off" ? `${Math.round(Number(v.value) * 10000) / 100}%` : formatRupiah(v.value)}
+                      {v.max_discount ? ` (maks ${formatRupiah(v.max_discount)})` : ""}
+                      {Number(v.min_spend) > 0 ? ` · min ${formatRupiah(v.min_spend)}` : ""}
+                    </p>
+                    <p className="ink-faint mt-0.5 text-xs tabular-nums">
+                      {v.uses} / {v.max_uses} dipakai
+                      {v.expires_at ? ` · s/d ${new Date(v.expires_at).toLocaleDateString("id-ID")}` : ""}
+                      {expired ? " · kedaluwarsa" : ""}
+                      {v.batch_name ? ` · ${v.batch_name}` : ""}
+                    </p>
+                  </div>
+                  <button onClick={() => toggleVoucher(v)} className="chip-btn mt-0.5 shrink-0">
+                    {v.is_active ? "Matikan" : "Nyalakan"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <Glass className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[640px] text-sm">
               <thead className="table-head text-left">
                 <tr>
@@ -352,13 +381,13 @@ export default function PromosPage() {
                   const expired = v.expires_at ? new Date(v.expires_at) <= new Date() : false;
                   return (
                     <tr key={v.id} className={`hairline-t ${!v.is_active || spent || expired ? "ink-faint" : ""}`}>
-                      <td className="px-5 py-3 font-mono text-[13px] font-medium">{v.code}</td>
+                      <td className="whitespace-nowrap px-5 py-3 font-mono text-[13px] font-medium">{v.code}</td>
                       <td className="px-4 py-3 tabular-nums">
                         {v.kind === "percent_off" ? `${Math.round(Number(v.value) * 10000) / 100}%` : formatRupiah(v.value)}
                         {v.max_discount ? ` (maks ${formatRupiah(v.max_discount)})` : ""}
                         {Number(v.min_spend) > 0 ? ` · min ${formatRupiah(v.min_spend)}` : ""}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">{v.uses} / {v.max_uses}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{v.uses} / {v.max_uses}</td>
                       <td className="px-4 py-3 tabular-nums">{v.expires_at ? new Date(v.expires_at).toLocaleDateString("id-ID") : "—"}{expired ? " · kedaluwarsa" : ""}</td>
                       <td className="px-4 py-3">{v.batch_name ?? "—"}</td>
                       <td className="px-5 py-3 text-right">
@@ -370,11 +399,12 @@ export default function PromosPage() {
               </tbody>
             </table>
           </Glass>
+          </>
         )}
       </section>
 
-      {voucherSheet && (
-        <Sheet open title="Buat voucher" onClose={() => !vbusy && setVoucherSheet(false)}>
+      <Sheet open={voucherSheet} title="Buat voucher" onClose={() => !vbusy && setVoucherSheet(false)}>
+        {voucherSheet && (
           <div className="space-y-3">
             <div className="segmented flex w-full" role="group" aria-label="Jumlah kode">
               {(["single", "batch"] as const).map((m) => (
@@ -423,17 +453,21 @@ export default function PromosPage() {
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-[13px] font-medium">{vdraft.kind === "percent_off" ? "Diskon (%)" : "Potongan (Rp)"}</span>
-                <input className="field" inputMode="decimal" value={vdraft.value} onChange={(e) => setVdraft({ ...vdraft, value: e.target.value.replace(/[^0-9.]/g, "") })} />
+                {vdraft.kind === "percent_off" ? (
+                  <input className="field tabular-nums" inputMode="decimal" value={vdraft.value} onChange={(e) => setVdraft({ ...vdraft, value: e.target.value.replace(/[^0-9.]/g, "") })} />
+                ) : (
+                  <MoneyInput className="field" value={vdraft.value} onValue={(v) => setVdraft({ ...vdraft, value: v })} />
+                )}
               </label>
               {vdraft.kind === "percent_off" && (
                 <label className="block">
                   <span className="ink-soft mb-1.5 block text-[13px] font-medium">Maksimal potongan (Rp)</span>
-                  <input className="field" inputMode="numeric" value={vdraft.max_discount} onChange={(e) => setVdraft({ ...vdraft, max_discount: e.target.value.replace(/[^0-9]/g, "") })} />
+                  <MoneyInput className="field" value={vdraft.max_discount} onValue={(v) => setVdraft({ ...vdraft, max_discount: v })} />
                 </label>
               )}
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-[13px] font-medium">Minimal belanja (Rp)</span>
-                <input className="field" inputMode="numeric" value={vdraft.min_spend} onChange={(e) => setVdraft({ ...vdraft, min_spend: e.target.value.replace(/[^0-9]/g, "") })} />
+                <MoneyInput className="field" value={vdraft.min_spend} onValue={(v) => setVdraft({ ...vdraft, min_spend: v })} />
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-[13px] font-medium">Berlaku sampai</span>
@@ -471,11 +505,15 @@ export default function PromosPage() {
               );
             })()}
           </div>
-        </Sheet>
-      )}
+        )}
+      </Sheet>
 
-      {editing && (
-        <Sheet open title={editing === "new" ? "Promo baru" : "Ubah promo"} onClose={() => !busy && setEditing(null)}>
+      <Sheet
+        open={editing !== null}
+        title={editing === "new" ? "Promo baru" : "Ubah promo"}
+        onClose={() => !busy && setEditing(null)}
+      >
+        {editing && (
           <div className="space-y-3">
             <label className="block">
               <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama</span>
@@ -501,7 +539,11 @@ export default function PromosPage() {
             {draft.kind !== "bonus_item" && (
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-[13px] font-medium">{draft.kind === "percent_off" ? "Diskon (%)" : "Potongan (Rp)"}</span>
-                <input className="field" inputMode="decimal" value={draft.value} onChange={(e) => setDraft({ ...draft, value: e.target.value.replace(/[^0-9.]/g, "") })} />
+                {draft.kind === "percent_off" ? (
+                  <input className="field tabular-nums" inputMode="decimal" value={draft.value} onChange={(e) => setDraft({ ...draft, value: e.target.value.replace(/[^0-9.]/g, "") })} />
+                ) : (
+                  <MoneyInput className="field" value={draft.value} onValue={(v) => setDraft({ ...draft, value: v })} />
+                )}
               </label>
             )}
             {editing === "new" && (
@@ -610,7 +652,7 @@ export default function PromosPage() {
             </div>
             <label className="block">
               <span className="ink-soft mb-1.5 block text-[13px] font-medium">Minimal belanja (Rp)</span>
-              <input className="field" inputMode="numeric" value={draft.min_spend} onChange={(e) => setDraft({ ...draft, min_spend: e.target.value.replace(/[^0-9]/g, "") })} />
+              <MoneyInput className="field" value={draft.min_spend} onValue={(v) => setDraft({ ...draft, min_spend: v })} />
             </label>
             {error && <p className="notice notice-bad">{error}</p>}
             {(() => {
@@ -634,8 +676,8 @@ export default function PromosPage() {
               );
             })()}
           </div>
-        </Sheet>
-      )}
+        )}
+      </Sheet>
     </div>
   );
 }

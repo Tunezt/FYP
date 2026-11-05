@@ -123,9 +123,9 @@ export default function CustomersPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-full sm:max-w-xs">
-          <IconSearch className="ink-faint pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+          <IconSearch className="ink-faint pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2" />
           <input
-          className="control-field cursor-text pl-9"
+          className="control-field cursor-text pl-10"
           type="search"
           aria-label="Cari pelanggan"
           placeholder="Cari nama atau nomor HP"
@@ -142,7 +142,7 @@ export default function CustomersPage() {
         </label>
       </div>
 
-      {customers.loading ? (
+      {customers.loading && !customers.data ? (
         <Skeleton className="h-64" />
       ) : customers.error && !customers.data ? (
         <Glass>
@@ -158,7 +158,7 @@ export default function CustomersPage() {
         </Glass>
       ) : (
         <>
-          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1640px]:grid-cols-4">
             {customers.data.rows.map((c) => (
               <li key={c.id}>
                 <Glass className="flex h-full flex-col px-5 py-4">
@@ -227,8 +227,12 @@ export default function CustomersPage() {
         </>
       )}
 
-      {editing && (
-        <Sheet open title={editing === "new" ? "Pelanggan baru" : "Ubah pelanggan"} onClose={() => !busy && setEditing(null)}>
+      <Sheet
+        open={editing !== null}
+        title={editing === "new" ? "Pelanggan baru" : "Ubah pelanggan"}
+        onClose={() => !busy && setEditing(null)}
+      >
+        {editing && (
           <div className="space-y-3">
             <label className="block">
               <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama</span>
@@ -318,8 +322,8 @@ export default function CustomersPage() {
               )}
             </div>
           </div>
-        </Sheet>
-      )}
+        )}
+      </Sheet>
     </div>
   );
 }

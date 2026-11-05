@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
+import { useMinWidth, useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatQty, formatRupiah } from "@/lib/format";
 import { PREP_STATION_LABEL, type InventoryItem, type PrepStation } from "@/lib/types";
-import { EmptyState, ErrorState, Glass, ItemIcon, RowChevron, Sheet, Skeleton } from "@/components/ui";
+import { EmptyState, ErrorState, Glass, ItemIcon, MoneyInput, RowChevron, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { FormHint } from "@/components/FormHint";
 import { MENU_CATEGORY_SUGGESTIONS } from "@/lib/pos";
 import { IconBox, IconPlus } from "@/components/icons";
+import { Figure } from "@/components/motion";
 
 type Draft = {
   name: string;
@@ -24,10 +25,10 @@ type Draft = {
 const EMPTY_DRAFT: Draft = {
   name: "",
   unit: "pcs",
-  current_stock: "0",
-  cost_price: "0",
-  sell_price: "0",
-  reorder_threshold: "0",
+  current_stock: "",
+  cost_price: "",
+  sell_price: "",
+  reorder_threshold: "",
   prep_station: null,
   menu_category: "",
 };
@@ -120,6 +121,13 @@ export default function InventoryPage() {
   }
 
   const sheetOpen = adding || editing !== null;
+  // What the shelves are worth at cost: the number an owner asks for before
+  // a big order, and the one a stock-take is checked against.
+  const stockValue = (items.data ?? []).reduce(
+    (sum, i) => sum + Math.max(0, Number(i.current_stock)) * Number(i.cost_price),
+    0
+  );
+  const sellable = (items.data ?? []).filter((i) => Number(i.sell_price) > 0).length;
   // The sections offered: the usual ones first, then any the owner already made.
   const categories = useMemo(() => {
     const seen = new Map(MENU_CATEGORY_SUGGESTIONS.map((c) => [c.toLocaleLowerCase("id-ID"), c]));
@@ -150,7 +158,7 @@ export default function InventoryPage() {
         </button>
       </header>
 
-      {items.loading ? (
+      {items.loading && !items.data ? (
         <Skeleton className="h-72" />
       ) : items.error && !items.data ? (
         <Glass>
@@ -165,25 +173,62 @@ export default function InventoryPage() {
         </Glass>
       ) : (
         <>
-          {risky.length > 0 && (
-            <section>
-              <div className="mb-3 flex items-baseline gap-2">
-                <h2 className="section-title">Perlu perhatian</h2>
-                <span className="pill-warn tabular-nums">{risky.length}</span>
-              </div>
-              <ItemRows items={risky} onEdit={openEdit} />
-            </section>
-          )}
-          <section>
-            <h2 className="mb-3 section-title">
-              {risky.length > 0 ? "Aman" : "Semua barang"}
-            </h2>
-            {safe.length === 0 ? (
-              <p className="ink-faint group-card px-5 py-4 text-sm">Semua barang sedang butuh perhatian.</p>
-            ) : (
-              <ItemRows items={safe} onEdit={openEdit} />
+          <Glass className="grid divide-y divide-[color:var(--hairline)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <div className="px-5 py-4 md:px-6 md:py-5">
+              <p className="ink-soft text-sm font-medium">Barang tercatat</p>
+              <p className="figure mt-2 text-[1.875rem]">
+                {items.data.length}
+                <span className="ink-soft ml-2 font-sans text-sm font-medium tracking-normal">
+                  {sellable} dijual · {items.data.length - sellable} bahan baku
+                </span>
+              </p>
+            </div>
+            <div className="px-5 py-4 md:px-6 md:py-5">
+              <p className="ink-soft text-sm font-medium">Perlu perhatian</p>
+              <p className="figure mt-2 flex items-center gap-2.5 text-[1.875rem]">
+                {risky.length}
+                {risky.length > 0 ? (
+                  <span className="pill-warn font-sans tracking-normal">segera isi ulang</span>
+                ) : (
+                  <span className="pill-good font-sans tracking-normal">aman semua</span>
+                )}
+              </p>
+            </div>
+            <div className="px-5 py-4 md:px-6 md:py-5">
+              <p className="ink-soft text-sm font-medium">Nilai stok (harga modal)</p>
+              <p className="figure mt-2 text-[1.875rem]">
+                <Figure value={stockValue} />
+              </p>
+            </div>
+          </Glass>
+
+          <div
+            className={
+              risky.length > 0
+                ? "grid items-start gap-x-6 gap-y-8 min-[1440px]:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
+                : ""
+            }
+          >
+            {risky.length > 0 && (
+              <section className="min-w-0">
+                <div className="mb-3 flex items-baseline gap-2">
+                  <h2 className="section-title">Perlu perhatian</h2>
+                  <span className="pill-warn tabular-nums">{risky.length}</span>
+                </div>
+                <ItemRows items={risky} onEdit={openEdit} />
+              </section>
             )}
-          </section>
+            <section className="min-w-0">
+              <h2 className="mb-3 section-title">
+                {risky.length > 0 ? "Aman" : "Semua barang"}
+              </h2>
+              {safe.length === 0 ? (
+                <p className="ink-faint group-card px-5 py-4 text-sm">Semua barang sedang butuh perhatian.</p>
+              ) : (
+                <ItemRows items={safe} onEdit={openEdit} split={risky.length === 0} />
+              )}
+            </section>
+          </div>
         </>
       )}
 
@@ -202,6 +247,7 @@ export default function InventoryPage() {
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               placeholder="cth. Biji Arabica" aria-required="true"
+              autoFocus={!editing}
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
@@ -210,6 +256,8 @@ export default function InventoryPage() {
                 className="field tabular-nums"
                 type="number"
                 min="0"
+                step="any"
+                placeholder="0"
                 value={draft.current_stock}
                 onChange={(e) => setDraft({ ...draft, current_stock: e.target.value })}
               />
@@ -223,29 +271,28 @@ export default function InventoryPage() {
               />
             </Field>
             <Field label="Harga modal (Rp)">
-              <input
-                className="field tabular-nums"
-                type="number"
-                min="0"
+              <PriceInput
+                placeholder="0"
                 value={draft.cost_price}
-                onChange={(e) => setDraft({ ...draft, cost_price: e.target.value })}
+                onValue={(v) => setDraft({ ...draft, cost_price: v })}
               />
             </Field>
             <Field label="Harga jual (Rp)">
-              <input
-                className="field tabular-nums"
-                type="number"
-                min="0"
+              <PriceInput
+                placeholder="0 = bahan baku"
                 value={draft.sell_price}
-                onChange={(e) => setDraft({ ...draft, sell_price: e.target.value })}
+                onValue={(v) => setDraft({ ...draft, sell_price: v })}
               />
             </Field>
           </div>
+          <Margin cost={Number(draft.cost_price)} sell={Number(draft.sell_price)} unit={draft.unit.trim() || "pcs"} />
           <Field label="Batas minimum (dapat peringatan kalau di bawah ini)">
             <input
               className="field tabular-nums"
               type="number"
               min="0"
+              step="any"
+              placeholder="0"
               value={draft.reorder_threshold}
               onChange={(e) => setDraft({ ...draft, reorder_threshold: e.target.value })}
             />
@@ -327,7 +374,27 @@ export default function InventoryPage() {
   );
 }
 
-function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: InventoryItem) => void }) {
+/** `split` lays a long list out as two cards side by side on a wide screen,
+ * so a row is never a name on the far left and a number a metre away. */
+function ItemRows({
+  items,
+  onEdit,
+  split = false,
+}: {
+  items: InventoryItem[];
+  onEdit: (i: InventoryItem) => void;
+  split?: boolean;
+}) {
+  const wide = useMinWidth(1440);
+  if (split && wide && items.length > 7) {
+    const half = Math.ceil(items.length / 2);
+    return (
+      <div className="grid grid-cols-2 items-start gap-6">
+        <ItemRows items={items.slice(0, half)} onEdit={onEdit} />
+        <ItemRows items={items.slice(half)} onEdit={onEdit} />
+      </div>
+    );
+  }
   return (
     <ul className="group-card group-body">
       {items.map((item) => {
@@ -346,7 +413,7 @@ function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: Inven
                   {Number(item.sell_price) > 0
                     ? `jual ${formatRupiah(item.sell_price)}${item.menu_category ? ` · ${item.menu_category}` : ""} · ${item.prep_station ? PREP_STATION_LABEL[item.prep_station] : "tujuan belum diatur"}`
                     : "bahan baku"}
-                  {item.avg_daily_usage ? ` · ±${item.avg_daily_usage} ${item.unit}/hari` : ""}
+                  {item.avg_daily_usage ? ` · ±${formatQty(Number(item.avg_daily_usage).toFixed(1))} ${item.unit}/hari` : ""}
                 </p>
               </div>
               <div className="shrink-0 text-right">
@@ -362,6 +429,45 @@ function ItemRows({ items, onEdit }: { items: InventoryItem[]; onEdit: (i: Inven
         );
       })}
     </ul>
+  );
+}
+
+/** A price in whole rupiah is typed grouped (150.000). A price saved with
+ * cents (a cost per gram, say) keeps a plain decimal field, so opening and
+ * saving the item never rounds it away. */
+function PriceInput({ value, onValue, placeholder }: { value: string; onValue: (v: string) => void; placeholder: string }) {
+  if (/^\d*$/.test(value))
+    return <MoneyInput className="field" placeholder={placeholder} value={value} onValue={onValue} />;
+  return (
+    <input
+      className="field tabular-nums"
+      type="number"
+      min="0"
+      step="any"
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onValue(e.target.value)}
+    />
+  );
+}
+
+/** What one unit earns at these prices, said the moment both are typed —
+ * and said plainly when the price is under what it costs. */
+function Margin({ cost, sell, unit }: { cost: number; sell: number; unit: string }) {
+  if (!(cost > 0) || !(sell > 0)) return null;
+  const gain = sell - cost;
+  if (gain < 0)
+    return (
+      <p className="notice notice-warn !py-2.5 text-[13px]" role="status">
+        Harga jual di bawah modal: rugi {formatRupiah(-gain)} tiap {unit}.
+      </p>
+    );
+  const pct = Math.round((gain / sell) * 100);
+  return (
+    <p className="ink-soft -mt-1 text-[13px]" role="status">
+      Untung <span className="font-semibold text-[color:var(--ink)] tabular-nums">{formatRupiah(gain)}</span> tiap {unit}
+      <span className="ink-faint"> · {pct}% dari harga jual</span>
+    </p>
   );
 }
 

@@ -63,7 +63,7 @@ export function ReceiptChoiceSheet({
     <div className="sheet-scrim z-[75] items-center p-4" role="dialog" aria-modal="true" aria-labelledby="receipt-choice-title">
       <div className="glass-card w-full max-w-lg px-6 pb-6 pt-5">
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white" style={{ background: "var(--good)" }}>
+          <span className="paid-check flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white" style={{ background: "var(--good)" }}>
             <IconCheck className="h-5 w-5" />
           </span>
           <div className="min-w-0">

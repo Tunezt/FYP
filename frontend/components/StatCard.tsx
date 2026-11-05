@@ -1,6 +1,6 @@
 "use client";
 
-import { Line, LineChart, ResponsiveContainer } from "recharts";
+import { Spark } from "@/components/charts";
 import { IconArrowDown, IconArrowUp } from "@/components/icons";
 
 /** One figure in the overview's key-figures strip: label (+ help) → the number
@@ -29,29 +29,18 @@ export function StatCard({
   const moves = !!spark && spark.length > 1 && spark.some((v) => v !== spark[0]);
   const noDelta = deltaPct === undefined || deltaPct === null;
   return (
-    <div className="flex min-h-[132px] min-w-0 flex-col px-5 py-5 md:px-6">
+    <div className="flex min-h-[140px] min-w-0 flex-col px-5 py-5 md:px-7 md:py-6">
       <p className="ink-soft flex items-center gap-1.5 text-[13px] font-medium">
         {label}
         {help}
       </p>
-      <div className="mt-1.5 flex items-end justify-between gap-4">
-        <p className="shrink-0 whitespace-nowrap text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.025em] lg:text-[1.5rem] xl:text-[1.75rem]">
+      <div className="mt-3 flex items-end justify-between gap-4">
+        <p className="figure shrink-0 text-[2rem] lg:text-[1.75rem] xl:text-[2.25rem]">
           {value}
         </p>
         {spark && moves && (
           <div className="h-8 min-w-0 max-w-24 flex-1 lg:hidden xl:block" aria-hidden>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={spark.map((v, i) => ({ i, v }))} margin={{ top: 2, left: 2, right: 2, bottom: 2 }}>
-                <Line
-                  type="monotone"
-                  dataKey="v"
-                  stroke="var(--chart-1)"
-                  strokeWidth={1.5}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <Spark values={spark} />
           </div>
         )}
       </div>

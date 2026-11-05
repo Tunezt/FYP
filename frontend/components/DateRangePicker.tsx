@@ -44,6 +44,7 @@ export function DateRangePicker({
   single = false,
   variant = "control",
   placeholder,
+  max,
 }: {
   since: string;
   until: string;
@@ -53,6 +54,9 @@ export function DateRangePicker({
   single?: boolean;
   variant?: "control" | "field";
   placeholder?: string;
+  /** The last day that can be picked (YYYY-MM-DD): a nota cannot be dated
+   *  tomorrow. Later days show but cannot be chosen. */
+  max?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => {
@@ -237,6 +241,7 @@ export function DateRangePicker({
                   <button
                     type="button"
                     onClick={() => pick(day)}
+                    disabled={max !== undefined && day > max}
                     aria-current={day === today ? "date" : undefined}
                     aria-pressed={isStart(day) || isEnd(day)}
                     className={`cal-day ${isStart(day) || isEnd(day) ? "cal-day-on" : ""} ${

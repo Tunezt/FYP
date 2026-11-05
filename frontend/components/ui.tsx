@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { categorize, type ItemCategory } from "@/lib/itemCategory";
 import { Wordmark } from "@/components/Wordmark";
+import { SlideIndicator } from "@/components/motion";
 import {
   IconAlert,
+  IconBox,
+  IconChart,
   IconCheck,
+  IconClock,
+  IconReceipt,
+  IconTag,
+  IconWallet,
   IconChevronDown,
   IconChevronRight,
   IconClose,
@@ -84,7 +91,7 @@ export function DayHeader({
 /** The trailing chevron on an interactive row. Pairs with `.list-row-action`.
  * Decorative: the row is the button, screen readers get its label. */
 export function RowChevron({ className = "" }: { className?: string }) {
-  return <IconChevronRight className={`row-chevron h-4 w-4 shrink-0 ${className}`} aria-hidden />;
+  return <IconChevronRight className={`row-chevron row-chevron-go h-4 w-4 shrink-0 ${className}`} aria-hidden />;
 }
 
 /** A day header that opens and closes its group.
@@ -164,9 +171,13 @@ export function DayGroup({
         onToggle={onToggle}
         controls={id}
       />
-      <ul id={id} className="group-body" hidden={!open}>
-        {children}
-      </ul>
+      {/* Opens and closes by animating the grid row (see .fold); `inert`
+          keeps a folded day out of the tab order and away from screen readers. */}
+      <div className="fold" data-open={open}>
+        <ul id={id} className="group-body" inert={!open}>
+          {children}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -254,6 +265,36 @@ export function ItemIcon({ name, className = "" }: { name: string; className?: s
   );
 }
 
+/** An alert's mark: what it is about, drawn in its severity's colour. The
+ * picture follows the kind of alert (a box for stock, a receipt for voids), so
+ * a sales dip is never drawn as a rising arrow. */
+const ALERT_ICONS: Record<string, (p: { className?: string }) => React.ReactNode> = {
+  low_stock: IconBox,
+  stockout_risk: IconClock,
+  anomaly: IconChart,
+  margin_drop: IconWallet,
+  void_rate: IconReceipt,
+  supplier_price: IconTag,
+};
+
+export function AlertIcon({ type, severity }: { type: string; severity: string }) {
+  const Icon = ALERT_ICONS[type] ?? IconAlert;
+  const high = severity === "high";
+  const low = severity === "low";
+  return (
+    <span
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+      style={{
+        background: high ? "var(--bad-bg)" : low ? "var(--fill)" : "var(--warn-bg)",
+        color: high ? "var(--bad)" : low ? "var(--ink-soft)" : "var(--warn)",
+      }}
+      aria-hidden
+    >
+      <Icon className="h-5 w-5" />
+    </span>
+  );
+}
+
 export function SeverityBadge({ severity }: { severity: string }) {
   const label = severity === "high" ? "penting" : severity === "medium" ? "sedang" : "info";
   const cls = severity === "high" ? "pill-bad" : severity === "medium" ? "pill-warn" : "pill-quiet";
@@ -290,7 +331,7 @@ export function EmptyState({
 }
 
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-2xl bg-[color:var(--row-press)] ${className}`} />;
+  return <div className={`skeleton ${className}`} />;
 }
 
 /** Shown when a data fetch fails — distinct from the loading skeleton so a dead
@@ -331,13 +372,15 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={`segmented ${className}`} role="tablist">
+    <div className={`segmented has-slide ${className}`} role="tablist">
+      <SlideIndicator className="segmented-thumb" watch={value} />
       {options.map((opt) => (
         <button
           key={opt.value}
           type="button"
           role="tab"
           aria-selected={opt.value === value}
+          data-slide-active={opt.value === value}
           onClick={() => onChange(opt.value)}
           className="segmented-item flex-1 whitespace-nowrap"
         >
@@ -370,13 +413,64 @@ export function Sheet({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  // The sheet stays in the page for the length of its exit, showing what it
+  // showed when it was told to close.
+  const [present, setPresent] = useState(open);
+  const kept = useRef({ title, children });
+  if (open) kept.current = { title, children };
+  useEffect(() => {
+    if (open) {
+      setPresent(true);
+      return;
+    }
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timer = window.setTimeout(() => setPresent(false), calm ? 0 : 220);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  // The handle on a phone sheet is real: drag the header down to close.
+  const drag = useRef<{ y: number; at: number; dy: number } | null>(null);
+  function dragStart(e: React.PointerEvent) {
+    if (e.pointerType === "mouse" || window.innerWidth >= 640) return;
+    if ((e.target as HTMLElement).closest("button, a, input")) return;
+    drag.current = { y: e.clientY, at: e.timeStamp, dy: 0 };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+  }
+  function dragMove(e: React.PointerEvent) {
+    const d = drag.current;
+    const panel = panelRef.current;
+    if (!d || !panel) return;
+    d.dy = Math.max(0, e.clientY - d.y);
+    panel.style.transition = "none";
+    panel.style.transform = `translateY(${d.dy}px)`;
+  }
+  function dragEnd(e: React.PointerEvent) {
+    const d = drag.current;
+    const panel = panelRef.current;
+    drag.current = null;
+    if (!d || !panel) return;
+    const speed = d.dy / Math.max(1, e.timeStamp - d.at);
+    if (d.dy > 120 || (d.dy > 30 && speed > 0.55)) {
+      onCloseRef.current(); // leaves from where it was let go
+      return;
+    }
+    panel.style.transition = "transform 280ms var(--ease-out)";
+    panel.style.transform = "";
+  }
+
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
     const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
     // Wait a frame: the panel is portaled in after mount.
-    const raf = requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
+    // Unless a field inside already took focus (autoFocus), the panel does.
+    const raf = requestAnimationFrame(() => {
+      const panel = panelRef.current;
+      if (panel && !panel.contains(document.activeElement)) panel.focus({ preventScroll: true });
+    });
     const onKey = (e: KeyboardEvent) => {
       // An open popover inside the sheet takes Escape first.
       if (e.key === "Escape" && !document.querySelector(".popover-panel")) onCloseRef.current();
@@ -390,10 +484,11 @@ export function Sheet({
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!open && !present) return null;
+  const closing = !open;
   return (
     <Portal>
-      <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet-scrim" data-closing={closing ? "" : undefined} inert={closing} onClick={onClose}>
         <div
           ref={panelRef}
           className="sheet-panel relative sm:max-w-lg"
@@ -408,12 +503,18 @@ export function Sheet({
             className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-[color:var(--hairline-strong)] sm:hidden"
             aria-hidden
           />
-          <div className="flex shrink-0 items-center gap-3 px-5 pb-3 pt-6 sm:px-6 sm:pt-5">
+          <div
+            className="sheet-grab flex shrink-0 items-center gap-3 px-5 pb-3 pt-6 sm:px-6 sm:pt-5"
+            onPointerDown={dragStart}
+            onPointerMove={dragMove}
+            onPointerUp={dragEnd}
+            onPointerCancel={dragEnd}
+          >
             <h3
               id={titleId}
               className="min-w-0 flex-1 truncate text-[17px] font-semibold tracking-[-0.012em]"
             >
-              {title}
+              {kept.current.title}
             </h3>
             <button
               type="button"
@@ -425,7 +526,7 @@ export function Sheet({
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-1 sm:px-6 sm:pb-6">
-            {children}
+            {kept.current.children}
           </div>
         </div>
       </div>
@@ -456,6 +557,68 @@ export function CopyField({ value }: { value: string }) {
         )}
       </span>
     </button>
+  );
+}
+
+/** A rupiah amount typed as digits and shown grouped while it is typed
+ * ("150000" reads "150.000"), so a zero too many or too few is seen before it
+ * is saved, not after. `value` and `onValue` carry the bare digits, the way
+ * every caller already stores them. The caret stays where the typing is, and
+ * Backspace over a group dot removes the digit before it. */
+export function MoneyInput({
+  value,
+  onValue,
+  maxDigits = 10,
+  className = "",
+  ...rest
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "inputMode" | "type"> & {
+  value: string;
+  onValue: (digits: string) => void;
+  maxDigits?: number;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const caret = useRef<number | null>(null);
+  const clean = value.replace(/\D/g, "");
+  const shown = clean ? Number(clean).toLocaleString("id-ID") : "";
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const wanted = caret.current;
+    caret.current = null;
+    if (!el || wanted === null || document.activeElement !== el) return;
+    // Put the caret after the same number of digits it was after.
+    let seen = 0;
+    let at = 0;
+    while (at < shown.length && seen < wanted) {
+      if (/\d/.test(shown[at])) seen++;
+      at++;
+    }
+    el.setSelectionRange(at, at);
+  });
+
+  return (
+    <input
+      {...rest}
+      ref={ref}
+      inputMode="numeric"
+      autoComplete="off"
+      className={`tabular-nums ${className}`}
+      value={shown}
+      onKeyDown={(e) => {
+        const el = e.currentTarget;
+        const at = el.selectionStart ?? 0;
+        if (el.selectionEnd === at) {
+          if (e.key === "Backspace" && at > 0 && shown[at - 1] === ".") el.setSelectionRange(at - 1, at - 1);
+          if (e.key === "Delete" && shown[at] === ".") el.setSelectionRange(at + 1, at + 1);
+        }
+        rest.onKeyDown?.(e);
+      }}
+      onChange={(e) => {
+        const raw = e.target.value;
+        caret.current = raw.slice(0, e.target.selectionStart ?? raw.length).replace(/\D/g, "").length;
+        onValue(raw.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, maxDigits));
+      }}
+    />
   );
 }
 

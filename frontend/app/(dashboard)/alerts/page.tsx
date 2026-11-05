@@ -4,10 +4,10 @@ import { useState } from "react";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { daySubLabel, groupByDay } from "@/lib/dates";
 import type { AlertRow, Business } from "@/lib/types";
-import { DayGroup, EmptyState, ErrorState, Glass, SeverityBadge, Skeleton } from "@/components/ui";
+import { AlertIcon, DayGroup, EmptyState, ErrorState, Glass, SeverityBadge, Skeleton } from "@/components/ui";
 import { HistoryFilters } from "@/components/HistoryFilters";
 import { HelpTip } from "@/components/HelpTip";
-import { IconBell, IconBox, IconCheck, IconTrendUp } from "@/components/icons";
+import { IconBell, IconCheck } from "@/components/icons";
 
 const ALERT_LABEL: Record<string, string> = {
   anomaly: "anomali penjualan",
@@ -39,15 +39,25 @@ export default function AlertsPage() {
   const tz = business.data?.timezone;
   const dayStart = business.data?.day_start_hour ?? 0;
   const mutate = useOwnerMutation();
-  const [acking, setAcking] = useState<string | null>(null);
+  // "beres" answers at once: the row folds away while the server is told,
+  // and comes back with a note if the server says no.
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
+  const [ackError, setAckError] = useState<string | null>(null);
 
   async function acknowledge(id: string) {
-    setAcking(id);
+    setAckError(null);
+    setLeaving((s) => new Set(s).add(id));
+    const folded = new Promise((r) => window.setTimeout(r, 340));
     try {
-      await mutate(`/api/alerts/${id}/ack`);
+      await Promise.all([mutate(`/api/alerts/${id}/ack`), folded]);
       alerts.reload();
-    } finally {
-      setAcking(null);
+    } catch {
+      setLeaving((s) => {
+        const next = new Set(s);
+        next.delete(id);
+        return next;
+      });
+      setAckError("Peringatan itu belum tertandai. Coba tekan beres lagi.");
     }
   }
 
@@ -93,7 +103,13 @@ export default function AlertsPage() {
         }}
       />
 
-      {alerts.loading ? (
+      {ackError && (
+        <p className="notice notice-bad" role="alert">
+          {ackError}
+        </p>
+      )}
+
+      {alerts.loading && !alerts.data ? (
         <Skeleton className="h-64" />
       ) : alerts.error && !alerts.data ? (
         <Glass>
@@ -111,9 +127,15 @@ export default function AlertsPage() {
           </EmptyState>
         </Glass>
       ) : (
-        <>
+        <div
+          className={
+            open.length > 0 && done.length > 0
+              ? "grid items-start gap-x-6 gap-y-7 min-[1440px]:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]"
+              : "max-w-5xl"
+          }
+        >
           {open.length > 0 && (
-            <section>
+            <section className="min-w-0">
               <div className="mb-3 flex items-baseline gap-2">
                 <h2 className="section-title">Perlu ditindak</h2>
                 <span className="pill-warn tabular-nums">{open.length}</span>
@@ -129,21 +151,13 @@ export default function AlertsPage() {
                   count={group.rows.length}
                 >
                     {group.rows.map((alert) => (
-                      <li key={alert.id} className="list-row flex-wrap sm:flex-nowrap" style={{ ["--row-inset" as string]: "4.25rem" }}>
-                        <span
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                          style={{
-                            background: alert.severity === "high" ? "var(--bad-bg)" : "var(--warn-bg)",
-                            color: alert.severity === "high" ? "var(--bad)" : "var(--warn)",
-                          }}
-                          aria-hidden
-                        >
-                          {alert.type === "low_stock" ? (
-                            <IconBox className="h-5 w-5" />
-                          ) : (
-                            <IconTrendUp className="h-5 w-5" />
-                          )}
-                        </span>
+                      <li
+                        key={alert.id}
+                        className="list-row flex-wrap sm:flex-nowrap"
+                        data-leaving={leaving.has(alert.id) || undefined}
+                        style={{ ["--row-inset" as string]: "4.25rem" }}
+                      >
+                        <AlertIcon type={alert.type} severity={alert.severity} />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">{alert.message}</p>
                           <p className="ink-faint mt-0.5 text-xs">
@@ -154,7 +168,7 @@ export default function AlertsPage() {
                         <SeverityBadge severity={alert.severity} />
                         <button
                           onClick={() => acknowledge(alert.id)}
-                          disabled={acking === alert.id}
+                          disabled={leaving.has(alert.id)}
                           className="btn-quiet shrink-0 px-3 py-2 text-xs font-semibold"
                           title="Tandai sudah dibaca"
                         >
@@ -169,7 +183,7 @@ export default function AlertsPage() {
           )}
 
           {done.length > 0 && (
-            <section>
+            <section className="min-w-0">
               <h2 className="mb-3 section-title">Sudah dibaca</h2>
               <ul className="group-card group-body">
                 {done.slice(0, 20).map((alert) => (
@@ -187,7 +201,7 @@ export default function AlertsPage() {
               </ul>
             </section>
           )}
-        </>
+        </div>
       )}
     </div>
   );

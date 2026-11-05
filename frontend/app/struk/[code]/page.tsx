@@ -8,6 +8,8 @@ import { orderHeading, paymentLabel, serviceDateLabel, taxLineLabel } from "@/li
 import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/types";
 import type { Receipt } from "@/components/pos/Receipts";
 import { Wordmark } from "@/components/Wordmark";
+import { MoonSpinner } from "@/components/motion";
+import { IconAlert, IconCheck, IconUpload } from "@/components/icons";
 
 /** The receipt a customer opens by scanning the QR the till showed (till-5b,
  *  decision 4). No login: the unguessable code in the address is the key. The
@@ -16,6 +18,27 @@ export default function ReceiptPage() {
   const { code } = useParams<{ code: string }>();
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [shared, setShared] = useState<"copied" | null>(null);
+
+  /** Keep the receipt: the phone's own share sheet (WhatsApp, saved notes,
+   *  a chat with oneself), or, where there is none, the link copied. */
+  async function keep(title: string) {
+    const url = window.location.href;
+    const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
+    if (nav.share) {
+      try {
+        await nav.share({ title, url });
+        return;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShared("copied");
+      window.setTimeout(() => setShared(null), 2200);
+    } catch {}
+  }
 
   useEffect(() => {
     api<Receipt>(`/public/struk/${encodeURIComponent(code)}`)
@@ -27,7 +50,14 @@ export default function ReceiptPage() {
     return (
       <main className="flex min-h-screen items-center justify-center px-4">
         <div className="glass-card max-w-sm px-6 py-8 text-center">
-          <p className="text-lg font-semibold">Struk tidak bisa dibuka</p>
+          <span
+            className="surface-inset ink-faint mx-auto flex h-11 w-11 items-center justify-center rounded-2xl"
+            style={{ boxShadow: "inset 0 0 0 1px var(--hairline)" }}
+            aria-hidden
+          >
+            <IconAlert className="h-5 w-5" />
+          </span>
+          <p className="mt-3 text-lg font-semibold">Struk tidak bisa dibuka</p>
           <p className="ink-soft mt-1 text-sm">{error}</p>
         </div>
       </main>
@@ -36,7 +66,9 @@ export default function ReceiptPage() {
   if (!receipt) {
     return (
       <main className="flex min-h-screen items-center justify-center px-4">
-        <p className="ink-soft animate-pulse">Membuka struk…</p>
+        <p className="ink-soft flex items-center gap-2 text-sm" role="status">
+          <MoonSpinner /> Membuka struk…
+        </p>
       </main>
     );
   }
@@ -56,7 +88,10 @@ export default function ReceiptPage() {
 
   return (
     <main className="min-h-screen px-4 py-8">
-      <article className="glass-card mx-auto w-full max-w-sm px-5 pb-6 pt-6" aria-label={`Struk ${r.business_name}`}>
+      {/* The receipt comes out of the slot the way paper does, and ends in a
+          torn edge: the same slip the counter prints, kept on a phone. */}
+      <div className="receipt-shadow mx-auto w-full max-w-sm">
+      <article className="receipt-paper px-5 pb-9 pt-6" aria-label={`Struk ${r.business_name}`}>
         <header className="text-center">
           {r.business_logo ? (
             <h1>
@@ -139,9 +174,23 @@ export default function ReceiptPage() {
           </p>
         </footer>
       </article>
-      <p className="ink-faint mx-auto mt-4 max-w-sm text-center text-xs">
-        Simpan halaman ini, atau ambil tangkapan layar, sebagai bukti pembayaran.
-      </p>
+      </div>
+      <div className="receipt-after mx-auto mt-5 flex max-w-sm flex-col items-center gap-3">
+        <button type="button" onClick={() => void keep(`Struk ${r.business_name}`)} className="btn-quiet px-5 py-2.5 text-sm">
+          {shared === "copied" ? (
+            <>
+              <IconCheck className="h-4 w-4" /> Tautan tersalin
+            </>
+          ) : (
+            <>
+              <IconUpload className="h-4 w-4" /> Simpan struk
+            </>
+          )}
+        </button>
+        <p className="ink-faint text-center text-xs">
+          Simpan halaman ini, atau ambil tangkapan layar, sebagai bukti pembayaran.
+        </p>
+      </div>
     </main>
   );
 }

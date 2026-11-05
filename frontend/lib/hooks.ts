@@ -83,3 +83,18 @@ export function useOwnerMutation() {
     [router]
   );
 }
+
+/** True once the viewport is at least `px` wide. For the few layouts CSS
+ * alone cannot express (splitting one list into two cards); everything else
+ * is a breakpoint class. Starts false, so the phone layout is the first paint. */
+export function useMinWidth(px: number): boolean {
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia(`(min-width: ${px}px)`);
+    const sync = () => setWide(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, [px]);
+  return wide;
+}

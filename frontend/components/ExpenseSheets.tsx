@@ -6,7 +6,8 @@ import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import { readPhoto, todayIso, type Photo } from "@/lib/photo";
 import type { InventoryItem } from "@/lib/types";
-import { Sheet } from "@/components/ui";
+import { MoneyInput, Sheet } from "@/components/ui";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { Select } from "@/components/Select";
 import { FormHint, missingText } from "@/components/FormHint";
 import { IconAlert, IconCamera, IconCheck, IconClose } from "@/components/icons";
@@ -26,7 +27,6 @@ export const EXPENSE_CATEGORIES: { value: string; label: string }[] = [
   { value: "lainnya", label: "Lainnya" },
 ];
 
-const digits = (v: string) => v.replace(/[^0-9]/g, "");
 const errText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.detail : e instanceof Error ? e.message : fallback);
 
 /** A photo slot: pick, preview, remove. */
@@ -133,13 +133,12 @@ export function AddExpenseSheet({
       <div className="space-y-4">
         <label className="block">
           <span className="ink-soft mb-1.5 block text-[13px] font-medium">Jumlah (Rp)</span>
-          <input
+          <MoneyInput
             autoFocus
-            inputMode="numeric"
-            className="field py-3 text-2xl font-semibold tabular-nums"
+            className="field py-3 text-2xl font-semibold"
             placeholder="0" aria-required="true"
-            value={amount ? Number(amount).toLocaleString("id-ID") : ""}
-            onChange={(e) => setAmount(digits(e.target.value).slice(0, 10))}
+            value={amount}
+            onValue={setAmount}
           />
         </label>
         <div>
@@ -162,13 +161,14 @@ export function AddExpenseSheet({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="ink-soft mb-1.5 block text-[13px] font-medium">Tanggal</span>
-            <input
-              type="date"
-              className="field"
-              value={day}
+            <DateRangePicker
+              single
+              variant="field"
+              placeholder="Hari ini"
+              since={day}
+              until={day}
               max={todayIso()}
-              onChange={(e) => setDay(e.target.value)}
-              aria-invalid={future || undefined}
+              onChange={(d) => setDay(d)}
             />
           </label>
           <label className="block">
@@ -432,7 +432,15 @@ export function NotaScanButton({ onSaved, onManual }: { onSaved: (message: strin
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-[13px] font-medium">Tanggal nota</span>
-                <input type="date" className="field" max={todayIso()} value={notaDate} onChange={(e) => setNotaDate(e.target.value)} />
+                <DateRangePicker
+                  single
+                  variant="field"
+                  placeholder="Tanggal di nota"
+                  since={notaDate}
+                  until={notaDate}
+                  max={todayIso()}
+                  onChange={(d) => setNotaDate(d)}
+                />
               </label>
             </div>
 
@@ -449,11 +457,11 @@ export function NotaScanButton({ onSaved, onManual }: { onSaved: (message: strin
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <label className="block">
                         <span className="ink-faint text-xs">Harga satuan</span>
-                        <input className="field py-2 text-sm tabular-nums" inputMode="numeric" value={l.unitPrice} onChange={(e) => set(l.key, { unitPrice: digits(e.target.value) })} />
+                        <MoneyInput className="field py-2 text-sm" value={l.unitPrice} onValue={(v) => set(l.key, { unitPrice: v })} />
                       </label>
                       <label className="block">
                         <span className="ink-faint text-xs">Total baris</span>
-                        <input className="field py-2 text-sm tabular-nums" inputMode="numeric" value={l.lineTotal} onChange={(e) => set(l.key, { lineTotal: digits(e.target.value) })} />
+                        <MoneyInput className="field py-2 text-sm" value={l.lineTotal} onValue={(v) => set(l.key, { lineTotal: v })} />
                       </label>
                     </div>
                     <div className="mt-2">
@@ -476,7 +484,7 @@ export function NotaScanButton({ onSaved, onManual }: { onSaved: (message: strin
 
             <label className="block">
               <span className="ink-soft mb-1.5 block text-[13px] font-medium">Total nota (Rp)</span>
-              <input className="field py-3 text-xl font-semibold tabular-nums" inputMode="numeric" value={total} onChange={(e) => setTotal(digits(e.target.value))} />
+              <MoneyInput className="field py-3 text-xl font-semibold" value={total} onValue={setTotal} />
             </label>
             <p className="ink-soft text-sm tabular-nums">
               {stocked.length} baris masuk stok ({formatRupiah(stockedValue)}) ·{" "}

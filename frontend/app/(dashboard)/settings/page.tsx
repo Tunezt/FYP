@@ -7,7 +7,8 @@ import { Select } from "@/components/Select";
 import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { ApiError } from "@/lib/api";
 import { ORDER_TYPE_LABEL, type Business, type LoyaltySettings, type OrderType, type PricingSettings, type StaffMember } from "@/lib/types";
-import { CopyField, Plate, Sheet, Skeleton } from "@/components/ui";
+import { CopyField, MoneyInput, Plate, Sheet, Skeleton } from "@/components/ui";
+import { SectionIndex } from "@/components/SectionIndex";
 import { HelpTip } from "@/components/HelpTip";
 import { PinLockouts } from "@/components/PinLockouts";
 import { PrinterTokens } from "@/components/PrinterTokens";
@@ -53,6 +54,21 @@ function toForm(p: PricingSettings | null | undefined): PricingForm {
     tax_label: p?.tax_label ?? "Pajak",
   };
 }
+
+/** The page's contents, in its order: what the index on the side (or the
+ * chips on a phone) lists and follows. */
+const SETTINGS_INDEX = [
+  { id: "profil", label: "Profil usaha" },
+  { id: "struk", label: "Data di struk" },
+  { id: "pajak", label: "Pajak & service" },
+  { id: "poin", label: "Program poin" },
+  { id: "staf", label: "Staf kasir" },
+  { id: "kasir", label: "Layar kasir" },
+  { id: "printer", label: "Printer" },
+  { id: "menu-qr", label: "Menu QR" },
+  { id: "template", label: "Template stok" },
+  { id: "impor", label: "Impor katalog" },
+];
 
 type LoyaltyForm = { is_active: boolean; rupiah_per_point: string; point_value: string; min_redeem_points: string };
 
@@ -309,13 +325,19 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="animate-fade-up max-w-3xl space-y-8">
-      <h1 className="page-title">Pengaturan</h1>
+    <div className="animate-fade-up">
+      <h1 className="page-title mb-5 xl:mb-7">Pengaturan</h1>
+      {/* Sticky to the page itself, so it stays under the thumb all the way down. */}
+      <div className="index-chips sticky top-0 z-20 -mx-4 px-4 py-2.5 md:-mx-6 md:px-6 xl:hidden">
+        <SectionIndex entries={SETTINGS_INDEX} variant="chips" />
+      </div>
+      <div className="mt-4 xl:mt-0 xl:grid xl:grid-cols-[minmax(0,48rem)_12.5rem] xl:gap-14 2xl:gap-20">
+      <div className="settings-flow min-w-0 max-w-3xl">
 
       {/* Business profile */}
-      <section>
+      <section id="profil">
         <h2 className="mb-2 section-title">Profil usaha</h2>
-        {business.loading ? (
+        {business.loading && !business.data ? (
           <Skeleton className="h-40" />
         ) : (
           <Plate className="space-y-3 px-6 py-5">
@@ -391,10 +413,12 @@ export default function SettingsPage() {
 
 
       {/* till-5a: the café's details printed under its name on every receipt */}
-      <ReceiptDetails business={b} loading={business.loading} onSaved={business.reload} />
+      <div id="struk">
+        <ReceiptDetails business={b} loading={business.loading} onSaved={business.reload} />
+      </div>
 
       {/* Pricing (M7-T4): tax, service charge, rounding, discount gate */}
-      <section>
+      <section id="pajak">
         <h2 className="mb-2 flex items-center gap-2 section-title">
           Pajak, service &amp; pembulatan
           <HelpTip title="Cara struk dihitung">
@@ -404,7 +428,7 @@ export default function SettingsPage() {
             tercatat tidak berubah.
           </HelpTip>
         </h2>
-        {pricing.loading ? (
+        {pricing.loading && !pricing.data ? (
           <Skeleton className="h-56" />
         ) : (
           <Plate className="space-y-4 px-6 py-5">
@@ -514,11 +538,10 @@ export default function SettingsPage() {
             </div>
             <label className="block sm:w-1/2">
               <span className="ink-soft mb-1.5 block text-[13px] font-medium">Ongkos kirim pesanan antar (Rp)</span>
-              <input
+              <MoneyInput
                 className="field"
-                inputMode="numeric"
                 value={pricingForm.delivery_fee}
-                onChange={(e) => setPricingDraft({ ...pricingForm, delivery_fee: e.target.value.replace(/[^0-9]/g, "") })}
+                onValue={(v) => setPricingDraft({ ...pricingForm, delivery_fee: v })}
                 placeholder="0"
               />
               <span className="ink-faint mt-1 block text-xs">
@@ -590,7 +613,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Points programme (M8-T2) */}
-      <section>
+      <section id="poin">
         <h2 className="mb-2 flex items-center gap-2 section-title">
           Program poin
           <HelpTip title="Cara poin bekerja">
@@ -599,7 +622,7 @@ export default function SettingsPage() {
             pembukuan sebagai beban pemasaran dan liabilitas poin, jadi laporan tetap jujur.
           </HelpTip>
         </h2>
-        {loyalty.loading ? (
+        {loyalty.loading && !loyalty.data ? (
           <Skeleton className="h-40" />
         ) : (
           <Plate className="space-y-4 px-6 py-5">
@@ -618,20 +641,18 @@ export default function SettingsPage() {
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-[13px] font-medium">Belanja per 1 poin (Rp)</span>
-                <input
+                <MoneyInput
                   className="field"
-                  inputMode="numeric"
                   value={loyaltyForm.rupiah_per_point}
-                  onChange={(e) => setLoyaltyDraft({ ...loyaltyForm, rupiah_per_point: e.target.value.replace(/[^0-9]/g, "") })}
+                  onValue={(v) => setLoyaltyDraft({ ...loyaltyForm, rupiah_per_point: v })}
                 />
               </label>
               <label className="block">
                 <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nilai 1 poin saat dipakai (Rp)</span>
-                <input
+                <MoneyInput
                   className="field"
-                  inputMode="numeric"
                   value={loyaltyForm.point_value}
-                  onChange={(e) => setLoyaltyDraft({ ...loyaltyForm, point_value: e.target.value.replace(/[^0-9]/g, "") })}
+                  onValue={(v) => setLoyaltyDraft({ ...loyaltyForm, point_value: v })}
                 />
               </label>
               <label className="block">
@@ -662,7 +683,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Staff */}
-      <section>
+      <section id="staf">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 section-title">
             Staf kasir
@@ -677,7 +698,7 @@ export default function SettingsPage() {
             <IconPlus className="h-4 w-4" /> Tambah staf
           </button>
         </div>
-        {staff.loading ? (
+        {staff.loading && !staff.data ? (
           <Skeleton className="h-24" />
         ) : (
           <ul className="group-card group-body">
@@ -756,7 +777,7 @@ export default function SettingsPage() {
       <PinLockouts tz={b?.timezone} />
 
       {/* POS pairing */}
-      <section>
+      <section id="kasir">
         <h2 className="mb-2 flex items-center gap-2 section-title">
           Layar kasir (POS)
           <HelpTip title="Layar kasir">
@@ -849,10 +870,12 @@ export default function SettingsPage() {
       </section>
 
       {/* prt-4: printer device tokens */}
-      <PrinterTokens />
+      <div id="printer">
+        <PrinterTokens />
+      </div>
 
       {/* QR e-menu (M11-T1) */}
-      <section>
+      <section id="menu-qr">
         <h2 className="mb-2 flex items-center gap-2 section-title">
           Menu QR untuk meja
           <HelpTip title="Menu QR">
@@ -887,7 +910,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Stock template */}
-      <section>
+      <section id="template">
         <h2 className="mb-2 section-title">Template stok</h2>
         <p className="ink-soft mb-3 max-w-lg text-sm">
           Isi template Excel ini lalu kirim ke asisten WhatsApp untuk mengisi stok awal sekaligus.
@@ -918,7 +941,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Catalogue import (M4-T6) */}
-      <section>
+      <section id="impor">
         <h2 className="mb-2 section-title">Impor katalog</h2>
         <p className="ink-soft mb-3 max-w-lg text-sm">
           Satu berkas Excel untuk barang, ukuran (varian), pilihan tambahan, satuan, konversi, dan resep.
@@ -970,6 +993,14 @@ export default function SettingsPage() {
           </p>
         )}
       </section>
+
+      </div>
+      <aside className="hidden xl:block">
+        <div className="sticky top-8">
+          <SectionIndex entries={SETTINGS_INDEX} variant="rail" />
+        </div>
+      </aside>
+      </div>
 
       <Sheet open={pinFor !== null} onClose={() => setPinFor(null)} title={`Ganti PIN ${pinFor?.name ?? ""}`}>
         <div className="space-y-3">

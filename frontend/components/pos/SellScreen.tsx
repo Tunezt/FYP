@@ -9,6 +9,8 @@ import { IconCheck, IconClose, IconLock, IconNote, IconPrinter, IconSearch, Icon
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Wordmark } from "@/components/Wordmark";
 import { formatQty, formatRupiah, initials } from "@/lib/format";
+import { Figure } from "@/components/motion";
+import { MoneyInput } from "@/components/ui";
 import {
   displayName,
   freshSelection,
@@ -1002,7 +1004,7 @@ export function SellScreen({
         className="glass-card group relative flex min-h-[5.75rem] flex-col items-start px-3.5 py-3 text-left transition-[transform,box-shadow] duration-150 hover:shadow-key active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100"
       >
         {inCart > 0 && (
-          <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[color:var(--accent-fill)] px-1.5 text-xs font-semibold tabular-nums text-[color:var(--on-accent)]">
+          <span key={inCart} className="badge-pop absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[color:var(--accent-fill)] px-1.5 text-xs font-semibold tabular-nums text-[color:var(--on-accent)]">
             {inCart}
           </span>
         )}
@@ -1259,7 +1261,9 @@ export function SellScreen({
                     {tableBill && cart.length > 0 && !tableLabel.trim() && <span style={{ color: "var(--warn)" }}> · isi nomor meja</span>}
                     {count > 0 && !orderType && <span style={{ color: "var(--warn)" }}> · pilih jenis pesanan</span>}
                   </p>
-                  <p className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{formatRupiah(cartTotal)}</p>
+                  <p className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">
+                    <Figure value={Number(cartTotal)} quick />
+                  </p>
                 </button>
                 <button onClick={() => setDrawer(true)} className="btn-quiet px-4 py-3 text-sm">
                   Pesanan
@@ -1392,11 +1396,11 @@ export function SellScreen({
             </div>
             <label className="relative mt-4 block">
               <span className="ink-faint pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium">Rp</span>
-              <input
+              <MoneyInput
                 autoFocus
-                inputMode="numeric"
-                value={lineDiscountDraft ? Number(lineDiscountDraft).toLocaleString("id-ID") : ""}
-                onChange={(e) => setLineDiscountDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 9))}
+                maxDigits={9}
+                value={lineDiscountDraft}
+                onValue={setLineDiscountDraft}
                 onKeyDown={(e) => e.key === "Enter" && save()}
                 className="field py-3 pl-12 text-2xl font-semibold tabular-nums"
                 placeholder="0"
@@ -1583,7 +1587,7 @@ export function SellScreen({
                 </label>
                 <label className="block">
                   <span className="text-[13px] font-medium">Diskon struk (Rp)</span>
-                  <input inputMode="numeric" value={billDiscount} onChange={(e) => setBillDiscount(e.target.value.replace(/[^0-9]/g, ""))} className="field mt-1 text-sm tabular-nums" placeholder="0" />
+                  <MoneyInput value={billDiscount} onValue={setBillDiscount} className="field mt-1 text-sm" placeholder="0" />
                 </label>
                 {quote?.voucher_error && voucherCode.trim() && <p className="col-span-2 text-xs text-[color:var(--bad)]">{quote.voucher_error}</p>}
                 {needsPin && (
@@ -1636,7 +1640,7 @@ export function SellScreen({
                   <label className="text-[13px] font-medium" htmlFor="cash-part">
                     Bagian tunai (sisanya QRIS)
                   </label>
-                  <input id="cash-part" inputMode="numeric" value={cashPart} onChange={(e) => setCashPart(e.target.value.replace(/[^0-9]/g, ""))} placeholder="0" aria-required="true" className="field mt-1 py-3 text-xl font-semibold tabular-nums" />
+                  <MoneyInput id="cash-part" value={cashPart} onValue={setCashPart} placeholder="0" aria-required="true" className="field mt-1 py-3 text-xl font-semibold" />
                   <p className="ink-soft mt-1 text-sm tabular-nums">
                     Tunai {formatRupiah(cashAmount)} · QRIS {formatRupiah(Math.max(0, qrisAmount))}
                     {!splitValid && cashPart !== "" && " — tunai harus di antara 0 dan total"}
@@ -1648,11 +1652,10 @@ export function SellScreen({
                   <label className="text-[13px] font-medium" htmlFor="tendered">
                     Uang diterima <span className="ink-faint font-normal">(opsional, untuk kembalian)</span>
                   </label>
-                  <input
+                  <MoneyInput
                     id="tendered"
-                    inputMode="numeric"
-                    value={tendered ? Number(tendered).toLocaleString("id-ID") : ""}
-                    onChange={(e) => setTendered(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
+                    value={tendered}
+                    onValue={setTendered}
                     placeholder={formatRupiah(cashAmount)}
                     className="field mt-1 py-3 text-xl font-semibold tabular-nums"
                     aria-invalid={tenderedShort || undefined}
@@ -1685,8 +1688,10 @@ export function SellScreen({
                 </p>
               )}
               <div className="mt-5 flex gap-2">
+                {/* Not "Kembali": on a payment screen that word is the change
+                    handed back, and the receipt prints it that way. */}
                 <button onClick={() => setPaying(false)} disabled={busy} className="btn-quiet px-5 py-3.5">
-                  Kembali
+                  Ubah pesanan
                 </button>
                 <button onClick={confirmPay} disabled={busy || !!payMissing} className="btn-accent flex-1 py-3.5 text-base">
                   {busy ? "Memproses…" : `Terima ${formatRupiah(moneyDue)}`}
@@ -1735,7 +1740,7 @@ export function SellScreen({
             ) : null}
             <label className="mt-5 block">
               <span className="text-[13px] font-medium">{shiftSheet === "open" ? "Modal awal (Rp)" : "Uang dihitung (Rp)"}</span>
-              <input autoFocus inputMode="numeric" value={shiftAmount} onChange={(e) => setShiftAmount(e.target.value.replace(/[^0-9]/g, ""))} className="field mt-1 py-3 text-2xl font-semibold tabular-nums" placeholder="0" aria-required="true" />
+              <MoneyInput autoFocus value={shiftAmount} onValue={setShiftAmount} className="field mt-1 py-3 text-2xl font-semibold" placeholder="0" aria-required="true" />
             </label>
             {shiftSheet === "close" && <input value={shiftNote} onChange={(e) => setShiftNote(e.target.value)} className="field mt-3 text-sm" placeholder="Catatan (opsional)" />}
             {shiftError && <p className="notice notice-bad mt-3">{shiftError}</p>}
@@ -1764,11 +1769,10 @@ export function SellScreen({
             <p className="ink-soft mt-1 text-sm">Hitung uang di laci, lalu isi modal awalnya. Penjualan baru bisa diterima setelah shift dibuka.</p>
             <label className="mt-5 block">
               <span className="text-[13px] font-medium">Modal awal di laci (Rp)</span>
-              <input
+              <MoneyInput
                 autoFocus
-                inputMode="numeric"
-                value={shiftAmount ? Number(shiftAmount).toLocaleString("id-ID") : ""}
-                onChange={(e) => setShiftAmount(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
+                value={shiftAmount}
+                onValue={setShiftAmount}
                 onKeyDown={(e) => e.key === "Enter" && void openShiftNow()}
                 className="field mt-1 py-3 text-2xl font-semibold tabular-nums"
                 placeholder="0" aria-required="true"
@@ -1829,7 +1833,7 @@ export function SellScreen({
             </div>
             <label className="mt-4 block">
               <span className="text-[13px] font-medium">Jumlah (Rp)</span>
-              <input autoFocus inputMode="numeric" value={cashInput} onChange={(e) => setCashInput(e.target.value.replace(/[^0-9]/g, ""))} className="field mt-1 py-3 text-2xl font-semibold tabular-nums" placeholder="0" aria-required="true" />
+              <MoneyInput autoFocus value={cashInput} onValue={setCashInput} className="field mt-1 py-3 text-2xl font-semibold" placeholder="0" aria-required="true" />
             </label>
             <input value={cashReason} onChange={(e) => setCashReason(e.target.value)} className="field mt-3 text-sm" placeholder={cashKind === "petty_cash" ? "Beli apa? (mis. es batu)" : "Alasan"} aria-required="true" />
             {cashKind === "petty_cash" && (

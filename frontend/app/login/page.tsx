@@ -1,8 +1,9 @@
 "use client";
 
 import { BrandMark } from "@/components/ui";
+import { GlassLight, MoonSpinner, shake, travel, travelArrived } from "@/components/motion";
 import { FormHint, missingText } from "@/components/FormHint";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError, OWNER_TOKEN_KEY } from "@/lib/api";
 import { demoAllowed, disableDemo, enableDemo } from "@/lib/demo";
@@ -18,7 +19,11 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // A refused PIN shakes its head.
+  const pinRef = useRef<HTMLLabelElement>(null);
+
   useEffect(() => {
+    travelArrived(); // logging out travels back here
     // ?demo=1 jumps straight in; otherwise just reveal the button.
     setShowDemo(demoAllowed());
     if (demoAllowed() && new URLSearchParams(window.location.search).get("demo") === "1") {
@@ -29,7 +34,7 @@ export default function LoginPage() {
 
   function startDemo() {
     enableDemo();
-    router.replace("/overview");
+    travel(() => router.replace("/overview"));
   }
 
   const ready = phone.replace(/\D/g, "").length >= 8 && pin.length >= 4;
@@ -44,9 +49,10 @@ export default function LoginPage() {
       if (res.token) {
         disableDemo();   // till-17: a real login ends the demo, or every save is silently faked
         localStorage.setItem(OWNER_TOKEN_KEY, res.token);
-        router.replace("/overview");
+        travel(() => router.replace("/overview"));
       }
     } catch (e) {
+      shake(pinRef.current);
       if (e instanceof ApiError) {
         setError(e.detail);
       } else {
@@ -60,15 +66,31 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm animate-scale-in">
-        <div className="mb-8 text-center">
-          <h1 className="flex justify-center">
-            <BrandMark size="lg" />
-          </h1>
+    <main className="flex min-h-screen items-center justify-center px-4 py-8">
+      <GlassLight />
+      <div className="pair-in grid w-full max-w-[26rem] gap-4 lg:max-w-[60rem] lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-5">
+        {/* The sign. On a phone it is the wordmark above the form; from a
+            laptop up it gets its own ink pane, lit, the way it hangs in the
+            café. */}
+        <h1 className="sr-only">Masuk ke Poernama</h1>
+        <div className="flex justify-center pb-2 pt-4 lg:hidden">
+          <BrandMark size="lg" className="travel-sign" />
         </div>
+        {/* One centred composition: the sign hangs in the middle of the pane
+            with its light pooled on the wall behind it, and the line of copy
+            sits under it on the same axis. */}
+        <section className="ink-card ink-card-lit hidden min-h-[30rem] flex-col items-center px-9 pb-10 pt-9 text-center lg:flex">
+          <div className="flex w-full flex-1 items-center justify-center">
+            <BrandMark size="lg" lit className="travel-sign !w-[17rem] translate-x-[3px]" />
+          </div>
+          <div className="shell-divider mb-7 h-px w-10" aria-hidden />
+          <p className="display-voice max-w-[19rem] text-[1.375rem] font-normal leading-[1.3] tracking-[-0.01em] [text-wrap:balance]">
+            Kasir, stok dan pembukuan Poernama, di satu tempat.
+          </p>
+        </section>
 
-        <div className="glass-card px-6 pb-6 pt-5">
+        <div className="glass-card flex flex-col justify-center px-6 pb-6 pt-6 sm:px-8 sm:py-9">
+          <h2 className="page-title mb-6 hidden !text-[1.75rem] lg:block">Masuk</h2>
           <label className="block">
             <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nomor HP pemilik</span>
             <input
@@ -81,7 +103,7 @@ export default function LoginPage() {
               autoFocus
             />
           </label>
-          <label className="mt-4 block">
+          <label ref={pinRef} className="mt-4 block">
             <span className="ink-soft mb-1.5 block text-[13px] font-medium">PIN pemilik</span>
             <input
               className="field py-3 text-center text-2xl font-semibold tabular-nums tracking-[0.45em]"
@@ -105,7 +127,13 @@ export default function LoginPage() {
             disabled={busy || !ready}
             className="btn-accent mt-5 w-full py-3.5"
           >
-            {busy ? "Memeriksa…" : "Masuk"}
+            {busy ? (
+              <>
+                <MoonSpinner /> Memeriksa…
+              </>
+            ) : (
+              "Masuk"
+            )}
           </button>
           {!busy && (
             <FormHint
@@ -126,11 +154,11 @@ export default function LoginPage() {
               </p>
             </div>
           )}
-        </div>
 
-        <p className="ink-faint mx-auto mt-6 max-w-xs text-center text-[13px] leading-relaxed">
-          Belum punya akun? Hubungi Poernama untuk didaftarkan.
-        </p>
+          <p className="ink-faint mt-6 text-center text-[13px] leading-relaxed">
+            Belum punya akun? Hubungi Poernama untuk didaftarkan.
+          </p>
+        </div>
       </div>
     </main>
   );

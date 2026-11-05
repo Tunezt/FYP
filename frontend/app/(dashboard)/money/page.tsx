@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { useOwnerData } from "@/lib/hooks";
 import { formatRupiah } from "@/lib/format";
 import { dayLabel, daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
@@ -21,15 +20,8 @@ import { HelpTip } from "@/components/HelpTip";
 import { IconCamera, IconChevronLeft, IconChevronRight, IconNote, IconPlus, IconReceipt, IconShield } from "@/components/icons";
 import { AddExpenseSheet, EXPENSE_CATEGORIES, NotaScanButton } from "@/components/ExpenseSheets";
 import type { Photo } from "@/lib/photo";
-
-const MONTH_LABEL = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-
-function monthName(ym: string): string {
-  const m = Number(ym.slice(5)) - 1;
-  return MONTH_LABEL[m] ?? ym;
-}
-
-const compact = new Intl.NumberFormat("id-ID", { notation: "compact" });
+import { Figure } from "@/components/motion";
+import { PnlBars } from "@/components/charts";
 
 const CASH_KIND_LABEL: Record<CashMovementRow["kind"], string> = {
   cash_in: "Kas masuk",
@@ -93,16 +85,7 @@ export default function MoneyPage() {
   return (
     <div className="animate-fade-up space-y-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="page-title">Keuangan</h1>
-          {current && (
-            <p className="ink-soft mt-1 text-sm">
-              Bulan ini <span className="font-semibold tabular-nums">{formatRupiah(current.revenue)}</span> masuk
-              {" · "}
-              <span className="font-semibold tabular-nums">{formatRupiah(current.expenses)}</span> keluar
-            </p>
-          )}
-        </div>
+        <h1 className="page-title">Keuangan</h1>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => {
@@ -129,8 +112,43 @@ export default function MoneyPage() {
       )}
       <AddExpenseSheet open={addOpen} initialPhoto={addPhoto} onClose={() => setAddOpen(false)} onSaved={afterSave} />
 
-      {/* HERO — P&L */}
-      <Glass className="px-5 pb-5 pt-5 md:px-6">
+      <div className="grid gap-4 xl:grid-cols-12 xl:gap-5">
+      {/* This month, on the page's one ink pane */}
+      <section className="ink-card flex flex-col p-5 md:p-6 xl:col-span-4">
+        <h2 className="ink-soft text-sm font-medium">Untung bulan ini</h2>
+        {current ? (
+          <>
+            <p className="figure mt-4 text-[2.5rem] sm:text-[3rem] xl:text-[2.5rem] 2xl:text-[3rem]">
+              {current.net < 0 ? "− " : ""}
+              <Figure value={Math.abs(current.net)} />
+            </p>
+            <dl className="mt-auto space-y-0 pt-8 text-sm">
+              <div className="flex items-baseline justify-between gap-3 py-2.5">
+                <dt className="ink-soft flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full" style={{ background: "var(--glow)" }} aria-hidden />
+                  Masuk
+                </dt>
+                <dd className="font-semibold tabular-nums">{formatRupiah(current.revenue)}</dd>
+              </div>
+              <div className="hairline-t flex items-baseline justify-between gap-3 py-2.5">
+                <dt className="ink-soft flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-white/40" aria-hidden />
+                  Keluar
+                </dt>
+                <dd className="font-semibold tabular-nums">{formatRupiah(current.expenses)}</dd>
+              </div>
+            </dl>
+          </>
+        ) : (
+          <div className="mt-4 flex flex-1 animate-pulse flex-col gap-4">
+            <span className="h-11 w-56 max-w-full rounded-2xl bg-white/10" />
+            <span className="mt-auto h-16 rounded-2xl bg-white/10" />
+          </div>
+        )}
+      </section>
+
+      {/* P&L */}
+      <Glass className="px-5 pb-5 pt-5 md:px-6 md:pt-6 xl:col-span-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 section-title">
             Untung / rugi 6 bulan
@@ -142,72 +160,24 @@ export default function MoneyPage() {
           {/* Legend — identity never by color alone (labels beside marks) */}
           <div className="ink-soft flex items-center gap-4 text-xs font-medium">
             <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--chart-1)" }} />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--chart-1)" }} />
               Masuk
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--chart-2)" }} />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--chart-2)" }} />
               Keluar
             </span>
           </div>
         </div>
-        <div className="mt-2 h-56 w-full">
+        <div className="mt-3 h-64 w-full md:h-72">
           {pnl.data ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={pnl.data} margin={{ top: 8, left: 4, right: 4 }} barGap={2}>
-                <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-                <XAxis
-                  dataKey="month"
-                  tickFormatter={monthName}
-                  tick={{ fontSize: 12, fill: "var(--ink-faint)" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  cursor={{ fill: "var(--chart-grid)" }}
-                  content={({ active, payload }) =>
-                    active && payload?.length ? (
-                      <div className="rounded-xl bg-[color:var(--surface-float)] px-3 py-2 text-xs shadow-pop">
-                        <p className="ink-soft">{(payload[0].payload as PnlMonth).month}</p>
-                        <p className="font-semibold tabular-nums">
-                          masuk {formatRupiah((payload[0].payload as PnlMonth).revenue)}
-                        </p>
-                        <p className="ink-soft tabular-nums">
-                          keluar {formatRupiah((payload[0].payload as PnlMonth).expenses)}
-                        </p>
-                        <p className="font-bold tabular-nums">
-                          net {formatRupiah((payload[0].payload as PnlMonth).net)}
-                        </p>
-                      </div>
-                    ) : null
-                  }
-                />
-                <Bar dataKey="revenue" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                <Bar dataKey="expenses" fill="var(--chart-2)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-              </BarChart>
-            </ResponsiveContainer>
+            <PnlBars months={pnl.data} />
           ) : (
             <Skeleton className="h-44" />
           )}
         </div>
-        {pnl.data && (
-          <div className="mt-2 grid grid-cols-6 gap-1">
-            {pnl.data.map((m) => (
-              <p key={m.month} className="text-center">
-                <span
-                  className={`text-xs font-semibold tabular-nums ${
-                    m.net >= 0 ? "text-[color:var(--good)]" : "text-[color:var(--bad)]"
-                  }`}
-                >
-                  {m.net >= 0 ? "+" : "−"}
-                  {compact.format(Math.abs(m.net))}
-                </span>
-              </p>
-            ))}
-          </div>
-        )}
       </Glass>
-
+      </div>
 
       {/* Till report (M7-T3) — every closed shift with the sum its count was
           checked against, and the cash that moved through it. */}
@@ -220,7 +190,7 @@ export default function MoneyPage() {
             ikut menghitung kas yang hilang atau lebih.
           </HelpTip>
         </h2>
-        {shifts.loading ? (
+        {shifts.loading && !shifts.data ? (
           <Skeleton className="mt-3 h-40" />
         ) : shifts.error && !shifts.data ? (
           <Plate className="mt-3">
@@ -234,7 +204,7 @@ export default function MoneyPage() {
             </EmptyState>
           </Plate>
         ) : (
-          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1640px]:grid-cols-4">
             {shifts.data.map((shift) => {
               const variance = Number(shift.variance ?? 0);
               const open = shift.status === "open";
@@ -336,7 +306,7 @@ export default function MoneyPage() {
             nilainya. Kalau ada yang tidak kamu kenali, tanyakan hari itu juga.
           </HelpTip>
         </h2>
-        {approvals.loading ? (
+        {approvals.loading && !approvals.data ? (
           <Skeleton className="mt-3 h-32" />
         ) : (approvals.data ?? []).length === 0 ? (
           <Plate className="mt-3">
@@ -405,7 +375,7 @@ export default function MoneyPage() {
               setUntil("");
             }}
           />
-          {expenses.loading ? (
+          {expenses.loading && !expenses.data ? (
             <Skeleton className="mt-3 h-56" />
           ) : expenses.error && !expenses.data ? (
             <Plate className="mt-3">
@@ -489,7 +459,7 @@ export default function MoneyPage() {
         {/* Receipts */}
         <section className="lg:col-span-2">
           <h2 className="section-title">Nota terakhir</h2>
-          {receipts.loading ? (
+          {receipts.loading && !receipts.data ? (
             <Skeleton className="mt-3 h-56" />
           ) : receipts.error && !receipts.data ? (
             <Plate className="mt-3">
