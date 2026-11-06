@@ -2567,3 +2567,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Printer, bridge, pairing, slip and print-job code untouched.
 **Deviation:** not a roadmap task; owner's instruction in chat (M12, Meta setup).
 **Next:** owner clicks Verify domain for poernama.com, then submits business verification with the NPWP.
+
+
+### [meta-3] The legal name is on the website, as Meta's verification asks
+**Date:** 2026-11-06
+**Status:** done and pushed at the owner's instruction
+**Changed:** frontend/components/LegalPage.tsx, frontend/app/page.tsx, frontend/app/login/page.tsx, frontend/app/privasi/page.tsx
+**Gates:** pytest 727 passed, 11 failed, 0 skipped (00.07 WIB): the 11 are exactly the known after-midnight clock set (test_eval_harness 2, test_exception_rules 6, test_new_tools 1, test_thesis_agreement 1, test_tools_use_registry 1); no backend file changed. alembic upgrade head / downgrade -1 / upgrade head OK; npm run build OK; seed OK (local Postgres had stopped after the test run and was restarted).
+**Notes:**
+- Business verification came back "more info needed": the legal name (FIRAZ WIANDA FARIC OSCAR, perorangan, as on the NPWP) must be present on the website.
+- One constant, OPERATOR_LEGAL_NAME, and a quiet OperatorLine ("Poernama dikelola oleh ...") now sit under the home splash, the login card and both legal pages; the privacy policy's opening names the operator too. All four are in the server-rendered HTML (checked in the built .html files), which is what Meta reads.
+- Privacy page "Terakhir diperbarui" moved to 6 November 2026, since its text changed.
+- Printer, bridge, pairing, slip and print-job code untouched.
+**Deviation:** not a roadmap task; owner's instruction in chat (M12, Meta setup).
+**Next:** owner resubmits business verification once the deploy is live.

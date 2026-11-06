@@ -8,7 +8,21 @@ import { BrandMark } from "@/components/ui";
 // people to the owner at the café, which is true for a single-shop system.
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || null;
 
-export const UPDATED = "1 Oktober 2026";
+export const UPDATED = "6 November 2026";
+
+// The legal name Poernama is registered under (perorangan, as on the NPWP).
+// Meta's business verification looks for this exact name on the website, so it
+// is spelled as the document spells it and rendered in the server HTML.
+export const OPERATOR_LEGAL_NAME = "FIRAZ WIANDA FARIC OSCAR";
+
+/** The quiet "who runs this" line under the public pages. */
+export function OperatorLine({ className = "" }: { className?: string }) {
+  return (
+    <p className={`ink-faint text-center text-xs leading-relaxed ${className}`}>
+      Poernama dikelola oleh <span className="tracking-wide">{OPERATOR_LEGAL_NAME}</span>
+    </p>
+  );
+}
 
 export function ContactLine() {
   return CONTACT_EMAIL ? (
@@ -46,6 +60,7 @@ export function LegalPage({ title, children }: { title: string; children: React.
             Masuk
           </Link>
         </nav>
+        <OperatorLine className="mt-3" />
       </div>
     </main>
   );

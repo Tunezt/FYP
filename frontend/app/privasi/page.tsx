@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ContactLine, LegalPage, Section } from "@/components/LegalPage";
+import { ContactLine, LegalPage, OPERATOR_LEGAL_NAME, Section } from "@/components/LegalPage";
 
 export const metadata: Metadata = {
   title: "Kebijakan privasi · Poernama",
@@ -12,8 +12,8 @@ export default function PrivacyPage() {
     <LegalPage title="Kebijakan privasi">
       <p>
         Sistem Poernama adalah perangkat lunak kasir, dapur, menu QR, dashboard, dan asisten WhatsApp
-        untuk kafe Poernama. Halaman ini menjelaskan data apa yang disimpan, untuk apa, dan siapa yang
-        ikut memprosesnya.
+        untuk kafe Poernama, dikelola oleh {OPERATOR_LEGAL_NAME} (usaha perorangan, Balikpapan). Halaman
+        ini menjelaskan data apa yang disimpan, untuk apa, dan siapa yang ikut memprosesnya.
       </p>
 
       <Section heading="Data yang disimpan">

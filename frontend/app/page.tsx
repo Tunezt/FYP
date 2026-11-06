@@ -1,6 +1,7 @@
 "use client";
 
 import { BrandMark } from "@/components/ui";
+import { OperatorLine } from "@/components/LegalPage";
 import { MoonSpinner } from "@/components/motion";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -16,7 +17,7 @@ export default function Home() {
   }, [router]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center">
+    <main className="relative flex min-h-screen items-center justify-center">
       <div className="flex animate-scale-in flex-col items-center text-center">
         <BrandMark size="lg" />
         <p className="sr-only">Poernama</p>
@@ -24,6 +25,10 @@ export default function Home() {
           <MoonSpinner /> Menyiapkan dashboard…
         </p>
       </div>
+      {/* In the server HTML of the home page, which is what Meta's verification reads. */}
+      <footer className="absolute inset-x-0 bottom-6 px-4">
+        <OperatorLine />
+      </footer>
     </main>
   );
 }

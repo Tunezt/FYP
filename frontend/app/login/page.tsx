@@ -3,6 +3,7 @@
 import { BrandMark } from "@/components/ui";
 import { GlassLight, MoonSpinner, shake, travel, travelArrived } from "@/components/motion";
 import { FormHint, missingText } from "@/components/FormHint";
+import { OperatorLine } from "@/components/LegalPage";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError, OWNER_TOKEN_KEY } from "@/lib/api";
@@ -158,6 +159,7 @@ export default function LoginPage() {
           <p className="ink-faint mt-6 text-center text-[13px] leading-relaxed">
             Belum punya akun? Hubungi Poernama untuk didaftarkan.
           </p>
+          <OperatorLine className="mt-2" />
         </div>
       </div>
     </main>
