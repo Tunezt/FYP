@@ -2601,3 +2601,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Not changed: otp_fallback still only counts the Meta token as "WhatsApp configured" (the fallback expired on 2026-10-16 anyway). Printer, bridge, pairing, slip, print-job code and WHATSAPP_RECEIPT_NUMBER untouched.
 **Deviation:** not a roadmap task; owner's instruction in chat (M12, WhatsApp).
 **Next:** wa-gw-2, the gateway service.
+
+
+### [wa-gw-2] The WhatsApp gateway service, linked by pairing code
+**Date:** 2026-11-18
+**Status:** done in code; live link waits on the owner (Railway service + pairing code on the phone)
+**Changed:** gateway/ (new): index.mjs, lib.mjs, lib.test.mjs, package.json, package-lock.json, README.md, .gitignore
+**Gates:** same tree as wa-gw-1's gate run (the gateway folder is outside all four gates): pytest 755 passed, 0 skipped, 0 failed; alembic up/down/up OK; npm run build OK; seed OK. Plus `npm test` in gateway/: 7 passed.
+**Notes:**
+- Node 20+, `@whiskeysockets/baileys` 7.0.0-rc14 (npm "latest" since 2026-07-29) and pino, pinned with a lockfile. Runs as a second Railway service: Root Directory `/gateway`, volume at `/data` (session in /data/auth), port 8080.
+- Login by pairing code, no QR: when the number is not linked, the log prints `PAIRING CODE for 62...: ABCD-EFGH`, typed on the phone under Linked devices > Link with phone number instead. Unlinked from the phone: the session is cleared and a new code is printed.
+- Inbound: only people writing to us (not own messages, groups, status, channels, reactions, edits). Text, photos (with caption) and documents are forwarded to BACKEND_WEBHOOK_URL with X-Gateway-Token; photos and files (up to 15 MB) as base64. Voice notes, video, stickers, contacts and locations are forwarded as "unsupported", so the bot says what it can read. Messages are marked read. 5 tries with backoff on a backend 5xx or network error; a 4xx is logged, not retried.
+- Outbound: POST /send {to, text}, Bearer token (constant-time compare), 503 while WhatsApp is not connected. GET /health gives {ok, connected}. `markOnlineOnConnect` off so the phone keeps its notifications.
+- Smoke test (fake number 62000000000, never a real one): the service connected to WhatsApp's servers and got a pairing code; /health 200, /send without token 401, with token while unlinked 503, bad body 400.
+- Not tested: the real link and a real message; that needs the bot's phone.
+**Deviation:** not a roadmap task; owner's instruction in chat (M12, WhatsApp).
+**Next:** owner creates the Railway service, sets the variables, links the number, sends `halo`.
