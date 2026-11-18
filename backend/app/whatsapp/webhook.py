@@ -12,9 +12,10 @@ import hmac
 import json
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query, Request, Response
 
 from app.core.config import get_settings, is_placeholder
+from app.whatsapp.gateway import GatewayMediaInvalid, GatewayMessageIn, to_cloud_payload
 from app.whatsapp.processor import process_webhook_payload
 
 logger = logging.getLogger("webhook")
@@ -60,5 +61,28 @@ async def receive_webhook(request: Request, background: BackgroundTasks):
         raise HTTPException(status_code=400, detail="JSON tidak sah")
 
     # Ack fast; the real work (LLM, DB, reply) happens after the response.
+    background.add_task(process_webhook_payload, payload)
+    return {"status": "received"}
+
+
+@router.post("/gateway")
+async def receive_gateway(
+    message: GatewayMessageIn,
+    background: BackgroundTasks,
+    x_gateway_token: str = Header(default=""),
+):
+    """wa-gw-1: one message from the self-hosted WhatsApp Web gateway. Closed
+    unless WHATSAPP_PROVIDER=gateway; the shared token stands in for Meta's
+    signature."""
+    settings = get_settings()
+    if settings.whatsapp_provider != "gateway":
+        raise HTTPException(status_code=404, detail="Gateway WhatsApp tidak aktif")
+    token = settings.whatsapp_gateway_token
+    if is_placeholder(token) or not hmac.compare_digest(x_gateway_token.encode(), token.encode()):
+        raise HTTPException(status_code=403, detail="Token gateway tidak sah")
+    try:
+        payload = to_cloud_payload(message)
+    except GatewayMediaInvalid:
+        raise HTTPException(status_code=400, detail="Lampiran tidak sah")
     background.add_task(process_webhook_payload, payload)
     return {"status": "received"}

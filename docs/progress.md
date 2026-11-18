@@ -2581,3 +2581,23 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Printer, bridge, pairing, slip and print-job code untouched.
 **Deviation:** not a roadmap task; owner's instruction in chat (M12, Meta setup).
 **Next:** owner resubmits business verification once the deploy is live.
+
+
+### [wa-gw-1] The bot can run through a self-hosted WhatsApp gateway, behind a switch
+**Date:** 2026-11-18
+**Status:** done
+**Changed:** backend/app/core/config.py, backend/app/whatsapp/client.py, backend/app/whatsapp/gateway.py (new), backend/app/whatsapp/webhook.py, backend/.env.example, backend/tests/test_whatsapp_gateway.py (new)
+**Gates:** pytest 755 passed, 0 skipped, 0 failed (23.40 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; npm run build OK; seed OK.
+**Notes:**
+- Why: Meta onboarding of +62 851 2805 6588 stays blocked (error #2494070, business verification wants an NIB, bank statement or utility bill in the legal name). The owner chose an unofficial gateway knowingly, self-hosted (Baileys, wa-gw-2) over Fonnte, so photos and Excel keep working. Ban risk stated to the owner.
+- `WHATSAPP_PROVIDER=cloud|gateway`, default `cloud`: the Meta path is unchanged and stays the default.
+- Inbound: POST /webhooks/gateway takes one flat message from the gateway and turns it into the Cloud API message shape, then runs the same `process_webhook_payload`: STRUK receipts, owner lookup by owner_phone, duplicate-id LRU, text / photo / Excel handlers, request logs. Nothing in the AI pipeline is forked.
+- The route answers 404 unless the provider is `gateway`, and 403 unless `X-Gateway-Token` equals `WHATSAPP_GATEWAY_TOKEN` (constant-time compare; a placeholder token refuses everything). Gateways do not sign like Meta, so this token is the guard.
+- Photos and Excel files arrive base64 inside the webhook and wait in a bounded in-process stash (32) until the processor's `download_media` takes them, once.
+- Outbound: `send_text` posts to `<WHATSAPP_GATEWAY_URL>/send` with the token as Bearer. `send_template` (the nightly `business_alert`) sends the template's approved wording as plain text, id or en; `send_otp_template` sends "<code> adalah kode verifikasi Anda." Dry-run (log only) while the gateway token or URL is unset.
+- A sender WhatsApp shows only by its private id (`...@lid`) is answered on that id.
+- Tests (17): route closed on Meta, wrong/empty/unset token, text/photo/Excel shapes, broken attachment, bounded stash, real pipeline for an unknown sender answered once when delivered twice, Meta still the default route, gateway routing, @lid passthrough, alert and OTP as text, dry-run, gateway refusal raises. HTTP is answered by httpx.MockTransport; live proof needs the owner's phone.
+- First full run had 2 failures (test_invariants posting rules, test_restore_drill): a local "Rules" test business left behind by an interrupted run on 2026-11-05 had no posting rules. Removed that one row the way its fixture teardown does; both passed, then the full suite.
+- Not changed: otp_fallback still only counts the Meta token as "WhatsApp configured" (the fallback expired on 2026-10-16 anyway). Printer, bridge, pairing, slip, print-job code and WHATSAPP_RECEIPT_NUMBER untouched.
+**Deviation:** not a roadmap task; owner's instruction in chat (M12, WhatsApp).
+**Next:** wa-gw-2, the gateway service.

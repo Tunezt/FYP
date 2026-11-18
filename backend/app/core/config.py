@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     # as wa.me/<number> for a WhatsApp receipt. Empty until the Indonesian SIM is
     # registered; while empty the till shows the WhatsApp choice as "Belum aktif".
     whatsapp_receipt_number: str = ""
+    # wa-gw-1: "cloud" (Meta Cloud API, default) or "gateway" (the self-hosted
+    # WhatsApp Web gateway in /gateway, used while Meta verification is parked).
+    # The gateway posts inbound messages to /webhooks/gateway with this token and
+    # takes outbound sends at <url>/send with it as a Bearer token.
+    whatsapp_provider: str = "cloud"
+    whatsapp_gateway_url: str = ""
+    whatsapp_gateway_token: str = "placeholder"
 
     # Auth
     jwt_secret: str = "dev-secret-do-not-use-in-production"
