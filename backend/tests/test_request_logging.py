@@ -82,8 +82,8 @@ async def test_unauthenticated_api_request_writes_no_log(dispose_app_engine):
 
 
 async def test_unregistered_whatsapp_sender_writes_no_log(dispose_app_engine):
-    """An inbound message from a number no business owns gets the free-form
-    "not registered" reply and no request_logs row."""
+    """An inbound message from a number no business owns gets no reply and no
+    request_logs row."""
     before = await _count_null_business_rows()
     unknown_number = "62" + uuid.uuid4().int.__str__()[:11]
 
@@ -97,9 +97,7 @@ async def test_unregistered_whatsapp_sender_writes_no_log(dispose_app_engine):
             }
         )
 
-    send_text.assert_awaited_once()
-    assert send_text.await_args.args[0] == unknown_number
-    assert "belum terdaftar" in send_text.await_args.args[1]
+    send_text.assert_not_awaited()
     assert await _count_null_business_rows() == before
 
 

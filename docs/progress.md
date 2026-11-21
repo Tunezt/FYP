@@ -2617,3 +2617,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Not tested: the real link and a real message; that needs the bot's phone.
 **Deviation:** not a roadmap task; owner's instruction in chat (M12, WhatsApp).
 **Next:** owner creates the Railway service, sets the variables, links the number, sends `halo`.
+
+
+### [wa-gw-3] The bot answers the owner only: strangers get no reply
+**Date:** 2026-11-22
+**Status:** done
+**Changed:** backend/app/whatsapp/processor.py, backend/tests/test_request_logging.py, backend/tests/test_role_separation.py, backend/tests/test_whatsapp_gateway.py, backend/tests/test_whatsapp_receipt.py
+**Gates:** pytest 756 passed, 0 skipped, 0 failed (23.11 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; seed OK; npm run build OK.
+**Notes:**
+- Owner's decision in chat (2026-11-22): the bot number serves the owner only. Customer questions ("buka jam berapa?", "ada ini?") go to the cafe's own WhatsApp (the number on Google Maps), answered by staff by hand, so no AI cost is spent on customers.
+- A message from a number that is not any business's owner_phone now gets no reply at all (was: "Nomor ini belum terdaftar di Poernama..."). Logged at info, no request_logs row (unchanged). A bot that never writes to strangers also keeps the gateway number's ban risk low.
+- Unchanged: `STRUK <kode>` from any number is still answered first (receipt QR, till-7), including "tidak ditemukan" for a wrong code.
+- Tests: the four tests that asserted the old "belum terdaftar" reply now assert silence (the owner changed the spec; no assertion was dropped). The gateway real-pipeline test is split in two: a stranger's message sends nothing; a STRUK request through the gateway is answered once even when delivered twice (keeps the redelivery and /send coverage). Count 755 -> 756.
+**Deviation:** not a roadmap task; owner's instruction in chat (M12, WhatsApp).
+**Next:** link the bot phone (pairing code), switch the backend to the gateway, owner sends `halo`.

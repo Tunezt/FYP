@@ -4,7 +4,7 @@ The customer scans a QR (`wa.me/<bot>?text=STRUK <code>`) and sends the
 message. The bot recognises `STRUK <code>` from any number, finds the paid
 order in whichever café the code belongs to, and replies with the receipt as
 text — free, inside the window the customer opened. Anything else from an
-unknown number still hears "belum terdaftar". The code cannot be walked:
+unknown number gets no reply (owner only, 2026-11-22). The code cannot be walked:
 lookups are rate-limited per sender; and the log is written only under the
 café that owns the receipt, without the customer's number.
 
@@ -156,7 +156,7 @@ async def test_a_wrong_code_finds_nothing_and_anything_else_is_as_before(client,
         await _process_message(_message("halo, mau pesan"))
     replies = [call.args[1] for call in send_text.await_args_list]
     assert "tidak ditemukan" in replies[0] and "tidak ditemukan" in replies[1]
-    assert "belum terdaftar" in replies[2]
+    assert len(replies) == 2  # anything else from an unknown number: no reply
     async with session_factory() as s:
         await _set_tenant(s, c["bid"])
         assert (await s.execute(select(RequestLog).where(RequestLog.path == "receipt"))).scalars().all() == []

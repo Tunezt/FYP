@@ -97,15 +97,11 @@ async def _process_message(message: dict) -> None:
     business = await _resolve_business(sender)
 
     if business is None:
-        # Unknown number: they just messaged us, so the 24h session window is
-        # open and a free-form reply is allowed. No DB log (request_logs RLS
-        # requires a business_id).
-        logger.info("Message from unregistered number %s (type=%s)", sender, msg_type)
-        await send_text(
-            sender,
-            "Nomor ini belum terdaftar di Poernama. "
-            "Minta pemilik usaha mendaftarkan nomormu ya! / This number isn't registered yet.",
-        )
+        # Unknown number: no reply at all (owner's decision 2026-11-22). The bot
+        # serves the owner only; customers ask the café's own staffed number,
+        # and a bot that never writes to strangers keeps the number's ban risk
+        # low. No DB log (request_logs RLS requires a business_id).
+        logger.info("Ignored message from unregistered number %s (type=%s)", sender, msg_type)
         return
 
     start = time.perf_counter()

@@ -91,7 +91,7 @@ def test_expired_owner_token_is_401():
 
 async def test_whatsapp_from_unregistered_number_never_reaches_business_logic():
     """WhatsApp owner-only commands: senders that don't match businesses.
-    owner_phone get a polite rejection and the router is never invoked."""
+    owner_phone get no reply and the router is never invoked."""
     from app.whatsapp import processor
 
     message = {
@@ -108,5 +108,4 @@ async def test_whatsapp_from_unregistered_number_never_reaches_business_logic():
         await processor._process_message(message)
 
     handler.assert_not_awaited()
-    sender.assert_awaited_once()
-    assert "belum terdaftar" in sender.await_args.args[1]
+    sender.assert_not_awaited()

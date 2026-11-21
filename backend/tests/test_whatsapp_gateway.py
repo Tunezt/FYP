@@ -126,13 +126,24 @@ def test_media_stash_is_bounded():
     wa._gateway_media.clear()
 
 
-async def test_unknown_sender_through_the_gateway_is_answered_once_even_when_redelivered(captured):
-    """Real pipeline (DB owner lookup included): an unregistered number gets the
-    'belum terdaftar' reply via the gateway's /send, and the same message id
-    delivered twice is answered once."""
+async def test_unknown_sender_through_the_gateway_is_ignored(captured):
+    """Real pipeline (DB owner lookup included): a plain message from an
+    unregistered number gets no reply (the bot serves the owner only)."""
     unknown = "62" + str(uuid.uuid4().int)[:11]
     msg = GatewayMessageIn.model_validate(
-        {"id": f"gw-{uuid.uuid4().hex}", "from": unknown, "type": "text", "text": "halo"}
+        {"id": f"gw-{uuid.uuid4().hex}", "from": unknown, "type": "text", "text": "halo, buka jam berapa?"}
+    )
+    with provider("gateway"):
+        await process_webhook_payload(to_cloud_payload(msg))
+    assert captured == []
+
+
+async def test_receipt_request_through_the_gateway_is_answered_once_even_when_redelivered(captured):
+    """Real pipeline: a STRUK request from any number is answered via the
+    gateway's /send, and the same message id delivered twice is answered once."""
+    unknown = "62" + str(uuid.uuid4().int)[:11]
+    msg = GatewayMessageIn.model_validate(
+        {"id": f"gw-{uuid.uuid4().hex}", "from": unknown, "type": "text", "text": "STRUK 001"}
     )
     with provider("gateway"):
         await process_webhook_payload(to_cloud_payload(msg))
@@ -142,7 +153,7 @@ async def test_unknown_sender_through_the_gateway_is_answered_once_even_when_red
     assert str(sent.url) == f"{GATEWAY_URL}/send"
     assert sent.headers["Authorization"] == f"Bearer {TOKEN}"
     body = json.loads(sent.content)
-    assert body["to"] == unknown and "belum terdaftar" in body["text"]
+    assert body["to"] == unknown and "tidak ditemukan" in body["text"]
 
 
 # ── Outbound routing ─────────────────────────────────────────────────────────
