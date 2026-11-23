@@ -2832,3 +2832,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **Changed:** backend/app/whatsapp/processor.py (`_handle_document`, `stock_import_reply`), backend/tests/test_stock_import_reply.py (new)
 **Gates:** see the final gate run in the push note of this batch.
 **Notes:** the import commits before the AI composes the reply; when the composer failed (503, quota) the owner saw "Waduh, ada gangguan" although the stock was already saved. Now any composer failure after the commit sends a fixed Indonesian line: "Stok dari Excel sudah tersimpan ✅ N barang diperbarui, M barang baru". Test reproduces it with a composer that raises.
+
+
+### [fin-nightly-scope] Safety switch: NIGHTLY_BUSINESS_IDS limits the nightly job
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/jobs/nightly.py, backend/tests/test_summary_job.py
+**Gates:** pytest, alembic up/down/up, npm run build, seed (see the commit).
+**Notes:**
+- Reason: Ibu Diah's real account holds invented demo data and must not get alerts or summaries.
+- Env `NIGHTLY_BUSINESS_IDS` (comma-separated business ids). Set = the whole night (rules, alerts, daily/weekly summary) runs only for those businesses; unset or blank = all. A listed id that matches no business is logged as a warning, never guessed at.
+- Test (+1): unset/blank keeps all, one id keeps one, an unknown id is ignored.
+- To use on Railway: set `NIGHTLY_BUSINESS_IDS` on the cron service to the demo business id(s) only.
+**Deviation:** none.
+**Next:** fin-eval results (docs/evaluation.md).

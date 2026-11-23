@@ -16,11 +16,15 @@ never a cross-tenant query):
 Delivery MUST use the template: this job runs unprompted, almost certainly
 outside the 24-hour session window, and Meta rejects free-form messages there.
 
+Safety switch: env NIGHTLY_BUSINESS_IDS (comma-separated ids) limits the whole night
+to those businesses; unset = all.
+
 Suggested Railway cron schedule: `30 16 * * *` (= 23:30 WIB) so "today" is a
 nearly-complete business day for Indonesian tenants.
 """
 import asyncio
 import logging
+import os
 
 from sqlalchemy import select
 
@@ -63,6 +67,20 @@ async def process_business(business: Business) -> int:
         return delivered
 
 
+def only_listed(businesses: list[Business], raw: str | None) -> list[Business]:
+    """Safety switch: NIGHTLY_BUSINESS_IDS (comma-separated business ids) limits
+    the night, alerts and summaries included, to those businesses. Unset or
+    blank = every business. A listed id that matches nothing is logged, never
+    guessed at."""
+    wanted = {x.strip() for x in (raw or "").split(",") if x.strip()}
+    if not wanted:
+        return businesses
+    kept = [b for b in businesses if str(b.id) in wanted]
+    for missing in wanted - {str(b.id) for b in kept}:
+        logger.warning("NIGHTLY_BUSINESS_IDS lists %s, which is not a business", missing)
+    return kept
+
+
 async def main() -> None:
     async with plain_session() as session:
         businesses = (
@@ -70,6 +88,7 @@ async def main() -> None:
             .scalars()
             .all()
         )
+    businesses = only_listed(businesses, os.environ.get("NIGHTLY_BUSINESS_IDS"))
     logger.info("Nightly run: %d business(es)", len(businesses))
 
     delivered_total = 0

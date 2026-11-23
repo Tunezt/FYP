@@ -118,3 +118,14 @@ async def test_gateway_sends_text_and_cloud_api_sends_the_template(shop):
 
 def test_rupiah_format():
     assert rp(D("1447000.00")) == "Rp 1.447.000" and rp(None) == "Rp 0"
+
+
+def test_nightly_safety_switch_limits_the_businesses():
+    from types import SimpleNamespace
+
+    from app.jobs.nightly import only_listed
+
+    a, b = SimpleNamespace(id=uuid.uuid4()), SimpleNamespace(id=uuid.uuid4())
+    assert only_listed([a, b], None) == [a, b] and only_listed([a, b], " ") == [a, b]
+    assert only_listed([a, b], f"{b.id}") == [b]
+    assert only_listed([a, b], f" {a.id} , {uuid.uuid4()} ") == [a]  # an unknown id is ignored, not guessed
