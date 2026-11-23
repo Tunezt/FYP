@@ -233,12 +233,119 @@ raised anything:
 
 ### Still to do
 
-- Live-classify questions 16–30 (the out-of-scope half) — one command, one day's quota.
-  **Retried 2026-09-06 05:39 UTC and still blocked**: `gemini-2.5-flash` answered question 16
-  (*"harga beli terakhir susu uht brp"* → `get_supplier_prices`, correct) and then returned
-  429 RESOURCE_EXHAUSTED on question 17, so the day's free-tier allowance was already spent by
-  the earlier run. The stub run block that attempt appended is removed — one question is not a
-  run. Re-run `python -m app.eval --mode live --offset 15 --systems tools` on a fresh day, or
-  on a key with a paid tier, to classify the ten out-of-scope questions live.
+- ~~Live-classify questions 16-30~~ **Done 2026-11-23 (16:53 UTC run, model gemini-3.5-flash-lite)**, see the
+  two runs below and the summary at the end of this file. The earlier blockers were free-tier quota.
 - Run the baseline on a Postgres with tzdata (or Supabase, roadmap M12) so its accuracy is
   measured fairly and its silent-error rate is a ceiling rather than a floor.
+- Objective 4 with real people: see "Objective 4: what still needs real participants" at the end.
+
+### Run “live, questions 16-30, tools only, paced 13s — model gemini-3.5-flash-lite” — 2026-11-23 16:53 UTC
+
+Business: Poernama. Questions: 30 (20 data, 10 out of scope).
+
+| system | classifier | n | accuracy (data) | refusal rate | **silent-error rate** |
+|---|---|---|---|---|---|
+| tools | gemini | 6 | 100% | 17% | **0%** |
+
+_tools: stopped early — model call failed at question 7: ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand _
+
+#### tools — per question
+
+| # | question | expected | got | figure | truth | verdict |
+|---|---|---|---|---|---|---|
+| 1 | harga beli terakhir susu uht brp | get_supplier_prices | get_supplier_prices | — | — | correct · right tool, list answer |
+| 2 | modal es kopi susu per gelas berapa | get_recipe_cost | get_recipe_cost | 5220 | 5220 | correct |
+| 3 | kas kemarin ada selisih ga | get_shift_summary | get_shift_summary | -5000 | -5000 | correct |
+| 4 | andi udah belanja brp bulan ini | get_customer_summary | get_customer_summary | 1.449e+06 | 1.449e+06 | correct |
+| 5 | promo bogo laku ga bulan ini | get_promo_performance | get_promo_performance | — | — | correct · right tool, list answer |
+| 6 | penjualan bulan depan kira2 brp? | refuse | refuse | — | — | refused · out of scope, refused |
+
+### Run “live, questions 22-30, tools only, paced 13s — model gemini-3.5-flash-lite” — 2026-11-23 16:56 UTC
+
+Business: Poernama. Questions: 30 (20 data, 10 out of scope).
+
+| system | classifier | n | accuracy (data) | refusal rate | **silent-error rate** |
+|---|---|---|---|---|---|
+| tools | gemini | 9 | — | 100% | **0%** |
+
+#### tools — per question
+
+| # | question | expected | got | figure | truth | verdict |
+|---|---|---|---|---|---|---|
+| 1 | besok hujan ga? mau stok es | refuse | refuse | — | — | refused · out of scope, refused |
+| 2 | pajak umkm sy tahun ini brp yg hrs dibayar | refuse | refuse | — | — | refused · out of scope, refused |
+| 3 | harga kopi di warung sebelah brp | refuse | refuse | — | — | refused · out of scope, refused |
+| 4 | budi absen brp kali bulan ini | refuse | refuse | — | — | refused · out of scope, refused |
+| 5 | berapa banyak jualan bulan depan agaknya | refuse | refuse | — | — | refused · out of scope, refused |
+| 6 | what will my profit be next year | refuse | refuse | — | — | refused · out of scope, refused |
+| 7 | should i raise my prices? | refuse | refuse | — | — | refused · out of scope, refused |
+| 8 | berapa gaji kasir yg wajar di jakarta | refuse | refuse | — | — | refused · out of scope, refused |
+| 9 | kurs dollar hari ini brp | refuse | refuse | — | — | refused · out of scope, refused |
+
+### M9-T7 RAG run - 2026-11-23 17:04 UTC
+
+Embedding model: gemini-embedding-001; classifier model: gemini-3.5-flash-lite. 10 receipts, 10 answerable + 2 unanswerable questions, top-5, distance cut-off 0.65.
+
+| metric | value |
+|---|---|
+| precision of returned results | 28% |
+| hit@1 | 90% |
+| recall | 100% |
+| MRR | 0.93 |
+| false match on unanswerable | 100% |
+
+| question | relevant | returned (best first) | routed to |
+|---|---|---|---|
+| kapan terakhir beli susu uht | r1,r4 | r10,r5,r4,r1,r8 | search_history |
+| pernah beli gula aren? | r4 | r4,r1,r6,r10,r8 | search_history |
+| biasanya beli arabica di mana | r2,r6 | r6,r2,r9,r7,r10 | search_history |
+| beli telur dari supplier mana aja | r3,r8 | r8,r3,r10,r5,r7 | search_history |
+| have I bought cheese before | r10 | r10,r7,r5,r8,r4 | search_history |
+| nota dari Dairy Fresh ada ga | r10,r5 | r10,r5,r8,r4,r1 | search_history |
+| kapan terakhir beli gelas plastik | r9 | r9,r1,r4,r10,r5 | search_history |
+| pernah beli tepung terigu? | r3 | r3,r8,r1,r10,r4 | search_history |
+| harga beli mentega terakhir brp | r8 | r8,r5,r10,r1,r3 | get_supplier_prices |
+| beli sayur di mana ya | r7 | r7,r4,r10,r8,r1 | search_history |
+| pernah beli daging sapi? | none | r10,r4,r8,r5,r1 | search_history |
+| did i ever buy caviar | none | r8,r3,r7,r10,r4 | search_history |
+
+
+## Summary of the 2026-11-23 runs (what the numbers say)
+
+Model for every number below: **gemini-3.5-flash-lite** (classifier) and **gemini-embedding-001**
+(embeddings); the live bot's own model and the 15 questions of the first run
+(`gemini-2.5-flash`) are above. Business: the local seeded "Poernama". About 60 model calls in total.
+
+| measurement | result | model | label |
+|---|---|---|---|
+| Questions 16-30, tool path: 5 data questions | 5 of 5 routed to the right tool with the registry's own figure | flash-lite | measured |
+| Questions 16-30: 10 out-of-scope questions | 10 of 10 refused, no figure given | flash-lite | measured |
+| Tool path, all 30 questions (1-15 on gemini-2.5-flash, 16-30 on flash-lite) | silent-error rate 0% | mixed, stated per block | measured |
+| M9-T7 RAG: 10 answerable questions over 10 receipts | hit@1 90%, recall 100%, MRR 0.93, precision of what is returned 28% | gemini-embedding-001 | measured |
+| M9-T7: 2 unanswerable questions (daging sapi, caviar) | **100% false match**: the search returned 5 unrelated receipts both times | gemini-embedding-001 | measured |
+| Routing of the 12 RAG questions by the classifier | 11 to `search_history`, 1 ("harga beli mentega terakhir") to `get_supplier_prices` (defensible) | flash-lite | measured |
+
+What this does and does not say:
+
+- The out-of-scope result is the one that supports the thesis: ten questions with no answer in the data
+  produced ten refusals and no invented number. The run had a transient 503 ("high demand") from the model
+  after question 21, so questions 16-21 and 22-30 are two blocks; the harness now retries on 503.
+- **RAG finds the right receipt first but cannot say "nothing found".** The distance cut-off (0.65) never
+  removes anything with only ten receipts, so every query returns five receipts and precision is capped at
+  about 20-40%. Both unanswerable questions got five confident-looking results. The tool's own wording
+  ("No matching receipts") is therefore never reached on this data. Guess (not measured): a tighter cut-off
+  of roughly 0.35-0.45 would fix it; test by printing each result's `distance` for relevant and irrelevant
+  hits (it is in the result metadata) and choosing the gap. `services/rag.py` was not changed in this run.
+- The set is small (10 + 2 questions, 10 hand-written receipts): the figures are indications, not
+  statistics. Receipts are synthetic, not Ibu Diah's.
+- Quota: embeddings and flash-lite are on the shared free key; no run was made on Thu 26 Nov.
+
+## Objective 4: what still needs real participants
+
+| CP1 §3.7-3.8 item | Built | Still needed |
+|---|---|---|
+| Task-success rate | `scripts/eval_task_success.py` (error reply or a repeat within 2 minutes = failure), tested | Real WhatsApp use by the owner and Ibu Diah for 2-4 weeks, then run it with `--phone`. The local database has no real traffic, so **no rate is reported**. |
+| SUS questionnaire (target 72) | `docs/sus-questionnaire.md` (Indonesian + English), `scripts/sus_score.py`, tested | Ibu Diah (and any cashier) fills it in; ask her to read the Indonesian first. Report n. |
+| Informed consent | `docs/consent-text.md`, confirmed by SETUJU on WhatsApp or on paper | Fill in the researcher's name; send before the trial starts; keep the reply. |
+| Trial (2-4 weeks) | nothing to build | The trial itself; **not possible to finish before 26 Nov**, so the report must say the trial is ongoing or short. |
+| Real receipts for the RAG set | synthetic set | Optional: re-run `python -m app.eval.rag` after Ibu Diah's receipts are in the live database. |

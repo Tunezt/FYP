@@ -238,7 +238,7 @@ def keyword_classifier(text: str):
     return SimpleNamespace(name="clarify", args={"reply": "Maaf, maksudnya gimana ya?"})
 
 
-async def _paced(coro_factory, *, pace: float, attempts: int = 3):
+async def _paced(coro_factory, *, pace: float, attempts: int = 5):
     """Free-tier models are rate-limited per minute (5 RPM on Flash at the time
     of writing). Sleep `pace` seconds before each call and, on a 429, wait and
     try again a couple of times before giving up on the run."""
@@ -250,7 +250,8 @@ async def _paced(coro_factory, *, pace: float, attempts: int = 3):
             return await coro_factory()
         except Exception as exc:  # noqa: BLE001 — the harness reports, it does not crash
             last = exc
-            if "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc):
+            # 503 UNAVAILABLE ("high demand") is the model's, not ours: it clears in seconds to minutes.
+            if any(m in str(exc) for m in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE")):
                 await asyncio.sleep(max(pace, 12.0) * (attempt + 1))
                 continue
             raise
