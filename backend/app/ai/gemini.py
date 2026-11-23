@@ -197,6 +197,24 @@ async def generate_json_from_image(
     return json.loads(response.text or "{}")
 
 
+async def generate_json(*, system: str, message: str, response_schema: dict, first_model: str | None = None) -> dict:
+    """Text in, structured JSON out. `first_model` jumps the queue (a cheap model
+    for a cheap yes/no); the usual chain stays behind it as the fallback."""
+    import json
+
+    config = types.GenerateContentConfig(
+        system_instruction=system,
+        response_mime_type="application/json",
+        response_schema=response_schema,
+        temperature=0.0,
+    )
+    response = await _run(
+        _dedupe([first_model, *text_chain()]) if first_model else text_chain(),
+        lambda model: _client().aio.models.generate_content(model=model, contents=message, config=config),
+    )
+    return json.loads(response.text or "{}")
+
+
 async def embed_text(text: str) -> list[float]:
     settings = get_settings()
     result = await _run(

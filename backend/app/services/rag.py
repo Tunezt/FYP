@@ -28,14 +28,20 @@ logger = logging.getLogger("rag")
 
 TOP_K = 5
 # Cosine distance beyond this is noise, not a match (distance = 1 - similarity).
-# Chosen by the sweep in docs/evaluation.md (`python -m app.eval.rag --sweep`); the lexical guard below does the rejecting.
+# Chosen by the sweep in docs/evaluation.md (`python -m app.eval.rag --sweep`); `verify` below does the rejecting.
 MAX_DISTANCE = 0.45
 
 
-# -- Lexical guard ----------------------------------------------------------
+# -- Verifying a match (fin-rag-judge) ---------------------------------------
 # A vector search always returns its nearest receipts, even when the thing asked
-# about was never bought. A match is only accepted if the question's key words
-# (item or supplier) really occur in that receipt's text.
+# about was never bought. Each candidate within the cut-off is verified:
+#   1. fast accept: every key word of the question (item or supplier) occurs in
+#      the receipt text -> accepted, no model call;
+#   2. the rest go to ONE cheap model call that answers yes/no per receipt
+#      ("does this receipt answer the question?").
+# The word match alone was the whole guard until fin-rag-judge: 100% on the
+# questions it was written for, 0% recall on a blind set (docs/evaluation.md),
+# because real phrasing carries dates, amounts and English no receipt contains.
 _STOP = set("""
 pernah beli membeli dibeli ngebeli belanja bought buy ever did have has had we i you my our kita saya aku
 kapan terakhir last when biasanya usually mana dimana di dari ke ada ga gak nggak tidak apa apakah yang dan atau
@@ -86,6 +92,64 @@ def mentions(text: str, words: list[str]) -> bool:
     return all(any(_close(alt, h) for alt in [w, *_SYNONYMS.get(w, [])] for h in have) for w in words)
 
 
+JUDGE_MODEL = "gemini-3.5-flash-lite"  # a yes/no needs no big model; the chain stays behind it
+_JUDGE_SYSTEM = (
+    "You check search results for a cafe owner's question about past purchases. For each numbered receipt, "
+    "answer true only if that receipt is a purchase the question asks about: the item (in any language, "
+    "spelling or category word, e.g. 'palm sugar' = gula aren, 'telor' = telur, 'sayur' covers selada) and "
+    "EVERY other detail the question states (supplier name, date, amount, variety, quantity) must match the "
+    "receipt. A different supplier, a similar but different item or variety (gula batu is not gula pasir, oat "
+    "milk is not susu UHT), or a supplier name that only looks alike is false. Filler words, slang and "
+    "politeness do not matter. Answer for every receipt, in order."
+)
+_JUDGE_SCHEMA = {
+    "type": "object",
+    "properties": {"answers": {"type": "array", "items": {"type": "boolean"}}},
+    "required": ["answers"],
+}
+
+
+class ReceiptCheckFailed(Exception):
+    """The judge could not answer. Nothing is cited, and the owner is told the
+    receipts could not be checked: never a silent "no receipt found"."""
+
+
+async def judge(query: str, texts: list[str]) -> list[bool]:
+    """One model call: does each receipt answer the question? A network error or
+    a malformed answer raises ReceiptCheckFailed; QuotaExhausted passes through
+    (the WhatsApp layer already says plainly that the AI quota is out)."""
+    from app.ai.gemini import QuotaExhausted, generate_json
+
+    listing = "\n\n".join(f"Receipt {i + 1}:\n{t}" for i, t in enumerate(texts))
+    try:
+        out = await generate_json(
+            system=_JUDGE_SYSTEM, message=f"Question: {query}\n\n{listing}",
+            response_schema=_JUDGE_SCHEMA, first_model=JUDGE_MODEL,
+        )
+    except QuotaExhausted:
+        raise
+    except Exception as exc:  # noqa: BLE001 - 503s past the chain, network, bad JSON
+        logger.warning("rag judge failed: %s", exc, exc_info=True)
+        raise ReceiptCheckFailed(str(exc)) from exc
+    answers = out.get("answers") if isinstance(out, dict) else None
+    if not isinstance(answers, list) or len(answers) != len(texts):
+        logger.warning("rag judge gave %r for %d receipts", answers, len(texts))
+        raise ReceiptCheckFailed(f"malformed answer {answers!r}")
+    return [a is True for a in answers]
+
+
+async def verify(query: str, texts: list[str]) -> list[bool]:
+    """Which candidate receipts answer `query`: word match first, the judge for
+    the rest (one call, none when everything is word-matched or nothing is left)."""
+    words = key_words(query)
+    fast = [bool(words) and mentions(t, words) for t in texts]
+    rest = [i for i, ok in enumerate(fast) if not ok]
+    if rest:
+        for i, ok in zip(rest, await judge(query, [texts[i] for i in rest])):
+            fast[i] = ok
+    return fast
+
+
 def receipt_to_document_text(receipt: Receipt) -> str:
     """Deterministic textual rendering of a receipt for embedding — supplier,
     date, and every line item, so item- and supplier-level questions both hit."""
@@ -128,7 +192,6 @@ async def search_receipts(
     """Top-k receipt matches for a natural-language question, as LangChain
     Documents (page_content = the embedded text, metadata = provenance)."""
     cutoff = MAX_DISTANCE if max_distance is None else max_distance
-    words = key_words(query) if lexical else []
     query_vec = await embed_text(query)
     distance = Receipt.embedding.cosine_distance(query_vec).label("distance")
     rows = (
@@ -140,12 +203,11 @@ async def search_receipts(
         )
     ).all()
 
+    candidates = [(r, d, receipt_to_document_text(r)) for r, d in rows if d is None or float(d) <= cutoff]
+    keep = await verify(query, [t for _r, _d, t in candidates]) if lexical else [True] * len(candidates)
     documents: list[Document] = []
-    for receipt, dist in rows:
-        if dist is not None and float(dist) > cutoff:
-            continue
-        text = receipt_to_document_text(receipt)
-        if not mentions(text, words):
+    for (receipt, dist, text), ok in zip(candidates, keep):
+        if not ok:
             continue
         documents.append(
             Document(

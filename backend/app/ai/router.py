@@ -24,6 +24,12 @@ from app.models import Business
 
 logger = logging.getLogger("ai.router")
 
+RECEIPT_CHECK_FAILED_REPLY = (
+    "Maaf, catatan nota belum bisa kucek sekarang — layanan AI-nya lagi sibuk. "
+    "Coba tanya lagi sebentar ya 🙏 "
+    "(I can't check your receipts right now, please try again in a minute.)"
+)
+
 CLARIFY = types.FunctionDeclaration(
     name="clarify",
     description=(
@@ -115,6 +121,9 @@ async def handle_text(session: AsyncSession, business: Business, text: str) -> R
         return RoutedReply(intent="clarify", reply=reply)
 
     facts = await executor(session, business, dict(call.args or {}))
+    if facts.get("receipt_check_failed"):
+        # Deterministic: "no receipt found" here would be a silent false negative (fin-rag-judge).
+        return RoutedReply(intent="rag_unavailable", reply=RECEIPT_CHECK_FAILED_REPLY)
     reply = await compose_reply(business, text, call.name, facts)
     # request_logs vocabulary: the RAG path is logged as 'rag' (per Section 6),
     # data tools keep their specific names (strictly more evaluable than the

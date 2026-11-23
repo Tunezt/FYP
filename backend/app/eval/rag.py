@@ -58,7 +58,7 @@ def sweep(questions: list[RagQuestion], ranked: list[list[tuple[str, float, bool
 
 def sweep_table(alone: list[dict], guarded: list[dict]) -> str:
     pct = lambda v: "n/a" if v is None else f"{v:.0%}"  # noqa: E731
-    out = ["| cut-off | alone: hit@1 | recall | false match | + lexical: hit@1 | recall | precision | false match |",
+    out = ["| cut-off | alone: hit@1 | recall | false match | + word match only: hit@1 | recall | precision | false match |",
            "|---|---|---|---|---|---|---|---|"]
     for a, g in zip(alone, guarded):
         out.append(f"| {a['cutoff']:.2f} | {pct(a['hit@1'])} | {pct(a['recall'])} | {pct(a['false_match'])} | "
@@ -75,7 +75,20 @@ async def run(pace: float, routing: bool, do_sweep: bool = False, questions: lis
     from app.core.db import SessionLocal, set_tenant
     from app.eval.harness import _paced
     from app.models import Business, Receipt
+    from app.services import rag as rag_service
     from app.services.rag import MAX_DISTANCE, embed_receipt, key_words, mentions, search_receipts
+
+    from app.ai.gemini import QuotaExhausted
+
+    judge_calls, judged, failed = [0], [], []
+    _judge = rag_service.judge
+
+    async def counted_judge(query, texts):
+        judge_calls[0] += 1
+        await asyncio.sleep(4.0)  # free tier: judge model 15/min, shared with the embeddings' pace
+        return await _judge(query, texts)
+
+    rag_service.judge = counted_judge
 
     async with SessionLocal() as session:
         business = (await session.execute(select(Business).where(Business.owner_phone == "628120001111"))).scalar_one()
@@ -101,7 +114,17 @@ async def run(pace: float, routing: bool, do_sweep: bool = False, questions: lis
             words = key_words(q.text)
             ranked.append([(by_id[d.metadata["receipt_id"]], d.metadata["distance"], mentions(d.page_content, words))
                            for d in docs if d.metadata["receipt_id"] in by_id])
-            keys = [k for k, dist, ok in ranked[-1] if dist <= MAX_DISTANCE and ok]
+            # what the bot cites: candidates within the cut-off, verified (word match, else the judge)
+            cand = [(by_id[d.metadata["receipt_id"]], d.page_content) for d in docs
+                    if d.metadata["receipt_id"] in by_id and d.metadata["distance"] <= MAX_DISTANCE]
+            before = judge_calls[0]
+            try:
+                ok = await rag_service.verify(q.text, [t for _k, t in cand])
+            except (rag_service.ReceiptCheckFailed, QuotaExhausted):
+                failed.append(q.text)  # the bot says "can't check right now"; scored as nothing cited
+                ok = [False] * len(cand)
+            keys = [k for (k, _t), good in zip(cand, ok) if good]
+            judged.append(judge_calls[0] - before)
             retrieved.append(keys)
             route = ""
             if routing:
@@ -125,7 +148,10 @@ async def run(pace: float, routing: bool, do_sweep: bool = False, questions: lis
         f"Embedding model: {settings.gemini_embedding_model}; classifier model: "
         f"{settings.gemini_flash_model if routing else 'not called (retrieval only)'}. "
         f"{len(RAG_RECEIPTS)} receipts, {s['answerable']} answerable + {s['unanswerable']} unanswerable "
-        f"questions, top-5, distance cut-off {MAX_DISTANCE} + lexical guard.",
+        f"questions, top-5, distance cut-off {MAX_DISTANCE}, verified by word match else one judge call "
+        f"({rag_service.JUDGE_MODEL} first): {judge_calls[0]} judge calls, "
+        f"{judge_calls[0] / len(questions):.2f} per question; {len(failed)} judge call(s) failed "
+        f"(the bot would say it cannot check receipts right now){': ' + '; '.join(failed) if failed else ''}.",
         "",
         "| metric | value |", "|---|---|",
         f"| precision of returned results | {pct(s['precision'])} |",
@@ -133,10 +159,10 @@ async def run(pace: float, routing: bool, do_sweep: bool = False, questions: lis
         f"| recall | {pct(s['recall'])} |",
         f"| MRR | {'n/a' if s['mrr'] is None else format(s['mrr'], '.2f')} |",
         f"| false match on unanswerable | {pct(s['false_match'])} |",
-        "", "| question | relevant | returned (best first) | routed to |", "|---|---|---|---|",
+        "", "| question | relevant | returned (best first) | routed to | judge calls |", "|---|---|---|---|---|",
     ]
     for q, keys, route in rows:
-        out.append(f"| {q.text} | {','.join(sorted(q.relevant)) or 'none'} | {','.join(keys) or 'none'} | {route or '-'} |")
+        out.append(f"| {q.text} | {','.join(sorted(q.relevant)) or 'none'} | {','.join(keys) or 'none'} | {route or '-'} | {judged.pop(0)} |")
     if do_sweep:
         cutoffs = [round(0.30 + 0.05 * i, 2) for i in range(8)]
         out += ["", f"Cut-off sweep over the same retrieved distances ({len(questions)} questions, "
@@ -152,12 +178,22 @@ if __name__ == "__main__":
     ap.add_argument("--routing", action="store_true")
     ap.add_argument("--sweep", action="store_true", help="also sweep the distance cut-off 0.30-0.65")
     ap.add_argument("--heldout", action="store_true", help="score the blind held-out set (app.eval.rag_heldout) instead")
+    ap.add_argument("--questions", help="score another question module instead, e.g. app.eval.rag_heldout2 "
+                                        "(its list of RagQuestion; the receipts stay RAG_RECEIPTS)")
     ap.add_argument("--no-append", action="store_true")
     a = ap.parse_args()
     qs, label = RAG_QUESTIONS, "M9-T7 RAG run"
     if a.heldout:
         from app.eval.rag_heldout import RAG_HELDOUT_QUESTIONS
         qs, label = list(RAG_HELDOUT_QUESTIONS), "M9-T7 RAG run, blind held-out set"
+    if a.questions:
+        import importlib
+
+        mod = importlib.import_module(a.questions)
+        lists = [v for v in vars(mod).values()
+                 if isinstance(v, list) and v and all(isinstance(q, RagQuestion) for q in v)]
+        assert len(lists) == 1, f"{a.questions}: expected one list of RagQuestion, found {len(lists)}"
+        qs, label = lists[0], f"M9-T7 RAG run, {a.questions}"
     body = asyncio.run(run(7.0 if a.sweep else 13.0, a.routing, a.sweep, qs, label))
     print(body)
     if not a.no_append:

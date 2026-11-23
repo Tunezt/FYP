@@ -42,9 +42,14 @@ async def test_a_caller_can_widen_the_cutoff_for_the_sweep():
 
 @pytest.mark.asyncio
 async def test_a_close_receipt_without_the_asked_word_is_not_cited():
-    # distance 0.20 is well inside the cut-off, but "salmon" is nowhere in the receipt text
-    with patch("app.services.rag.embed_text", new=AsyncMock(return_value=[0.0] * 768)):
+    # distance 0.20 is well inside the cut-off, but "salmon" is nowhere in the receipt text:
+    # no word match, so the judge is asked (fin-rag-judge), and its "no" keeps it out.
+    judge = AsyncMock(return_value=[False])
+    with patch("app.services.rag.embed_text", new=AsyncMock(return_value=[0.0] * 768)),             patch("app.services.rag.judge", new=judge):
         session = MagicMock()
         session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: [(_receipt("Dairy Fresh"), 0.20)]))
         assert await rag.search_receipts(session, uuid.uuid4(), "pernah beli ikan salmon?") == []
+        assert judge.await_count == 1
+        # a word match is accepted at once, without asking the judge
         assert len(await rag.search_receipts(session, uuid.uuid4(), "nota dari Dairy Fresh ada ga")) == 1
+        assert judge.await_count == 1

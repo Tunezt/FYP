@@ -2929,3 +2929,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - demo-script: open-shift step, the till's real stock-guard behaviour, ~300 porsi (not 198), the RAG answer lists both Toko Manis receipts.
 **Deviation:** none.
 **Next:** no duplicate-receipt check: the same photo confirmed twice is recorded twice (expense and stock). Not built (needs a design decision).
+
+### [fin-rag-judge] Receipt matches: word match as a fast accept, one model check for the rest
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/services/rag.py (`verify`, `judge`), backend/app/ai/gemini.py (`generate_json`), backend/app/eval/rag.py (scores the bot's path, counts judge calls and failures, `--questions <module>`), backend/app/ai/tools.py (`search_history`), backend/app/ai/router.py (`RECEIPT_CHECK_FAILED_REPLY`), backend/tests/test_rag_judge.py (new), backend/tests/test_rag_cutoff.py, docs/evaluation.md
+**Gates:** see the commit.
+**Notes:**
+- Why: the every-word guard (fin-rag-lexical) scored 100% on its own questions and 0% recall on a blind set; the live bot missed real receipts whenever the owner worded a question differently.
+- Now: candidates within cut-off 0.45; a receipt with every key word is accepted at once; the rest go to one call (gemini-3.5-flash-lite first, then the chain) that answers true/false per receipt. A judge failure cites nothing and the owner gets a fixed line: "catatan nota belum bisa kucek sekarang… coba tanya lagi" (intent `rag_unavailable`), never a silent "not found"; an exhausted quota keeps the existing quota message.
+- Measured: tuned set 100/100/0% false match; held-out 1 (seen once during the redesign) hit@1 100%, recall 100%, false match 7% (1/15, "Pasar Indah" accepted as Pasar Induk); 1.00 judge call per question; 2 of 30 judge calls failed on 503/quota and cited nothing.
+- test_rag_cutoff: the "close receipt without the asked word" case now gets its "no" from a mocked judge (the old guard is gone by design); the new tests pin fast accept, one call for the rest, and failure = nothing cited.
+**Deviation:** none.
+**Next:** score the untouched second blind set once (fin-rag-heldout2).

@@ -384,9 +384,13 @@ async def record_expense(session: AsyncSession, business: Business, args: dict) 
     )
 )
 async def search_history(session: AsyncSession, business: Business, args: dict) -> dict:
-    from app.services.rag import search_receipts
+    from app.services.rag import ReceiptCheckFailed, search_receipts
 
-    documents = await search_receipts(session, business.id, args.get("query", ""))
+    try:
+        documents = await search_receipts(session, business.id, args.get("query", ""))
+    except ReceiptCheckFailed:
+        # the router answers this with a fixed "can't check right now" line, never "not found"
+        return {"matches": [], "receipt_check_failed": True}
     if not documents:
         return {
             "matches": [],

@@ -607,3 +607,133 @@ Distances (best first), A = answerable, U = unanswerable, (x) = key word missing
 - U got a receipt for dishwashing liquid from Toko Bersih Sentosa?: r10=0.32(x), r1=0.32(x), r5=0.32(x), r9=0.33(x), r4=0.33(x)
 
 </details>
+
+## Redesign: word match as a fast accept, a model check for the rest (fin-rag-judge) - 2026-11-24
+
+The story so far: tuned set 100% -> blind held-out set 0% recall. The every-word guard was **overfitted** to
+the questions it was written for. Design rule for the redesign (set before looking at any new numbers): the
+check must not depend on how the owner words a question, so no new word lists.
+
+How a match is now verified (`verify` / `judge` in `backend/app/services/rag.py`):
+
+1. The vector search returns the top 5 receipts; anything beyond cosine distance 0.45 is dropped (unchanged).
+2. **Fast accept:** a receipt that contains every key word of the question is cited without a model call
+   (the old guard, now only a shortcut that can say yes, never no).
+3. **Judge:** all other candidates go to **one** model call (`gemini-3.5-flash-lite` first, then the usual
+   fallback chain) that answers true/false per receipt: is this a purchase the question asks about, with every
+   stated detail (supplier, date, amount, variety) matching? If the judge fails (503 past the whole chain,
+   network, malformed answer) nothing is cited AND the owner is told plainly that receipts cannot be checked
+   right now ("Maaf, catatan nota belum bisa kucek sekarang ... coba tanya lagi"), never a silent
+   "no receipt found"; an exhausted quota gets the existing quota message.
+
+All candidates within the cut-off are judged in the same single call (not only the top 1-3), because a
+question like "beli telur dari supplier mana aja" has two right receipts; it costs no extra call.
+
+| set | how it was used | hit@1 | recall | precision | false match | judge calls / question |
+|---|---|---|---|---|---|---|
+| tuned (22 q) | tuned on (cut-off, old word lists) | 100% | 100% | 100% | 0% | 1.00 |
+| held-out 1 (30 q) | **seen once during the redesign** (it showed the 0%) | 100% | 100% | 100% | 7% (1 of 15) | 1.00 |
+| held-out 2 (30 q) | untouched until the design was committed | see below | | | | |
+
+Measured on gemini-embedding-001 + the judge, 2026-11-24, `python -m app.eval.rag [--heldout]`.
+
+- **Recall on unseen phrasing is back**: every answerable held-out question (dates, amounts, English,
+  slang) gets its one right receipt, first.
+- **The one false match** is "selada yg kita beli di Pasar Indah" -> the Pasar Induk receipt: the judge
+  accepted a supplier name that only looks alike, although its instructions name that case. Not fixed: a fix
+  aimed at this one question would be tuning on this set.
+- **Cost:** in practice one extra model call per receipt question (1.00 per question on both sets: among 5
+  neighbours there is almost always one without the words). On the free tier that is one more request
+  against the 15/min of gemini-3.5-flash-lite; the owner's question already costs two.
+- **Caveat (measured):** 2 of the 30 held-out judge calls failed (gemini-3.5-flash-lite and
+  gemini-3.1-flash-lite 503 "high demand", the rest of the chain at its daily or per-minute limit) and cited
+  nothing (in that run the bot would have stayed silent about it; since then it says it cannot check). Both fell on unanswerable questions (a failure on an answerable one would have lost its receipt:
+  none of them is word-matched, and recall stayed 100%), so 2 of the 14 correct rejections are the safe
+  failure path, not the judge's verdict.
+- The demo question ("pernah beli gula aren dari toko manis?") is word-matched; in the demo cafe both
+  receipts are Toko Manis ones, so it needs no judge call.
+
+<details><summary>Redesign runs, per question (tuned set, held-out 1)</summary>
+
+### M9-T7 RAG run - 2026-11-23 20:34 UTC
+
+Embedding model: gemini-embedding-001; classifier model: not called (retrieval only). 10 receipts, 10 answerable + 12 unanswerable questions, top-5, distance cut-off 0.45, verified by word match else one judge call (gemini-3.5-flash-lite first): 22 judge calls, 1.00 per question.
+
+| metric | value |
+|---|---|
+| precision of returned results | 100% |
+| hit@1 | 100% |
+| recall | 100% |
+| MRR | 1.00 |
+| false match on unanswerable | 0% |
+
+| question | relevant | returned (best first) | routed to | judge calls |
+|---|---|---|---|---|
+| kapan terakhir beli susu uht | r1,r4 | r4,r1 | - | 1 |
+| pernah beli gula aren? | r4 | r4 | - | 1 |
+| biasanya beli arabica di mana | r2,r6 | r6,r2 | - | 1 |
+| beli telur dari supplier mana aja | r3,r8 | r8,r3 | - | 1 |
+| have I bought cheese before | r10 | r10 | - | 1 |
+| nota dari Dairy Fresh ada ga | r10,r5 | r10,r5 | - | 1 |
+| kapan terakhir beli gelas plastik | r9 | r9 | - | 1 |
+| pernah beli tepung terigu? | r3 | r3 | - | 1 |
+| harga beli mentega terakhir brp | r8 | r8 | - | 1 |
+| beli sayur di mana ya | r7 | r7 | - | 1 |
+| pernah beli daging sapi? | none | none | - | 1 |
+| did i ever buy caviar | none | none | - | 1 |
+| pernah beli ikan salmon? | none | none | - | 1 |
+| nota dari Toko Bangunan Jaya ada ga | none | none | - | 1 |
+| did we ever buy printer paper | none | none | - | 1 |
+| kapan terakhir beli beras | none | none | - | 1 |
+| beli minyak goreng di mana | none | none | - | 1 |
+| pernah order dari PT Samudra Frozen? | none | none | - | 1 |
+| have I bought vanilla syrup before | none | none | - | 1 |
+| harga beli ayam terakhir brp | none | none | - | 1 |
+| nota dari CV Sumber Rejeki ada ga | none | none | - | 1 |
+| pernah beli teh celup? | none | none | - | 1 |
+### M9-T7 RAG run, blind held-out set - 2026-11-23 20:38 UTC
+
+Embedding model: gemini-embedding-001; classifier model: not called (retrieval only). 10 receipts, 15 answerable + 15 unanswerable questions, top-5, distance cut-off 0.45, verified by word match else one judge call (gemini-3.5-flash-lite first): 30 judge calls, 1.00 per question.
+
+| metric | value |
+|---|---|
+| precision of returned results | 100% |
+| hit@1 | 100% |
+| recall | 100% |
+| MRR | 1.00 |
+| false match on unanswerable | 7% |
+
+| question | relevant | returned (best first) | routed to | judge calls |
+|---|---|---|---|---|
+| nota white sugar yg bareng susu kotak itu mana ya? | r1 | r1 | - | 1 |
+| ada bon biji kopi dua jenis, arabika sama robusta, awal oktober 2026? | r2 | r2 | - | 1 |
+| Find the wheat flour and eggs purchase from 9 October 2026 please | r3 | r3 | - | 1 |
+| yg beli palm sugar 5 kilo di Sinar Jaya, bonnya masih ada? | r4 | r4 | - | 1 |
+| cariin pembelian fresh milk sekalian creamer dong | r5 | r5 | - | 1 |
+| bon arabika tgl 26 okt 2026 yg 765rb itu | r6 | r6 | - | 1 |
+| Where's the receipt for lettuce and tomatoes from Pasar Induk? | r7 | r7 | - | 1 |
+| mentega sm telor awal nov 2026 beli di mana ya, ada notanya? | r8 | r8 | - | 1 |
+| need the bon for disposable cups + straws, seribu cup dua ribu straw | r9 | r9 | - | 1 |
+| bon cheese 2 kilo barengan susu dari Dairy Fresh ada gak? | r10 | r10 | - | 1 |
+| nota Toko Sinar Jaya tanggal 2 Oktober 2026 tolong cariin | r1 | r1 | - | 1 |
+| Kopi Nusantara yg totalnya sejuta seratus lima puluh ribu, kirim bonnya dong | r2 | r2 | - | 1 |
+| cari struk belanja 580rb di Maju Makmur bulan oktober 2026 | r3 | r3 | - | 1 |
+| the Dairy Fresh invoice on October 20, 2026, can you find it? | r5 | r5 | - | 1 |
+| yg abis 140 rebu buat sayur di pasar induk, itu nota mana? | r7 | r7 | - | 1 |
+| pernah beli gula batu di Sinar Jaya? cariin notanya | none | none | - | 1 |
+| ada bon oat milk dari Dairy Fresh gak? | none | none | - | 1 |
+| invoice kopi liberika di Kopi Nusantara yg dulu itu mana | none | none | - | 1 |
+| tepung beras dari UD Maju Makmur ada struknya? | none | none | - | 1 |
+| Find our mozzarella receipt from PT Dairy Fresh | none | none | - | 1 |
+| bon gelas kertas seribu pcs dr Kemasan Prima ada? | none | none | - | 1 |
+| selada yg kita beli di Pasar Indah, tolong cari bonnya | none | r7 | - | 1 |
+| nota gula pasir dr Toko Sinar Baru ada ga | none | none | - | 1 |
+| did we buy robusta beans from CV Kopi Nusani? show the receipt | none | none | - | 1 |
+| cariin bon gula aren dari UD Maju Makmur | none | none | - | 1 |
+| ada nota telur dari Toko Sinar Jaya? | none | none | - | 1 |
+| fresh milk dari CV Kopi Nusantara, invoice-nya mana ya? | none | none | - | 1 |
+| bon sedotan dari Pasar Induk dong | none | none | - | 1 |
+| pernah restok sirup vanila buat latte? cari nota belinya | none | none | - | 1 |
+| got a receipt for dishwashing liquid from Toko Bersih Sentosa? | none | none | - | 1 |
+
+</details>
