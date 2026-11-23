@@ -6,7 +6,7 @@ from app.eval.rag import score
 def test_the_set_is_consistent():
     keys = {r.key for r in RAG_RECEIPTS}
     assert all(q.relevant <= keys for q in RAG_QUESTIONS)
-    assert sum(1 for q in RAG_QUESTIONS if not q.relevant) == 2
+    assert sum(1 for q in RAG_QUESTIONS if not q.relevant) >= 10
 
 
 def test_scores():

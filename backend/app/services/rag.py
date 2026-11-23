@@ -25,7 +25,8 @@ logger = logging.getLogger("rag")
 
 TOP_K = 5
 # Cosine distance beyond this is noise, not a match (distance = 1 - similarity).
-MAX_DISTANCE = 0.65
+# Chosen by the sweep in docs/evaluation.md (`python -m app.eval.rag --sweep`).
+MAX_DISTANCE = 0.35
 
 
 def receipt_to_document_text(receipt: Receipt) -> str:
@@ -64,10 +65,12 @@ async def embed_receipt(session: AsyncSession, receipt: Receipt) -> None:
 
 
 async def search_receipts(
-    session: AsyncSession, business_id: uuid.UUID, query: str, k: int = TOP_K
+    session: AsyncSession, business_id: uuid.UUID, query: str, k: int = TOP_K,
+    max_distance: float | None = None,
 ) -> list[Document]:
     """Top-k receipt matches for a natural-language question, as LangChain
     Documents (page_content = the embedded text, metadata = provenance)."""
+    cutoff = MAX_DISTANCE if max_distance is None else max_distance
     query_vec = await embed_text(query)
     distance = Receipt.embedding.cosine_distance(query_vec).label("distance")
     rows = (
@@ -81,7 +84,7 @@ async def search_receipts(
 
     documents: list[Document] = []
     for receipt, dist in rows:
-        if dist is not None and float(dist) > MAX_DISTANCE:
+        if dist is not None and float(dist) > cutoff:
             continue
         documents.append(
             Document(

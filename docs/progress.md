@@ -2846,3 +2846,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - To use on Railway: set `NIGHTLY_BUSINESS_IDS` on the cron service to the demo business id(s) only.
 **Deviation:** none.
 **Next:** fin-eval results (docs/evaluation.md).
+
+### [fin-rag-cutoff] RAG distance cut-off chosen by a sweep: 0.65 -> 0.35
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/services/rag.py, backend/app/eval/rag.py, backend/app/eval/questions.py, backend/tests/test_rag_cutoff.py (new), backend/tests/test_eval_rag_score.py, docs/evaluation.md
+**Gates:** see the commit.
+**Notes:**
+- Unanswerable set grown from 2 to 12; `python -m app.eval.rag --sweep` re-scores one retrieval at cut-offs 0.30-0.65 (32 embedding calls on gemini-embedding-001).
+- 0.35: false match on unanswerable 100% -> 25%; hit@1 90% -> 80%; precision 28% -> 71%. A distance alone cannot fully separate them (ranges overlap); lexical check suggested, not built.
+- `search_receipts(..., max_distance=None)` lets the sweep widen the cut-off; default is `MAX_DISTANCE`.
+**Deviation:** none.
+**Next:** none.

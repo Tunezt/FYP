@@ -79,7 +79,7 @@ OOS_QUESTIONS = [q for q in QUESTIONS if q.kind == "oos"]
 #
 # Ten receipts are inserted for the run (and rolled back after it); each
 # question names which of them contain the answer. Retrieval precision is then
-# measured against that, not against opinion. Two questions have no answer on
+# measured against that, not against opinion. Twelve questions have no answer on
 # purpose: the right behaviour is to return nothing.
 
 
@@ -124,4 +124,15 @@ RAG_QUESTIONS: list[RagQuestion] = [
     RagQuestion("beli sayur di mana ya", "id", frozenset({"r7"})),
     RagQuestion("pernah beli daging sapi?", "id", frozenset()),
     RagQuestion("did i ever buy caviar", "en", frozenset()),
+    # never bought / never used: the right answer is "no receipt", whatever the cut-off
+    RagQuestion("pernah beli ikan salmon?", "id", frozenset()),
+    RagQuestion("nota dari Toko Bangunan Jaya ada ga", "id", frozenset()),
+    RagQuestion("did we ever buy printer paper", "en", frozenset()),
+    RagQuestion("kapan terakhir beli beras", "id", frozenset()),
+    RagQuestion("beli minyak goreng di mana", "id", frozenset()),
+    RagQuestion("pernah order dari PT Samudra Frozen?", "id", frozenset()),
+    RagQuestion("have I bought vanilla syrup before", "en", frozenset()),
+    RagQuestion("harga beli ayam terakhir brp", "id", frozenset()),
+    RagQuestion("nota dari CV Sumber Rejeki ada ga", "id", frozenset()),
+    RagQuestion("pernah beli teh celup?", "id", frozenset()),
 ]

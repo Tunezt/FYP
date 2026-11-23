@@ -47,7 +47,25 @@ def score(questions: list[RagQuestion], retrieved: list[list[str]]) -> dict:
     }
 
 
-async def run(pace: float, routing: bool) -> str:
+def sweep(questions: list[RagQuestion], ranked: list[list[tuple[str, float]]], cutoffs: list[float]) -> list[dict]:
+    """Re-score the same retrieved (key, distance) lists at each cut-off: no model calls."""
+    rows = []
+    for c in cutoffs:
+        s = score(questions, [[k for k, d in r if d <= c] for r in ranked])
+        rows.append({"cutoff": c, **s})
+    return rows
+
+
+def sweep_table(rows: list[dict]) -> str:
+    pct = lambda v: "n/a" if v is None else f"{v:.0%}"  # noqa: E731
+    out = ["| cut-off | hit@1 (answerable) | recall | precision | unanswerable rejected |", "|---|---|---|---|---|"]
+    for r in rows:
+        rejected = None if r["false_match"] is None else 1 - r["false_match"]
+        out.append(f"| {r['cutoff']:.2f} | {pct(r['hit@1'])} | {pct(r['recall'])} | {pct(r['precision'])} | {pct(rejected)} |")
+    return "\n".join(out)
+
+
+async def run(pace: float, routing: bool, do_sweep: bool = False) -> str:
     from app.ai import tools as tools_module
     from app.ai.gemini import force_tool_call
     from app.ai.router import CLARIFY, OUT_OF_SCOPE, _CLASSIFIER_SYSTEM
@@ -55,7 +73,7 @@ async def run(pace: float, routing: bool) -> str:
     from app.core.db import SessionLocal, set_tenant
     from app.eval.harness import _paced
     from app.models import Business, Receipt
-    from app.services.rag import embed_receipt, search_receipts
+    from app.services.rag import MAX_DISTANCE, embed_receipt, search_receipts
 
     async with SessionLocal() as session:
         business = (await session.execute(select(Business).where(Business.owner_phone == "628120001111"))).scalar_one()
@@ -73,11 +91,13 @@ async def run(pace: float, routing: bool) -> str:
             await session.flush()
             by_id[str(rec.id)] = r.key
             await embed_receipt(session, rec)
-            await asyncio.sleep(1.0)
-        retrieved, rows = [], []
+            await asyncio.sleep(pace if do_sweep else 1.0)
+        retrieved, rows, ranked = [], [], []
         for q in RAG_QUESTIONS:
-            docs = await search_receipts(session, business.id, q.text)
-            keys = [by_id[d.metadata["receipt_id"]] for d in docs if d.metadata["receipt_id"] in by_id]
+            # one embedding call per question; the cut-off is applied afterwards, so a sweep costs no more
+            docs = await search_receipts(session, business.id, q.text, max_distance=2.0)
+            ranked.append([(by_id[d.metadata["receipt_id"]], d.metadata["distance"]) for d in docs if d.metadata["receipt_id"] in by_id])
+            keys = [k for k, dist in ranked[-1] if dist <= MAX_DISTANCE]
             retrieved.append(keys)
             route = ""
             if routing:
@@ -86,7 +106,7 @@ async def run(pace: float, routing: bool) -> str:
                 call = await _paced(lambda: force_tool_call(system=system, message=q.text, tools=declarations), pace=pace)
                 route = call.name if call is not None else "clarify"
             rows.append((q, keys, route))
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(pace if do_sweep else 1.0)
         await session.rollback()
 
     s = score(RAG_QUESTIONS, retrieved)
@@ -101,7 +121,7 @@ async def run(pace: float, routing: bool) -> str:
         f"Embedding model: {settings.gemini_embedding_model}; classifier model: "
         f"{settings.gemini_flash_model if routing else 'not called (retrieval only)'}. "
         f"{len(RAG_RECEIPTS)} receipts, {s['answerable']} answerable + {s['unanswerable']} unanswerable "
-        "questions, top-5, distance cut-off 0.65.",
+        f"questions, top-5, distance cut-off {MAX_DISTANCE}.",
         "",
         "| metric | value |", "|---|---|",
         f"| precision of returned results | {pct(s['precision'])} |",
@@ -113,15 +133,23 @@ async def run(pace: float, routing: bool) -> str:
     ]
     for q, keys, route in rows:
         out.append(f"| {q.text} | {','.join(sorted(q.relevant)) or 'none'} | {','.join(keys) or 'none'} | {route or '-'} |")
+    if do_sweep:
+        cutoffs = [round(0.30 + 0.05 * i, 2) for i in range(8)]
+        out += ["", f"Cut-off sweep over the same retrieved distances ({len(RAG_QUESTIONS)} questions, "
+                    f"{len(RAG_RECEIPTS)} receipts, {len(RAG_RECEIPTS) + len(RAG_QUESTIONS)} embedding calls):", "",
+                sweep_table(sweep(RAG_QUESTIONS, ranked, cutoffs)), "", "Distances (best first), A = answerable, U = unanswerable:", ""]
+        for (q, _k, _r), r in zip(rows, ranked):
+            out.append(f"- {'A' if q.relevant else 'U'} {q.text}: " + ", ".join(f"{k}={d:.2f}" for k, d in r))
     return "\n".join(out)
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--routing", action="store_true")
+    ap.add_argument("--sweep", action="store_true", help="also sweep the distance cut-off 0.30-0.65")
     ap.add_argument("--no-append", action="store_true")
     a = ap.parse_args()
-    body = asyncio.run(run(13.0, a.routing))
+    body = asyncio.run(run(7.0 if a.sweep else 13.0, a.routing, a.sweep))
     print(body)
     if not a.no_append:
         import pathlib

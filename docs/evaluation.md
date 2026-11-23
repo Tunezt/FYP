@@ -349,3 +349,65 @@ What this does and does not say:
 | Informed consent | `docs/consent-text.md`, confirmed by SETUJU on WhatsApp or on paper | Fill in the researcher's name; send before the trial starts; keep the reply. |
 | Trial (2-4 weeks) | nothing to build | The trial itself; **not possible to finish before 26 Nov**, so the report must say the trial is ongoing or short. |
 | Real receipts for the RAG set | synthetic set | Optional: re-run `python -m app.eval.rag` after Ibu Diah's receipts are in the live database. |
+
+## RAG cut-off sweep and decision (fin-rag-cutoff) - 2026-11-23
+
+Why: the first run returned five receipts for questions with no answer (100% false match). The bot can then
+cite a receipt that does not exist, the silent error the thesis argues against. Model: **gemini-embedding-001**
+(no classifier call). 10 synthetic receipts, 10 answerable + 12 unanswerable questions (things never bought,
+suppliers never used), top-5. 32 embedding calls, paced 7 s. Distances are cosine distance (0 = identical).
+
+Cut-off sweep over the same retrieved distances (22 questions, 10 receipts, 32 embedding calls):
+
+| cut-off | hit@1 (answerable) | recall | precision | unanswerable rejected |
+|---|---|---|---|---|
+| 0.30 | 30% | 30% | 27% | 83% |
+| 0.35 | 80% | 85% | 71% | 75% |
+| 0.40 | 80% | 90% | 49% | 25% |
+| 0.45 | 90% | 100% | 28% | 0% |
+| 0.50 | 90% | 100% | 28% | 0% |
+| 0.55 | 90% | 100% | 28% | 0% |
+| 0.60 | 90% | 100% | 28% | 0% |
+| 0.65 | 90% | 100% | 28% | 0% |
+
+Distances (best first), A = answerable, U = unanswerable:
+
+- A kapan terakhir beli susu uht: r10=0.31, r5=0.32, r4=0.33, r1=0.33, r8=0.38
+- A pernah beli gula aren?: r4=0.30, r1=0.36, r6=0.40, r10=0.41, r8=0.41
+- A biasanya beli arabica di mana: r6=0.31, r2=0.31, r9=0.41, r7=0.42, r10=0.42
+- A beli telur dari supplier mana aja: r8=0.32, r3=0.36, r10=0.38, r5=0.39, r7=0.40
+- A have I bought cheese before: r10=0.40, r7=0.43, r5=0.43, r8=0.44, r4=0.44
+- A nota dari Dairy Fresh ada ga: r10=0.19, r5=0.20, r8=0.29, r4=0.31, r1=0.31
+- A kapan terakhir beli gelas plastik: r9=0.30, r1=0.40, r4=0.40, r10=0.41, r5=0.41
+- A pernah beli tepung terigu?: r3=0.30, r8=0.38, r1=0.38, r10=0.39, r4=0.40
+- A harga beli mentega terakhir brp: r8=0.28, r5=0.33, r10=0.33, r1=0.34, r3=0.34
+- A beli sayur di mana ya: r7=0.34, r4=0.41, r10=0.42, r8=0.42, r1=0.42
+- U pernah beli daging sapi?: r10=0.38, r4=0.40, r8=0.41, r5=0.41, r1=0.41
+- U did i ever buy caviar: r8=0.44, r3=0.45, r7=0.46, r10=0.46, r4=0.46
+- U pernah beli ikan salmon?: r10=0.39, r7=0.40, r8=0.40, r5=0.41, r3=0.42
+- U nota dari Toko Bangunan Jaya ada ga: r9=0.27, r1=0.28, r4=0.28, r8=0.28, r3=0.28
+- U did we ever buy printer paper: r9=0.42, r6=0.43, r2=0.44, r4=0.44, r8=0.44
+- U kapan terakhir beli beras: r4=0.37, r3=0.37, r8=0.37, r1=0.37, r10=0.38
+- U beli minyak goreng di mana: r8=0.40, r4=0.41, r7=0.41, r10=0.42, r1=0.42
+- U pernah order dari PT Samudra Frozen?: r10=0.39, r5=0.40, r3=0.41, r8=0.42, r1=0.42
+- U have I bought vanilla syrup before: r4=0.42, r6=0.43, r1=0.43, r2=0.44, r8=0.45
+- U harga beli ayam terakhir brp: r8=0.32, r10=0.35, r3=0.35, r7=0.36, r5=0.36
+- U nota dari CV Sumber Rejeki ada ga: r10=0.29, r6=0.29, r8=0.30, r5=0.30, r2=0.31
+- U pernah beli teh celup?: r6=0.39, r9=0.39, r2=0.40, r3=0.40, r7=0.41
+
+
+**Decision: `MAX_DISTANCE` 0.65 -> 0.35** in `backend/app/services/rag.py` (pinned by `tests/test_rag_cutoff.py`).
+
+- 0.30 loses 70% of the right answers; 0.40 and above reject at most 25% of the unanswerable questions;
+  0.35 is the knee: **75% of unanswerable questions now return nothing** (false match 100% -> 25%) while
+  hit@1 on answerable questions is 80% (was 90%: "have I bought cheese before", distance 0.40, is now missed)
+  and recall 85%. Precision of what is returned rises from 28% to 71%. Measured on this set.
+- **A distance cut-off alone cannot separate the two groups.** Answerable top hits sit at 0.19-0.40,
+  unanswerable ones at 0.27-0.46: they overlap. The three unanswerable questions still matched at 0.35 are the
+  supplier-name ones ("nota dari Toko Bangunan Jaya", "CV Sumber Rejeki") and "harga beli ayam": the embedding
+  rates a made-up supplier close to any receipt that has a supplier line. Not fixed here; **guess (not measured):**
+  a lexical check that the asked item or supplier word occurs in the returned receipt text would remove them.
+  Test by adding that check to `search_receipts` and re-running `python -m app.eval.rag --sweep`.
+- The set is small and synthetic; the right value on Ibu Diah's real receipts (more of them, real photos' text)
+  may differ. Re-run the sweep once her receipts are in the live database.
+- The earlier result table above ("cut-off 0.65") stays as the before-picture.
