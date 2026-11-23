@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     google_api_key: str = "placeholder"
     gemini_flash_model: str = "gemini-2.5-flash"
     gemini_pro_model: str = "gemini-2.5-pro"
+    # wa-gw-8: tried in order after the primary on a 429 (each model has its own free quota)
+    gemini_fallback_models: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.5-flash,gemini-3.6-flash"
     gemini_embedding_model: str = "gemini-embedding-001"
 
     # WhatsApp Cloud API

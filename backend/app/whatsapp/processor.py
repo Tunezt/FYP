@@ -10,9 +10,11 @@ Pipeline per message:
 import logging
 import time
 from collections import OrderedDict
+from datetime import timedelta, timezone
 
 from sqlalchemy import select
 
+from app.ai.gemini import QuotaExhausted
 from app.core.db import plain_session, tenant_session
 from app.models import Business, RequestLog
 from app.whatsapp.client import normalize_phone, send_text
@@ -170,6 +172,14 @@ async def _process_message(message: dict) -> None:
             )
         if reply:
             await send_text(sender, f"{header}\n{reply}" if header else reply)
+    except QuotaExhausted as exc:
+        # wa-gw-8: every AI model is out of free quota — say so, never "ada gangguan".
+        status = "quota"
+        logger.warning("AI quota exhausted (daily=%s) for %s message", exc.daily, msg_type)
+        try:
+            await send_text(sender, quota_reply(exc))
+        except Exception:
+            logger.exception("Failed to send quota reply")
     except Exception:
         status = "error"
         logger.exception("Error handling %s message from %s", msg_type, sender)
@@ -205,6 +215,24 @@ async def _process_message(message: dict) -> None:
         intent,
         status,
         latency_ms,
+    )
+
+
+def quota_reply(exc: QuotaExhausted) -> str:
+    """The owner-facing text when the free AI quota is used up (Indonesian + English)."""
+    if exc.daily and exc.resets_at is not None:
+        wib = exc.resets_at.astimezone(timezone(timedelta(hours=7)))
+        at = f"{wib:%H.%M} WIB ({wib + timedelta(hours=1):%H.%M} WITA)"
+        return (
+            "Maaf, asisten sudah kena batas pemakaian AI gratis untuk hari ini, "
+            f"jadi belum bisa menjawab. Biasanya aktif lagi sekitar jam {at}. "
+            "Data kamu aman, coba kirim lagi setelah itu ya 🙏\n"
+            f"(The assistant has hit today's free AI usage limit. It resets around {at}; "
+            "please try again after that.)"
+        )
+    return (
+        "Asisten lagi terlalu ramai, coba kirim lagi sekitar 1 menit ya 🙏\n"
+        "(The assistant is busy right now, please try again in about a minute.)"
     )
 
 

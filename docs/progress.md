@@ -2776,3 +2776,14 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Test (+1): latte sold once → bot says 82 servings, limited by Susu UHT; no alert from the sweep, the rule, the post-sale check or the bot's low-stock list; a plain ingredient still answers with its number.
 **Deviation:** none.
 **Next:** fin-demo.
+### [wa-gw-8] Survive on the Gemini free tier: fallback chain + plain quota message
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/ai/gemini.py, backend/app/core/config.py (gemini_fallback_models), backend/app/whatsapp/processor.py (QuotaExhausted catch, quota_reply), backend/tests/test_gemini_fallback_chain.py (new, 11 tests, LLM mocked)
+**Gates:** pytest in 5 parts (low RAM): 786 passed; failures only the clock-dependent tests after 00:00 WIB (test_recipe_cost_shift_customer_and_promo, test_thesis_agreement, test_tools_use_registry: identical failures on a HEAD worktree) and test_print_bridge probe flake (passes alone); alembic upgrade/downgrade -1/upgrade OK; seed OK; npm run build unchanged (no frontend change, passed for wa-gw-7).
+**Notes:**
+- Every generation call walks GEMINI_FLASH_MODEL then GEMINI_FALLBACK_MODELS (default `gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.5-flash,gemini-3.6-flash`). 429 -> next model; daily 429 parks the model until midnight Pacific; a per-minute 429 is waited out once; 503 is retried once (chain pass), 504 parks a model 60 s, 404 five minutes. 20 s model timeout.
+- All models out: owner gets an Indonesian + English message with the reset time (about 15.00 WIB / 16.00 WITA) only when every model really returned a daily 429; when overloaded (503/504) it says "terlalu ramai, coba 1 menit". Never "ada gangguan" for quota. Found in the live-path walk: first version called a 503 storm "daily limit"; fixed + tested.
+- Measured on the free key (24 Nov): gemini-2.5-flash 20 req/DAY; gemini-3.5-flash-lite 15 req/MIN (daily not measured, >=35 used without a daily 429); gemini-2.5-flash-lite 404 (retired for new users, not used); 3.1-flash-lite / 3.5-flash / 3.6-flash 503/504 on most probes (limits unknown, kept last in the chain).
+- Calls per text question: 2 (classify + compose) by design; clarify/out_of_scope already 1. Not reduced: composing the answer in a second call keeps the language and tone quality.
+**Next:** owner may later enable billing for a steady primary model.
