@@ -16,8 +16,9 @@ never a cross-tenant query):
 Delivery MUST use the template: this job runs unprompted, almost certainly
 outside the 24-hour session window, and Meta rejects free-form messages there.
 
-Safety switch: env NIGHTLY_BUSINESS_IDS (comma-separated ids) limits the whole night
-to those businesses; unset = all.
+Safety switch: env NIGHTLY_BUSINESS_IDS (comma-separated business ids or owner
+phone numbers) limits the whole night to those businesses; unset = all. A phone
+survives a demo re-seed, which makes a new business id.
 
 Suggested Railway cron schedule: `30 16 * * *` (= 23:30 WIB) so "today" is a
 nearly-complete business day for Indonesian tenants.
@@ -68,15 +69,17 @@ async def process_business(business: Business) -> int:
 
 
 def only_listed(businesses: list[Business], raw: str | None) -> list[Business]:
-    """Safety switch: NIGHTLY_BUSINESS_IDS (comma-separated business ids) limits
-    the night, alerts and summaries included, to those businesses. Unset or
-    blank = every business. A listed id that matches nothing is logged, never
-    guessed at."""
+    """Safety switch: NIGHTLY_BUSINESS_IDS (comma-separated business ids or owner
+    phone numbers) limits the night, alerts and summaries included, to those
+    businesses. Unset or blank = every business. A listed entry that matches
+    nothing is logged, never guessed at. A phone keeps matching after the demo
+    seed is re-run (new id, same owner_phone)."""
     wanted = {x.strip() for x in (raw or "").split(",") if x.strip()}
     if not wanted:
         return businesses
-    kept = [b for b in businesses if str(b.id) in wanted]
-    for missing in wanted - {str(b.id) for b in kept}:
+    kept = [b for b in businesses if str(b.id) in wanted or b.owner_phone in wanted]
+    matched = {str(b.id) for b in kept} | {b.owner_phone for b in kept}
+    for missing in wanted - matched:
         logger.warning("NIGHTLY_BUSINESS_IDS lists %s, which is not a business", missing)
     return kept
 

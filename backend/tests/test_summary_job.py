@@ -125,7 +125,9 @@ def test_nightly_safety_switch_limits_the_businesses():
 
     from app.jobs.nightly import only_listed
 
-    a, b = SimpleNamespace(id=uuid.uuid4()), SimpleNamespace(id=uuid.uuid4())
+    a = SimpleNamespace(id=uuid.uuid4(), owner_phone="6281100000001")
+    b = SimpleNamespace(id=uuid.uuid4(), owner_phone="628115819400")
     assert only_listed([a, b], None) == [a, b] and only_listed([a, b], " ") == [a, b]
     assert only_listed([a, b], f"{b.id}") == [b]
     assert only_listed([a, b], f" {a.id} , {uuid.uuid4()} ") == [a]  # an unknown id is ignored, not guessed
+    assert only_listed([a, b], "628115819400") == [b]  # an owner phone survives a re-seed (new id)

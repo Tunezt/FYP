@@ -2883,3 +2883,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Overfitting caveat in docs/evaluation.md: lists written with this question set in mind; re-check on real receipts.
 **Deviation:** none.
 **Next:** none.
+
+
+### [fin-cron] Railway nightly job service ("nightly") and NIGHTLY_BUSINESS_IDS accepts owner phones
+**Date:** 2026-11-24
+**Status:** done (see the worker report for the live proof)
+**Changed:** backend/app/jobs/nightly.py, backend/tests/test_summary_job.py
+**Gates:** see the commit.
+**Notes:**
+- Railway service `nightly` (repo Tunezt/FYP, branch main, root /backend; set through the Railway API because Railway no longer lets a new service point at a config file): start `python -m app.jobs.nightly`, cron `30 16 * * *` (= 23:30 WIB), restart never. Variables reference the FYP service (`${{FYP.VAR}}`); no elevated `MIGRATION_DATABASE_URL`, no backup vars.
+- Re-running the demo seed makes a NEW business id (it deletes and recreates the business). A scope by id would silently stop covering the demo, so `NIGHTLY_BUSINESS_IDS` now also accepts owner phone numbers; the live value is `628115819400` (the Poernama Demo owner), which survives every re-seed. Ibu Diah's business is skipped.
+- Test: the existing safety-switch test gains a phone case.
+**Deviation:** none.
