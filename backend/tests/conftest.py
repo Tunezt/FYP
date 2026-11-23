@@ -10,11 +10,25 @@ After M0-T1 those four tests must never skip (roadmap §2). If they do, local Po
 down: `python scripts/local-pg.py status` / `docker compose ps`.
 """
 import os
+from datetime import datetime
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from app.core.config import get_settings
+
+# Proof that no test leans on the hour: FYP_TEST_CLOCK_WIB=00:30 runs the suite with
+# the Python clock set to that WIB time today (needs `pip install time-machine`; unset
+# in normal runs). The database's own now() stays real, so tests that stamp rows in
+# SQL (print queue ages) are only meaningful near the real time.
+if os.getenv("FYP_TEST_CLOCK_WIB"):
+    import time_machine
+
+    _h, _m = (int(x) for x in os.environ["FYP_TEST_CLOCK_WIB"].split(":"))
+    time_machine.travel(
+        datetime.now(ZoneInfo("Asia/Jakarta")).replace(hour=_h, minute=_m, second=0, microsecond=0), tick=True
+    ).start()
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
@@ -22,6 +36,23 @@ if not os.getenv("INTEGRATION_DATABASE_URL"):
     _url = get_settings().database_url
     if urlsplit(_url).hostname in _LOCAL_HOSTS:
         os.environ["INTEGRATION_DATABASE_URL"] = _url
+
+
+def on_day(days_ago: int = 0, hours_ago: float = 0):
+    """A moment on the WIB day `days_ago` days back, standing for 'hours_ago hours
+    before now'. Fixtures used `now - timedelta(hours=...)`, which between 00:00 and
+    ~07:00 WIB lands on yesterday, while the metrics say 'today' by the WIB date
+    (fin-test-clock). Here 'hours ago' is placed in proportion to the day so far, so
+    a row meant for a day is on that day at any hour of the clock, and the order of
+    rows is kept (more hours ago = earlier). Use for any row that must land on a
+    given day; keep plain timedeltas for 'N days ago' that need no day alignment."""
+    from datetime import timedelta, timezone
+
+    wib = ZoneInfo("Asia/Jakarta")
+    now = datetime.now(wib)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    when = start - timedelta(days=days_ago) + (now - start) * (1 - min(hours_ago, 23) / 24)
+    return when.astimezone(timezone.utc)
 
 
 async def seed_books(session, business_id) -> None:

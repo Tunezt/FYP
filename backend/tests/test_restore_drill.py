@@ -10,9 +10,11 @@ import asyncio
 import importlib.util
 import re
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import asyncpg
 import pytest
 
 from app.core.config import Settings, get_settings
@@ -91,9 +93,41 @@ def test_the_pytest_summary_line_is_what_gets_reported():
 
 # ── the drill itself ─────────────────────────────────────────────────────────
 
+@pytest.fixture(scope="module")
+def drill_source():
+    """The database the drill dumps: a throwaway one, migrated and seeded here
+    (fin-test-clock). Dumping the shared local database made the drill depend on
+    whatever other runs had left in it (an aborted run's half-built cafe, or no
+    cafe at all) and fail for reasons that had nothing to do with restoring."""
+    admin = source_url()
+    name = f"wp_drill_src_{uuid.uuid4().hex[:8]}"
+    asyncio.run(drill_module.drop_scratch(admin, name))
+    asyncio.run(drill_module.create_scratch(admin, name))
+    url = drill_module.with_database(admin, name)
+    app_url = drill_module.with_database(get_settings().database_url, name)
+    try:
+        async def prepare():
+            conn = await asyncpg.connect(drill_module.asyncpg_url(url))
+            try:
+                await conn.execute("create extension if not exists vector")
+            finally:
+                await conn.close()
+            await drill_module.apply_bootstrap(url)
+
+        asyncio.run(prepare())
+        backend = Path(__file__).resolve().parents[1]
+        env = {"MIGRATION_DATABASE_URL": url, "DATABASE_URL": app_url, "BACKUP_DATABASE_URL": url}
+        for cmd in ([sys.executable, "-m", "alembic", "upgrade", "head"], [sys.executable, "-m", "app.seed"]):
+            done = drill_module.run(cmd, env=env, cwd=backend)
+            assert done.returncode == 0, f"{cmd[2]} failed: {(done.stderr or done.stdout)[-600:]}"
+        yield url
+    finally:
+        asyncio.run(drill_module.drop_scratch(admin, name))
+
+
 @pytest.fixture
-def a_real_dump(configure, tmp_path) -> Path:
-    configure(backup_dir=str(tmp_path / "offsite"), environment="development")
+def a_real_dump(configure, tmp_path, drill_source) -> Path:
+    configure(backup_dir=str(tmp_path / "offsite"), environment="development", backup_database_url=drill_source)
     result = run_backup(NOW)
     assert result.ok, result.error
     dump = latest_dump(tmp_path / "offsite")
@@ -101,25 +135,25 @@ def a_real_dump(configure, tmp_path) -> Path:
     return dump
 
 
-def _run(dump: Path):
+def _run(dump: Path, source: str | None = None):
     settings = get_settings()
     return asyncio.run(
         drill_module.drill(
             dump=dump,
             admin_url=source_url(),
             app_role_url=settings.database_url,
-            source=source_url(),
+            source=source or source_url(),
             keep=False,
         )
     )
 
 
-def test_the_drill_restores_checks_and_passes(a_real_dump):
+def test_the_drill_restores_checks_and_passes(a_real_dump, drill_source):
     """The deliverable: a dump goes into a scratch database, the schema is the
     revision this code expects, `test_invariants.py` passes against it as
     app_role with RLS enforced, and every table that has rows in the source has
     rows in the restore."""
-    result = _run(a_real_dump)
+    result = _run(a_real_dump, drill_source)
 
     failed = [f"{p.name}: {p.detail}" for p in result.phases if not p.ok]
     assert result.ok, "phases failed: " + " | ".join(failed)

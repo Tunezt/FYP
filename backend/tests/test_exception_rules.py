@@ -28,7 +28,7 @@ from app.services.receiving import GrLineSpec, receive_goods
 from app.services.stock import open_item_stock
 from app.services.suppliers import create_supplier
 
-from tests.conftest import seed_books
+from tests.conftest import seed_books, on_day
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 D = Decimal
@@ -81,7 +81,7 @@ async def shop(session_factory):
             await open_item_stock(s, it, unit_cost=it.cost_price)
             await ensure_default_variant(s, it)
         for day in range(40, -1, -1):
-            when = NOW - timedelta(days=day, hours=6 if day else 1)
+            when = on_day(day, 6 if day else 1)
             qty = D(2) if day % 2 == 0 else D(3)
             for staff in (sari, budi):
                 await create_order(s, business_id=bid, staff_id=staff.id,
@@ -125,7 +125,7 @@ async def test_margin_drop_fires_exactly_once(session_factory, shop):
             v.cost_price = D(17000)
         await s.flush()
         for day in range(6, -1, -1):
-            when = NOW - timedelta(days=day, hours=5 if day else 1, minutes=30)
+            when = on_day(day, 5.5 if day else 1)
             await create_order(s, business_id=c["bid"], staff_id=c["sari"], lines=[OrderLineSpec(item_id=c["kopi"], quantity=D(5))],
                                payments=[PaymentSpec(method="cash", amount=D(100000))], sold_at=when)
         await s.commit()
@@ -151,7 +151,7 @@ async def test_stockout_before_the_next_delivery_fires_exactly_once(session_fact
         jaya = await create_supplier(s, c["bid"], name="Toko Jaya")
         for days_ago in (30, 20, 10):
             await receive_goods(s, c["bid"], supplier_id=jaya.id, lines=[GrLineSpec(item_id=c["roti"], quantity=D(20), unit_cost=D(6000))],
-                                received_at=NOW - timedelta(days=days_ago), received_by=c["owner"])
+                                received_at=on_day(days_ago), received_by=c["owner"])
         roti = await s.get(Item, c["roti"])
         roti.current_stock = D(6)
         await s.commit()
@@ -199,9 +199,9 @@ async def test_supplier_price_move_fires_exactly_once(session_factory, shop):
         await _set_tenant(s, c["bid"])
         jaya = await create_supplier(s, c["bid"], name="Toko Jaya")
         await receive_goods(s, c["bid"], supplier_id=jaya.id, lines=[GrLineSpec(item_id=c["kopi"], quantity=D(10), unit_cost=D(8000))],
-                            received_at=NOW - timedelta(days=9), received_by=c["owner"])
+                            received_at=on_day(9), received_by=c["owner"])
         await receive_goods(s, c["bid"], supplier_id=jaya.id, lines=[GrLineSpec(item_id=c["kopi"], quantity=D(10), unit_cost=D(9600))],
-                            received_at=NOW - timedelta(hours=2), received_by=c["owner"])
+                            received_at=on_day(0, 2), received_by=c["owner"])
         await s.commit()
     async with session_factory() as s:
         await _set_tenant(s, c["bid"])
@@ -222,7 +222,7 @@ async def test_takings_anomaly_fires_exactly_once(session_factory, shop):
         await _set_tenant(s, c["bid"])
         for _ in range(20):
             await create_order(s, business_id=c["bid"], staff_id=c["sari"], lines=[OrderLineSpec(item_id=c["kopi"], quantity=D(5))],
-                               payments=[PaymentSpec(method="cash", amount=D(100000))], sold_at=NOW - timedelta(minutes=30))
+                               payments=[PaymentSpec(method="cash", amount=D(100000))], sold_at=on_day(0, 0.5))
         await s.commit()
     async with session_factory() as s:
         await _set_tenant(s, c["bid"])

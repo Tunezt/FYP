@@ -33,7 +33,7 @@ from app.services.stock import open_item_stock
 from app.services.suppliers import create_supplier
 from app.services.units import ensure_standard_uoms
 
-from tests.conftest import seed_books
+from tests.conftest import seed_books, on_day
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 D = Decimal
@@ -97,12 +97,12 @@ async def shop(session_factory):
                             received_at=now - timedelta(days=2), received_by=owner.id)
         andi = await create_customer(s, bid, name="Andi Wijaya", phone="081200001111")
         await create_promo(s, bid, name="BOGO Es Kopi", kind="bonus_item", item_id=eskopi.id, max_per_order=1)
-        shift = await open_shift(s, bid, staff_id=sari.id, opening_float=D(50000), opened_at=now - timedelta(hours=8))
+        shift = await open_shift(s, bid, staff_id=sari.id, opening_float=D(50000), opened_at=on_day(0, 8))
         await create_order(s, business_id=bid, staff_id=sari.id, lines=[OrderLineSpec(item_id=eskopi.id, quantity=D(1))],
-                           payments=[PaymentSpec(method="cash", amount=D(22000))], sold_at=now - timedelta(hours=6), customer_id=andi.id)
+                           payments=[PaymentSpec(method="cash", amount=D(22000))], sold_at=on_day(0, 6), customer_id=andi.id)
         await create_order(s, business_id=bid, staff_id=sari.id, lines=[OrderLineSpec(item_id=eskopi.id, quantity=D(2))],
-                           payments=[PaymentSpec(method="qris", amount=D(44000))], sold_at=now - timedelta(hours=3), customer_id=andi.id)
-        await close_shift(s, shift, counted_cash=D(74000), closed_by=owner.id, closed_at=now - timedelta(hours=1))   # expected 72.000
+                           payments=[PaymentSpec(method="qris", amount=D(44000))], sold_at=on_day(0, 3), customer_id=andi.id)
+        await close_shift(s, shift, counted_cash=D(74000), closed_by=owner.id, closed_at=on_day(0, 1))   # expected 72.000
         await s.commit()
         ids = {"bid": bid, "gula": gula.id, "kopi": kopi.id, "eskopi": eskopi.id, "jaya": jaya.id, "andi": andi.id}
     yield ids

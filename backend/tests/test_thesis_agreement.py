@@ -34,7 +34,7 @@ from app.services.orders import OrderLineSpec, PaymentSpec, create_order, void_o
 from app.services.pricing import ensure_pricing_settings
 from app.services.stock import open_item_stock
 
-from tests.conftest import seed_books
+from tests.conftest import seed_books, on_day
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 D = Decimal
@@ -110,12 +110,12 @@ async def shop(session_factory):
             return await create_order(s, business_id=bid, staff_id=sari.id, lines=lines,
                                       payments=[PaymentSpec(method="cash", amount=D(paid))], sold_at=when)
 
-        await sell([OrderLineSpec(item_id=roti.id, quantity=D(1))], 15000, now - timedelta(days=1))
-        await sell([OrderLineSpec(item_id=kopi.id, quantity=D(2))], 40000, now - timedelta(minutes=30))
-        await sell([OrderLineSpec(item_id=roti.id, quantity=D(1)), OrderLineSpec(item_id=kopi.id, quantity=D(1))], 35000, now - timedelta(minutes=20))
-        voided = await sell([OrderLineSpec(item_id=kopi.id, quantity=D(1))], 20000, now - timedelta(minutes=10))
+        await sell([OrderLineSpec(item_id=roti.id, quantity=D(1))], 15000, on_day(1))
+        await sell([OrderLineSpec(item_id=kopi.id, quantity=D(2))], 40000, on_day(0, 0.5))
+        await sell([OrderLineSpec(item_id=roti.id, quantity=D(1)), OrderLineSpec(item_id=kopi.id, quantity=D(1))], 35000, on_day(0, 1/3))
+        voided = await sell([OrderLineSpec(item_id=kopi.id, quantity=D(1))], 20000, on_day(0, 1/6))
         await void_order(s, business_id=bid, order_id=voided.order.id, staff_id=sari.id, manager_pin="1234")
-        await record_expense(s, bid, amount=D(12000), description="es batu", category="operasional", source="manual", occurred_at=now - timedelta(minutes=5))
+        await record_expense(s, bid, amount=D(12000), description="es batu", category="operasional", source="manual", occurred_at=on_day(0, 1/12))
         await s.commit()
         ids = {"bid": bid, "kopi": kopi.id, "roti": roti.id}
     yield ids

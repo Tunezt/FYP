@@ -2858,3 +2858,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - `search_receipts(..., max_distance=None)` lets the sweep widen the cut-off; default is `MAX_DISTANCE`.
 **Deviation:** none.
 **Next:** none.
+
+
+### [fin-test-clock] The test suite no longer depends on the hour
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/tests/conftest.py, backend/tests/test_exception_rules.py, test_eval_harness.py, test_thesis_agreement.py, test_tools_use_registry.py, test_new_tools.py, test_restore_drill.py
+**Gates:** see the commit.
+**Notes:**
+- Cause (measured): fixtures wrote rows at `now - timedelta(hours=1..8)` / `minutes=5..30`, while the metrics and rules say "today" by the WIB calendar date. Between 00:00 and ~07:00 WIB "an hour ago" is yesterday, so today's revenue was 0 and the anomaly rule fired on a quiet shop. 11 tests failed on a clean `main` at 00:30 WIB (exception_rules ×6, eval_harness ×2, thesis_agreement, tools_use_registry, new_tools). No product bug: the product's WIB-day logic is right.
+- Fix, one shared place: `on_day(days_ago, hours_ago)` in `tests/conftest.py` puts "hours ago" in proportion to the day so far, on the right WIB day, in the same order, at any hour. The five files call it instead of `now - timedelta(...)`.
+- Proof: with `FYP_TEST_CLOCK_WIB=HH:MM` (the Python clock set with `time-machine`, an opt-in that only runs when the variable is set) the five files pass at 00:30, 06:30, 12:00 and 23:50 WIB, 21 of 21 each time, and at the real 00:48 WIB. A global clock pin was tried first and rejected: the database's own `now()` stays real, and with the Python clock moved hours away the print-queue age tests (print_bridge, open_bills, prep_routing) fail for that reason alone, which real life never does.
+- Restore drill: it dumped the shared local database, so any half-built cafe from an aborted run (or an empty database) failed its invariants phase. It now builds its own throwaway database (migrated and seeded in a subprocess, dropped after), so the drill passes with a junk cafe in the shared database (checked). `test_invariants.py` itself still scans the shared database; seed it once (`python -m app.seed`) before the suite on a fresh local database.
+**Deviation:** none.

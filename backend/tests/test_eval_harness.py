@@ -27,7 +27,7 @@ from app.services.orders import OrderLineSpec, PaymentSpec, create_order
 from app.services.pricing import ensure_pricing_settings
 from app.services.stock import open_item_stock
 
-from tests.conftest import seed_books
+from tests.conftest import seed_books, on_day
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 D = Decimal
@@ -152,7 +152,7 @@ async def shop(session_factory):
         for name, qty, hours in [("Kopi Arabica", 2, 5), ("Croissant", 1, 3), ("Es Kopi Susu", 3, 1)]:
             it = items[name]
             await create_order(s, business_id=bid, staff_id=sari.id, lines=[OrderLineSpec(item_id=it.id, quantity=D(qty))],
-                               payments=[PaymentSpec(method="cash", amount=D(it.sell_price) * qty)], sold_at=now - timedelta(hours=hours))
+                               payments=[PaymentSpec(method="cash", amount=D(it.sell_price) * qty)], sold_at=on_day(0, hours))
         await s.commit()
     yield bid
     async with session_factory() as s:
