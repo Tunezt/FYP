@@ -2707,3 +2707,45 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Cause (Railway log, deploy 43777549): `400 INVALID_ARGUMENT 'Function calling is not enabled for api version v1. Use api version v1beta instead.'` Railway built an unpinned google-genai 3.6.1 (local 2.10.0); 3.x defaults to API v1. Not a quota problem; key hash identical live vs local.
 - Fix: `HttpOptions(api_version="v1beta")` in gemini.py; google-genai==2.10.0, langchain-core==1.4.8, langchain-google-genai==4.2.7 pinned exactly so a rebuild cannot change them.
 **Next:** deploy, confirm no 400 in Railway logs; then wa-gw-8.
+
+
+### [fin-p0-8] A day header on the Penjualan page is the whole day's figure
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/api/dashboard.py, backend/app/schemas/pos.py, backend/tests/test_day_totals.py (new), frontend/components/TransactionHistory.tsx, frontend/app/(dashboard)/sales/page.tsx, frontend/lib/types.ts
+**Gates:** pytest 799 passed, 0 skipped, 0 failed (00:3x WITA, on the tree with fin-p1-3 and fin-eval); alembic upgrade head / downgrade -1 / upgrade head OK; seed OK; npm run build OK.
+**Notes:**
+- Audit P0-8: "Kemarin" showed 40 transactions, Rp 964.000 while 22 Nov really had 59 orders and Rp 1.447.000. The header summed only the rows of the loaded page.
+- `GET /api/orders` now also returns `days`: for each business day on the page, the count of all bills (voided included) and the takings (voided left out), under the same cashier and search filter. The page header uses these; without them (the demo data) it falls back to the loaded rows.
+- Test (+2): a page of 3 rows that cuts a 5-bill day in half still reports 5 bills and the right takings (one bill voided); a filtered page lists only its own days.
+**Deviation:** none.
+**Next:** fin-p1-3.
+
+
+### [fin-p1-3] Daily summary to the owner, and last week's on Monday
+**Date:** 2026-11-24
+**Status:** done (cron service on Railway not verified, see Notes)
+**Changed:** backend/app/jobs/summary.py (new), backend/app/jobs/nightly.py, backend/tests/test_summary_job.py (new)
+**Gates:** as fin-p0-8.
+**Notes:**
+- CP1 §1.5 promised periodic summaries; only alerts existed. After the alerts, the nightly job now sends one message per business: takings, bills, average, change against yesterday, expenses and net profit, top three items; on Monday it adds last week against the week before. All numbers come from the metric registry. A day with no sales sends nothing. The demo number is never messaged. A failure runs inside a savepoint and never undoes the alerts.
+- Gateway provider sends plain text; the Cloud API sends the approved alert template with the summary in the detail slot (no newlines). A new template is not needed.
+- Not guarded against a double run: two nightly runs the same night send two summaries.
+- P1-9 (is a Railway cron service running `python -m app.jobs.nightly`?): NOT verified. The only connected Chrome is not logged in to Railway and there is no Railway CLI here. Create if missing: service from this repo, backend root, start command `python -m app.jobs.nightly`, schedule `30 16 * * *` (UTC, = 23:30 WIB), same variables as the web service.
+- Test (+4): Monday message has the day and last week with the right figures; a midweek day has no weekly part; a closed day sends nothing; gateway sends text and the Cloud API sends the template.
+**Deviation:** none.
+**Next:** fin-eval.
+
+
+### [fin-eval] Evaluation tooling: task success, SUS, consent, RAG set, CP2 deviations
+**Date:** 2026-11-24
+**Status:** PARTIAL: tooling done; live runs and the real participants still to do
+**Changed:** scripts/eval_task_success.py, scripts/sus_score.py, backend/app/eval/rag.py, backend/app/eval/questions.py, docs/sus-questionnaire.md, docs/consent-text.md, docs/cp2-deviations.md, backend/tests/test_eval_task_success.py, test_sus_score.py, test_eval_rag_score.py (all new except questions.py)
+**Gates:** as fin-p0-8.
+**Notes:**
+- Task success: a WhatsApp text question fails if its reply was an error or the same business repeats it (similar text) within 2 minutes; lower bound on failure.
+- SUS: 10 items in Indonesian and English, Brooke scoring, target 72. Consent text in both languages, confirmed by replying SETUJU.
+- M9-T7: 10 receipts and 12 questions (2 with no answer) with precision, hit@1, recall, MRR and false-match scoring; run with `python -m app.eval.rag [--routing]`. Not yet run against Gemini.
+- CP2 deviations: six rows with reasons. Correction to the audit: LangChain is not entirely absent (`langchain_core` Documents, `langchain-google-genai` in requirements); orchestration and the vector store are not LangChain.
+**Deviation:** none.
+**Next:** run questions 16-30 and the RAG set on gemini-3.5-flash-lite (not Thu 26 Nov before 16:00 WITA), then fill docs/evaluation.md.

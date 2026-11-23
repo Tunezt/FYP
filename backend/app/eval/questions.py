@@ -73,3 +73,55 @@ QUESTIONS: list[Question] = [
 
 DATA_QUESTIONS = [q for q in QUESTIONS if q.kind == "data"]
 OOS_QUESTIONS = [q for q in QUESTIONS if q.kind == "oos"]
+
+
+# -- M9-T7: the RAG set (search_history over receipt history) ----------------
+#
+# Ten receipts are inserted for the run (and rolled back after it); each
+# question names which of them contain the answer. Retrieval precision is then
+# measured against that, not against opinion. Two questions have no answer on
+# purpose: the right behaviour is to return nothing.
+
+
+@dataclass(frozen=True)
+class RagReceipt:
+    key: str
+    supplier: str
+    day: str                                       # YYYY-MM-DD
+    items: tuple[tuple[str, str, int, int], ...]   # name, unit, quantity, line total (Rp)
+
+
+@dataclass(frozen=True)
+class RagQuestion:
+    text: str
+    lang: str
+    relevant: frozenset[str]                       # receipt keys that answer it; empty = no answer exists
+
+
+RAG_RECEIPTS: list[RagReceipt] = [
+    RagReceipt("r1", "Toko Sinar Jaya", "2026-10-02", (("gula pasir", "kg", 10, 140000), ("susu UHT", "liter", 24, 456000))),
+    RagReceipt("r2", "CV Kopi Nusantara", "2026-10-05", (("kopi arabica", "kg", 5, 750000), ("kopi robusta", "kg", 5, 400000))),
+    RagReceipt("r3", "UD Maju Makmur", "2026-10-09", (("tepung terigu", "kg", 25, 300000), ("telur", "kg", 10, 280000))),
+    RagReceipt("r4", "Toko Sinar Jaya", "2026-10-16", (("gula aren", "kg", 5, 125000), ("susu UHT", "liter", 24, 456000))),
+    RagReceipt("r5", "PT Dairy Fresh", "2026-10-20", (("susu segar", "liter", 30, 540000), ("krimer", "kg", 5, 200000))),
+    RagReceipt("r6", "CV Kopi Nusantara", "2026-10-26", (("kopi arabica", "kg", 5, 765000),)),
+    RagReceipt("r7", "Pasar Induk", "2026-10-28", (("selada", "kg", 3, 60000), ("tomat", "kg", 4, 80000))),
+    RagReceipt("r8", "UD Maju Makmur", "2026-11-03", (("telur", "kg", 10, 290000), ("mentega", "kg", 5, 250000))),
+    RagReceipt("r9", "Toko Kemasan Prima", "2026-11-08", (("gelas plastik", "pcs", 1000, 350000), ("sedotan", "pcs", 2000, 120000))),
+    RagReceipt("r10", "PT Dairy Fresh", "2026-11-12", (("susu segar", "liter", 30, 540000), ("keju", "kg", 2, 180000))),
+]
+
+RAG_QUESTIONS: list[RagQuestion] = [
+    RagQuestion("kapan terakhir beli susu uht", "id", frozenset({"r1", "r4"})),
+    RagQuestion("pernah beli gula aren?", "id", frozenset({"r4"})),
+    RagQuestion("biasanya beli arabica di mana", "id", frozenset({"r2", "r6"})),
+    RagQuestion("beli telur dari supplier mana aja", "id", frozenset({"r3", "r8"})),
+    RagQuestion("have I bought cheese before", "en", frozenset({"r10"})),
+    RagQuestion("nota dari Dairy Fresh ada ga", "id", frozenset({"r5", "r10"})),
+    RagQuestion("kapan terakhir beli gelas plastik", "id", frozenset({"r9"})),
+    RagQuestion("pernah beli tepung terigu?", "id", frozenset({"r3"})),
+    RagQuestion("harga beli mentega terakhir brp", "id", frozenset({"r8"})),
+    RagQuestion("beli sayur di mana ya", "id", frozenset({"r7"})),
+    RagQuestion("pernah beli daging sapi?", "id", frozenset()),
+    RagQuestion("did i ever buy caviar", "en", frozenset()),
+]
