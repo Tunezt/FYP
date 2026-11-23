@@ -2795,3 +2795,18 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **Changed:** backend/app/services/owner_numbers.py, backend/app/whatsapp/processor.py, backend/tests/test_number_on_two_cafes.py
 **Gates:** pytest on every file touching whatsapp/processor/owner numbers: 204 passed, 1 failed (test_thesis_agreement: clock flake after 00:00 WIB, same on HEAD); no migration, no frontend change.
 **Notes:** wa-gw-6 regression. The list now stores an `asked:<phone>` marker in `active_owner_numbers` (no schema change); only a reply to a list already shown can be "unclear". A pick or "ganti toko" clears it. Test +1; the unclear-reply test now sends "halo" first.
+
+
+### [fin-demo] Demo data and script: alerts after seeding, today's sales, a staged receipt, a rewritten script
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/seed.py, docs/demo-script.md, docs/demo-receipt-toko-manis.jpg (new)
+**Gates:** see the commit.
+**Notes:**
+- Audit P0-5: the seed now ends with `nightly_pass` (rules only, never delivery, never Gemini), run as last night's pass (23:30 WIB yesterday), so the planted spike is "that day". Result: an anomaly alert (Rp 1.447.000 against a normal of about Rp 475.000) and a Croissant stock-out alert; no alert for the made-to-order drinks (fin-p0-4). Peringatan and the Ringkasan card are no longer empty right after a seed.
+- Audit P1-5: the seed adds today's sales up to the current WIB hour (none before 07:00, never a sale after now, books closed at "now" instead of 21:00 for today). Checked with the clock moved to ~11:00 WIB: 6 sales today, last 09:43. The earlier 30 days are unchanged (today's sales are drawn last).
+- Audit P1-4: `docs/demo-receipt-toko-manis.jpg`, a photographed Toko Manis nota (Gula Aren 5 kg, Susu UHT 12 liter, Biji Arabica 2 kg, total Rp 684.000). The script says to send it once before the demo, then YA, so the receipt-history question has an answer. Correcting gula to 3 kg gives Rp 608.000 (fin-p0-6). Not parsed by a real model yet (no Gemini call in this task).
+- Audit P0-3: `docs/demo-script.md` rewritten for Poernama Demo: the re-seed command, the cafe picker on a two-cafe number, PIN/WhatsApp login, Croissant ×13 as the stock-guard example, made-to-order wording, the Toko Manis receipt, the alerts, the billed Gemini key.
+- Not changed: whether a Railway cron sends the alerts (unknown, owner to check; the script says so).
+**Deviation:** none.
+**Next:** the coordinator re-seeds the live demo.

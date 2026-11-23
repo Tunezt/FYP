@@ -4,7 +4,9 @@ Creates the **Poernama** demo business (Jakarta) with:
 - owner + 2 staff (PINs below)
 - 11 items: sellable drinks/food with stock in servings, plus raw materials in kg/liter
 - 30 days of deterministic pseudo-random sales history (weekend bumps, one
-  planted sales spike yesterday so anomaly detection has something to find)
+  planted sales spike yesterday so anomaly detection has something to find),
+  plus today's sales up to the current hour
+- the nightly pass run once at the end, so alerts and the anomaly exist at once
 - a few manual expenses so the P&L view isn't empty
 
 Idempotent: re-running deletes and recreates the demo business (cascade), so
@@ -270,21 +272,28 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
         sale_movements: list[tuple] = []  # (item, qty, sold_at, line, staff_id, unit_cost) — ledgered after the loop
         day_books: dict = {}  # local date -> (posted_at, {component: amount}) — journalled per day after the loop
         yesterday_till: list[tuple] = []  # (order, payment) Sari rang up yesterday — her closed shift (M7-T1)
-        for day_offset in range(30, 0, -1):
+        local_now = now.astimezone(ZoneInfo("Asia/Jakarta"))
+        for day_offset in range(30, -1, -1):   # 0 = today, up to the current hour (audit P1-5)
             day = now - timedelta(days=day_offset)
             weekend = day.weekday() >= 5
             base = 26 if weekend else 18
             if day_offset == 1:
                 base = 55  # planted anomaly: yesterday was unusually busy
             n_sales = base + rng.randint(-4, 4)
+            if day_offset == 0:
+                open_hours = min(max(local_now.hour - 6, 0), 14)   # the café trades 07:00-20:59
+                n_sales = round(n_sales * open_hours / 14)
             for _ in range(n_sales):
                 item, _w = rng.choices(sellable, weights=[w for _, w in sellable])[0]
                 qty = Decimal(rng.choices([1, 1, 1, 2], weights=[6, 6, 6, 2])[0])
                 # Business hours in the café's own timezone (07:00–20:59 WIB),
                 # stored as UTC — not UTC-hour times that read as 3 AM sales.
+                last_hour = 20 if day_offset else min(local_now.hour, 20)
                 sold_at = day.astimezone(ZoneInfo("Asia/Jakarta")).replace(
-                    hour=rng.randint(7, 20), minute=rng.randint(0, 59), second=0, microsecond=0
+                    hour=rng.randint(7, last_hour), minute=rng.randint(0, 59), second=0, microsecond=0
                 ).astimezone(timezone.utc)
+                if sold_at > now:   # the current hour: never a sale from the future
+                    sold_at = now - timedelta(minutes=rng.randint(1, 30))
                 # Order model (M3-T2): one order, one line, one payment per sale.
                 # Cash dominates a warung; QRIS is the common alternative.
                 # One in four drinks with a Large size sells as Large (M4-T1).
@@ -325,7 +334,9 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
                 session.add(payment)
                 if day_offset == 1 and staff_id == sari.id:
                     yesterday_till.append((order, payment))
-                close_of_day = sold_at.astimezone(ZoneInfo("Asia/Jakarta")).replace(hour=21, minute=0).astimezone(timezone.utc)
+                close_of_day = min(
+                    sold_at.astimezone(ZoneInfo("Asia/Jakarta")).replace(hour=21, minute=0).astimezone(timezone.utc), now
+                )
                 _, components = day_books.setdefault(close_of_day.date(), (close_of_day, {}))
                 components[f"payment:{method}"] = components.get(f"payment:{method}", Decimal(0)) + total
                 components["cogs"] = components.get("cogs", Decimal(0)) + unit_cost * qty
@@ -423,6 +434,20 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
                 session, business_id, amount=Decimal(amount), category=category,
                 description=description, source="manual", occurred_at=now - timedelta(days=days_ago),
             )
+
+    # The nightly pass (audit P0-5): baselines, the stock sweep and the alert rules,
+    # so Peringatan, the Ringkasan card and the anomaly exist right after seeding.
+    # Rules only, never delivery: nothing is sent to WhatsApp from a seed, and
+    # nothing here calls Gemini.
+    from app.jobs.nightly import nightly_pass
+
+    async with tenant_session(business_id) as session:
+        business = await session.get(Business, business_id)
+        # As last night's run saw it (23:30 WIB yesterday): the planted spike is then
+        # "that day", which is what the cron would have flagged by the morning.
+        last_night = (local_now - timedelta(days=1)).replace(hour=23, minute=30, second=0, microsecond=0)
+        written = await nightly_pass(session, business, last_night.astimezone(timezone.utc))
+    print(f"Nightly pass: {len(written)} alert(s) ready: {sorted({a.type for a in written})}")
 
     print(f"Seeded '{business_name}' (business_id={business_id})")
     print(f"Owner phone {phone} | owner PIN 1234 | Sari 2345 | Budi 3456")
