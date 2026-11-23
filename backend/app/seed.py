@@ -7,7 +7,13 @@ Creates the **Poernama** demo business (Jakarta) with:
   planted sales spike yesterday so anomaly detection has something to find)
 - a few manual expenses so the P&L view isn't empty
 
-Idempotent: re-running deletes and recreates the demo business (cascade).
+Idempotent: re-running deletes and recreates the demo business (cascade), so
+its dates move up to today. Re-run it before each presentation.
+
+A demo on a real number (the FYP presentation, 26 Nov 2026):
+  python -m app.seed --phone 0811... --name "Poernama Demo" --owner "Pemilik" --yes
+It refuses when the number owns any other cafe, so it can only ever replace
+its own demo business. Being an extra assistant number elsewhere is fine.
 
 **Development only.** It refuses to run with ENVIRONMENT=production, and asks
 before touching any database that is not on this machine, because deleting and
@@ -18,9 +24,9 @@ Demo credentials:
   owner phone  +62 812-000-1111  (OTP arrives via WhatsApp; in dev the code is logged)
   owner PIN    1234   | staff Sari PIN 2345 | staff Budi PIN 3456
 """
+import argparse
 import asyncio
 import random
-import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from urllib.parse import urlsplit
@@ -46,6 +52,7 @@ from app.services.vouchers import create_vouchers
 from app.services.shifts import post_variance
 from app.services.stock import record_movement
 from app.services.suppliers import create_supplier
+from app.services.owner_numbers import OwnerNumberInvalid, clean_owner_number
 from app.services.units import ensure_standard_uoms
 
 # Suppliers (M5-T1): (name, phone, address)
@@ -140,22 +147,38 @@ def guard_demo_data(confirm: bool = False) -> None:
         )
 
 
-async def seed(confirm: bool = False) -> None:
+async def demo_business_to_replace(session, phone: str, name: str) -> Business | None:
+    """The demo business this run replaces, or None. Refuses when `phone` owns a
+    business of another name: a mistyped number must never delete a real cafe.
+    An extra assistant number elsewhere is allowed (the bot asks which cafe)."""
+    found = (await session.execute(select(Business).where(Business.owner_phone == phone))).scalar_one_or_none()
+    if found is not None and found.name != name:
+        raise ProductionRefusal(
+            f"{phone} already owns '{found.name}', and the seed only replaces its own demo. "
+            "Use the --name of the demo it seeded before, or another number."
+        )
+    return found
+
+
+async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: str = "Poernama",
+               owner_name: str = "Ibu Diah") -> None:
     guard_demo_data(confirm)
+    try:
+        phone = clean_owner_number(phone)
+    except OwnerNumberInvalid:
+        raise ProductionRefusal(f"{phone!r} is not a mobile number")
     rng = random.Random(42)
     now = datetime.now(timezone.utc)
 
     async with plain_session() as session:
-        existing = (
-            await session.execute(select(Business).where(Business.owner_phone == OWNER_PHONE))
-        ).scalar_one_or_none()
+        existing = await demo_business_to_replace(session, phone, business_name)
         if existing:
             await session.delete(existing)  # cascades to all business data
             await session.flush()
         business = Business(
-            name="Poernama",
+            name=business_name,
             business_type="cafe",
-            owner_phone=OWNER_PHONE,
+            owner_phone=phone,
             language_preference="id",
             timezone="Asia/Jakarta",
             onboarding_completed_at=now - timedelta(days=31),
@@ -176,8 +199,8 @@ async def seed(confirm: bool = False) -> None:
 
     async with tenant_session(business_id) as session:
         owner = Staff(
-            business_id=business_id, name="Ibu Diah", role="owner",
-            phone=OWNER_PHONE, pin_hash=hash_pin("1234"),
+            business_id=business_id, name=owner_name, role="owner",
+            phone=phone, pin_hash=hash_pin("1234"),
         )
         sari = Staff(business_id=business_id, name="Sari", pin_hash=hash_pin("2345"))
         budi = Staff(business_id=business_id, name="Budi", pin_hash=hash_pin("3456"))
@@ -401,12 +424,18 @@ async def seed(confirm: bool = False) -> None:
                 description=description, source="manual", occurred_at=now - timedelta(days=days_ago),
             )
 
-    print(f"Seeded 'Poernama' (business_id={business_id})")
-    print(f"Owner phone {OWNER_PHONE} | owner PIN 1234 | Sari 2345 | Budi 3456")
+    print(f"Seeded '{business_name}' (business_id={business_id})")
+    print(f"Owner phone {phone} | owner PIN 1234 | Sari 2345 | Budi 3456")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Seed (or refresh) a demo cafe with a month of invented sales.")
+    parser.add_argument("--yes", action="store_true", help="allow a database that is not on this machine")
+    parser.add_argument("--phone", default=OWNER_PHONE, help="the demo owner's WhatsApp number")
+    parser.add_argument("--name", default="Poernama", help="the demo business's name")
+    parser.add_argument("--owner", default="Ibu Diah", help="the demo owner's name")
+    args = parser.parse_args()
     try:
-        asyncio.run(seed(confirm="--yes" in sys.argv))
+        asyncio.run(seed(confirm=args.yes, phone=args.phone, business_name=args.name, owner_name=args.owner))
     except ProductionRefusal as exc:
         raise SystemExit(f"Refused: {exc}")

@@ -237,6 +237,36 @@ def test_seed_runs_against_a_local_database(monkeypatch):
     seed_module.guard_demo_data()   # no exception: this is the development default
 
 
+async def test_seed_replaces_only_its_own_demo_business(session_factory):
+    """The demo can run on a real number (the FYP presentation). A mistyped
+    number must never delete a real cafe, so a number that owns a business of
+    another name is refused. Re-running on its own demo is allowed, and so is a
+    number that is only an extra assistant number on another cafe."""
+    from app.services.owner_numbers import clean_owner_number
+
+    real, extra, demo, fresh = (clean_owner_number(_phone()) for _ in range(4))
+    async with session_factory() as session:
+        cafe = Business(name="Kafe Ibu", business_type="cafe", owner_phone=real,
+                        extra_owner_numbers=[{"name": "Anak", "phone": extra, "added_at": "2026-11-23T00:00:00+00:00"}])
+        mine = Business(name="Poernama Demo", business_type="cafe", owner_phone=demo)
+        session.add_all([cafe, mine])
+        await session.commit()
+    try:
+        async with session_factory() as session:
+            for phone, name in [(real, "Poernama Demo"), (demo, "Kafe Lain")]:
+                with pytest.raises(ProductionRefusal, match="already owns"):
+                    await seed_module.demo_business_to_replace(session, phone, name)
+            assert await seed_module.demo_business_to_replace(session, extra, "Poernama Demo") is None
+            replaced = await seed_module.demo_business_to_replace(session, demo, "Poernama Demo")
+            assert replaced is not None and replaced.id == mine.id
+            assert await seed_module.demo_business_to_replace(session, fresh, "Poernama Demo") is None
+    finally:
+        async with session_factory() as session:
+            for bid in (cafe.id, mine.id):
+                await session.delete(await session.get(Business, bid))
+            await session.commit()
+
+
 def test_production_refusal_names_the_entrypoint(monkeypatch):
     _settings(monkeypatch, environment="production")
     with pytest.raises(ProductionRefusal, match="app.bootstrap"):

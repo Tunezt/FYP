@@ -2650,3 +2650,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Live 23 Nov: the bot phone was linked to the gateway at 16.10 WITA (pairing code) and the 3 staged FYP variables were applied; FYP is on WHATSAPP_PROVIDER=gateway.
 **Deviation:** not a roadmap task; owner's instruction in chat (M12, WhatsApp).
 **Next:** after deploy the owner adds his +60 number in Pengaturan and sends `halo`.
+
+
+### [demo-2] The demo cafe can run on a real number, for the FYP presentation
+**Date:** 2026-11-23
+**Status:** done
+**Changed:** backend/app/seed.py, backend/tests/test_bootstrap.py, docs/runbook.md
+**Gates:** pytest 774 passed, 0 skipped, 0 failed (18.25 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; seed OK; npm run build OK.
+**Notes:**
+- Owner's request (2026-11-23, via the coordinator): a permanent demo business for supervisor meetings and the final presentation (26 Nov), owned by his own number so he logs in by WhatsApp code and chats with the bot, without the real restaurant's account.
+- `python -m app.seed` takes `--phone`, `--name`, `--owner` (defaults unchanged: Poernama, 0812-000-1111, Ibu Diah, so the gate run is the same). The number is cleaned like an owner number (0811… → 62811…); a non-mobile number is refused.
+- Guard `demo_business_to_replace`: the seed deletes only the business that number owns under the same name. A number that owns a business of another name is refused, so a mistyped number can never delete a real cafe. Being an extra assistant number on another cafe is allowed (the owner keeps his number on the restaurant's account; the bot asks which cafe, wa-gw-5).
+- Re-running is the refresh: the month of sales, yesterday's spike and the closed shift move up to now. It recreates the business (new id), so the owner logs in again after each run.
+- Found while testing: the item loop reused the variable `name`, so the closing line printed an item name; the parameter is `business_name`.
+- Test (+1): a number owning another cafe is refused, a number owning the demo under another name is refused, its own demo is returned for replacement, an extra number elsewhere and a fresh number pass.
+**Deviation:** not a roadmap task; owner's instruction.
+**Next:** wa-gw-5 (one number on two cafes: the bot asks which), then the owner seeds the live demo.

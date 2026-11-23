@@ -351,6 +351,19 @@ and deletes and recreates what it made last time. It refuses to run with
 the machine you are typing on. If you ever see it offer to run against the real
 cafe, stop.
 
+**The presentation demo (demo-2).** A demo business on a real WhatsApp number, so
+the presenter logs in by WhatsApp code and chats with the bot about invented data:
+
+```bash
+cd backend && ./.venv/Scripts/python.exe -m app.seed --phone 0811... --name "Poernama Demo" --owner "Pemilik" --yes
+```
+
+Run it with `DATABASE_URL` set to the live app role. It only ever replaces the
+business that number owns under that name (a number that owns anything else is
+refused), and every run moves the month of sales up to yesterday, so run it again
+the evening before each presentation. Re-running deletes and recreates the demo:
+log in again afterwards and re-pair any till on it.
+
 ---
 
 ## Backups
