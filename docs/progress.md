@@ -2810,3 +2810,9 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Not changed: whether a Railway cron sends the alerts (unknown, owner to check; the script says so).
 **Deviation:** none.
 **Next:** the coordinator re-seeds the live demo.
+### [fin-p0-7] English questions are answered in English
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/ai/composer.py, backend/tests/test_composer_language.py (new)
+**Gates:** pytest on every file using the composer: see run; no migration or frontend change. Real check on gemini-3.5-flash-lite (2 calls): "how much did I sell today?" and "what's my best selling item this week?" both answered in English (audit: Indonesian 3 of 3).
+**Notes:** `detect_language` in composer.py counts English vs Indonesian/Malay words in the owner's message; English -> a hard "WHOLE reply MUST be English" instruction; unsure ("halo", "3") -> the business default. Malay "jualan semalam" stays Indonesian/Malay.
