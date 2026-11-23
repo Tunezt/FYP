@@ -59,6 +59,7 @@ function toForm(p: PricingSettings | null | undefined): PricingForm {
  * chips on a phone) lists and follows. */
 const SETTINGS_INDEX = [
   { id: "profil", label: "Profil usaha" },
+  { id: "whatsapp", label: "WhatsApp asisten" },
   { id: "struk", label: "Data di struk" },
   { id: "pajak", label: "Pajak & service" },
   { id: "poin", label: "Program poin" },
@@ -411,6 +412,11 @@ export default function SettingsPage() {
         )}
       </section>
 
+
+      {/* wa-gw-4: more numbers that get the owner's assistant on WhatsApp */}
+      <div id="whatsapp">
+        <AssistantNumbers business={b} loading={business.loading} onSaved={business.reload} />
+      </div>
 
       {/* till-5a: the café's details printed under its name on every receipt */}
       <div id="struk">
@@ -1099,6 +1105,122 @@ const DETAIL_FIELDS: { key: "address" | "contact_phone" | "instagram" | "receipt
 /** Address, phone and Instagram under the café's name on every receipt
  *  (till-5a). New cafés start with obvious placeholders; each one still at its
  *  placeholder is marked "Contoh" so nobody prints "Jl. Lorem Ipsum" by mistake. */
+// wa-gw-4: the WhatsApp assistant answers the owner's number and these, and
+// nobody else. Login codes and the nightly report still go to the owner only.
+function AssistantNumbers({ business, loading, onSaved }: { business: Business | null; loading: boolean; onSaved: () => void }) {
+  const mutate = useOwnerMutation();
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const numbers = business?.extra_owner_numbers ?? [];
+
+  async function add() {
+    setBusy("add");
+    setError(null);
+    try {
+      await mutate("/api/business/owner-numbers", { name: name.trim(), phone: phone.trim() });
+      setName("");
+      setPhone("");
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.detail : "Gagal menambah nomor — coba lagi ya.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove(number: string) {
+    setBusy(number);
+    setError(null);
+    try {
+      await mutate(`/api/business/owner-numbers/${number}`, undefined, "DELETE");
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.detail : "Gagal menghapus nomor — coba lagi ya.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="mb-2 flex items-center gap-2 section-title">
+        WhatsApp asisten
+        <HelpTip title="Siapa yang dijawab asisten">
+          Asisten WhatsApp hanya menjawab nomor pemilik dan nomor yang kamu tambahkan di sini. Mereka bisa
+          memakai semua fitur asisten: tanya penjualan, stok, kirim foto nota. Kode masuk dan laporan malam
+          tetap hanya ke nomor pemilik. Nomor lain tidak dibalas sama sekali.
+        </HelpTip>
+      </h2>
+      {loading && !business ? (
+        <Skeleton className="h-32" />
+      ) : (
+        <div className="group-card">
+          <ul className="group-body">
+            <li className="list-row">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">Pemilik</p>
+                <p className="ink-faint text-xs">+{business?.owner_phone}</p>
+              </div>
+            </li>
+            {numbers.map((n) => (
+              <li key={n.phone} className="list-row">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{n.name}</p>
+                  <p className="ink-faint text-xs">+{n.phone}</p>
+                </div>
+                <button
+                  onClick={() => remove(n.phone)}
+                  disabled={busy !== null}
+                  className="chip-btn shrink-0 hover:!text-[color:var(--bad)]"
+                  aria-label={`Hapus nomor ${n.name}`}
+                >
+                  {busy === n.phone ? "menghapus…" : "hapus"}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <form
+            className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-end"
+            style={{ borderTop: "1px solid var(--hairline)" }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              add();
+            }}
+          >
+            <label className="block">
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nama</span>
+              <input className="field" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="mis. Firaz" />
+            </label>
+            <label className="block">
+              <span className="ink-soft mb-1.5 block text-[13px] font-medium">Nomor WhatsApp</span>
+              <input
+                className="field"
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
+                value={phone}
+                maxLength={40}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="0812… atau +60 12…"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={busy !== null || !name.trim() || !phone.trim()}
+              className="btn-quiet px-3.5 py-2.5 text-sm"
+            >
+              <IconPlus className="h-4 w-4" /> {busy === "add" ? "Menambah…" : "Tambah nomor"}
+            </button>
+          </form>
+          {error && <p className="px-5 pb-4 text-xs text-[color:var(--bad)]" role="alert">{error}</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ReceiptDetails({ business, loading, onSaved }: { business: Business | null; loading: boolean; onSaved: () => void }) {
   const mutate = useOwnerMutation();
   const [draft, setDraft] = useState<Record<string, string> | null>(null);

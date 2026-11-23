@@ -118,6 +118,9 @@ class Business(Base):
     till_device_lock: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     till_device_hash: Mapped[str | None] = mapped_column(Text)
     till_device_bound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # wa-gw-4 (migration 0050): more numbers that get the owner's assistant on
+    # WhatsApp, [{name, phone, added_at}], phone digits-only international.
+    extra_owner_numbers: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _now()
 

@@ -2631,3 +2631,22 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Tests: the four tests that asserted the old "belum terdaftar" reply now assert silence (the owner changed the spec; no assertion was dropped). The gateway real-pipeline test is split in two: a stranger's message sends nothing; a STRUK request through the gateway is answered once even when delivered twice (keeps the redelivery and /send coverage). Count 755 -> 756.
 **Deviation:** not a roadmap task; owner's instruction in chat (M12, WhatsApp).
 **Next:** link the bot phone (pairing code), switch the backend to the gateway, owner sends `halo`.
+
+
+### [wa-gw-4] More WhatsApp numbers get the owner's assistant, +60 included
+**Date:** 2026-11-23
+**Status:** done
+**Changed:** backend/alembic/versions/0050_extra_owner_numbers.py (new), backend/app/models/models.py, backend/app/services/owner_numbers.py (new), backend/app/schemas/auth.py, backend/app/schemas/dashboard.py, backend/app/api/dashboard.py, backend/app/whatsapp/processor.py, backend/tests/test_extra_owner_numbers.py (new), frontend/app/(dashboard)/settings/page.tsx, frontend/lib/types.ts
+**Gates:** pytest 773 passed, 0 skipped, 0 failed (15.40 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; npm run build OK; seed OK.
+**Notes:**
+- Owner's request in chat (2026-11-23): more than one number must reach the assistant, among them a Malaysian (+60) number for the FYP demo on 26 November.
+- `businesses.extra_owner_numbers` (jsonb, default []): [{name, phone, added_at}]. On `businesses`, not a new table, because the bot must find the cafe from the sender before it knows the tenant and `businesses` has no RLS by design. Additive; downgrade drops the column.
+- Pengaturan > "WhatsApp asisten": lists the owner and the extra numbers, adds (name + number) and removes. POST /api/business/owner-numbers, DELETE /api/business/owner-numbers/{phone}, owner token only. Errors in Indonesian: bad number 422, number already used by any cafe (owner or extra) 409, more than 10 numbers 422, unknown number 404.
+- Numbers are normalised like the owner's (to_international_phone): 0812… becomes 62812…, 012… and +60 12… become 6012…. Indonesian numbers must be mobile (628…, 10–14 digits), Malaysian mobile (601…, 11–12 digits), any other country 8–15 digits.
+- The bot treats an extra number exactly like owner_phone. The "photo received" message now goes to whoever sent the photo instead of always to the owner. Pending photo confirmations stay per cafe, shared by everyone on the list.
+- Kept owner-only on purpose: OTP login codes (an extra number gets no dashboard access) and the nightly alerts (Meta template sends would need each recipient set up). Strangers still get silence; `STRUK <kode>` is still answered for anyone.
+- A removed number is taken off the list (an access list, not a business record), and from then on gets silence.
+- Tests (17): +60 / 012 / 0812 / +62 / +1 normalisation; landlines and impossible numbers refused; added number answered and removed number silent through the real gateway pipeline; stranger silent; owner still answered; bad / taken / unknown numbers refused in Indonesian.
+- Live 23 Nov: the bot phone was linked to the gateway at 16.10 WITA (pairing code) and the 3 staged FYP variables were applied; FYP is on WHATSAPP_PROVIDER=gateway.
+**Deviation:** not a roadmap task; owner's instruction in chat (M12, WhatsApp).
+**Next:** after deploy the owner adds his +60 number in Pengaturan and sends `halo`.

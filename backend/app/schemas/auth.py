@@ -29,6 +29,13 @@ class PinLoginIn(PhoneIn):
     pin: str = Field(min_length=4, max_length=12, pattern=r"^\d+$")
 
 
+class OwnerNumberOut(BaseModel):
+    """wa-gw-4: one more number that gets the owner's assistant on WhatsApp."""
+    name: str
+    phone: str
+    added_at: str | None = None
+
+
 class BusinessOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -49,6 +56,7 @@ class BusinessOut(BaseModel):
     # on), and since when a tablet has been bound. The key's hash is never sent.
     till_device_lock: bool = False
     till_device_bound_at: datetime | None = None
+    extra_owner_numbers: list[OwnerNumberOut] = []   # wa-gw-4
 
     @field_validator("receipt_logo", mode="before")
     @classmethod

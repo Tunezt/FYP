@@ -595,6 +595,13 @@ class BusinessUpdateIn(BaseModel):
     till_device_lock: bool | None = None                                  # kasir-1: the till on one tablet only
 
 
+class OwnerNumberIn(BaseModel):
+    """wa-gw-4: a number that gets the owner's assistant. Checked and turned
+    into international digits by services.owner_numbers."""
+    name: str = Field(min_length=1, max_length=60)
+    phone: str = Field(min_length=1, max_length=40)
+
+
 # ── Pricing settings (M7-T4b): tax, service charge, rounding, discount gate ──
 
 

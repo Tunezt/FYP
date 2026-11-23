@@ -34,6 +34,7 @@ from app.schemas.dashboard import (
     StatementLineOut,
     AlertRow,
     BusinessUpdateIn,
+    OwnerNumberIn,
     CustomerCreateIn,
     CustomerOut,
     CustomersPage,
@@ -1377,6 +1378,45 @@ async def update_business(payload: BusinessUpdateIn, ctx: OwnerCtx):
         business.till_device_bound_at = None
     for field, value in changes.items():
         setattr(business, field, value)
+    await ctx.session.flush()
+    return BusinessOut.model_validate(business)
+
+
+# ── More WhatsApp numbers for the owner's assistant (wa-gw-4) ──────────────
+
+_OWNER_NUMBER_ERRORS = {
+    "name": (422, "Nama tidak boleh kosong"),
+    "phone": (422, "Nomor WhatsApp tidak valid. Contoh: 0812 3456 7890 atau +60 12 345 6789"),
+    "duplicate": (409, "Nomor ini sudah dipakai untuk asisten WhatsApp"),
+    "full": (422, "Maksimal 10 nomor tambahan"),
+    "not_found": (404, "Nomor tidak ditemukan"),
+}
+
+
+@router.post("/business/owner-numbers", response_model=BusinessOut)
+async def add_business_owner_number(payload: OwnerNumberIn, ctx: OwnerCtx):
+    from app.services.owner_numbers import OwnerNumberInvalid, add_owner_number
+
+    business = await _business(ctx)
+    try:
+        await add_owner_number(ctx.session, business, payload.name, payload.phone)
+    except OwnerNumberInvalid as exc:
+        status, detail = _OWNER_NUMBER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
+    await ctx.session.flush()
+    return BusinessOut.model_validate(business)
+
+
+@router.delete("/business/owner-numbers/{phone}", response_model=BusinessOut)
+async def remove_business_owner_number(phone: str, ctx: OwnerCtx):
+    from app.services.owner_numbers import OwnerNumberInvalid, remove_owner_number
+
+    business = await _business(ctx)
+    try:
+        remove_owner_number(business, phone)
+    except OwnerNumberInvalid as exc:
+        status, detail = _OWNER_NUMBER_ERRORS[exc.code]
+        raise HTTPException(status_code=status, detail=detail)
     await ctx.session.flush()
     return BusinessOut.model_validate(business)
 

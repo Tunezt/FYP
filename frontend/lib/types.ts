@@ -92,6 +92,7 @@ export type Business = {
   require_shift?: boolean; // till-4: no sale at the till without an open shift
   till_device_lock?: boolean; // kasir-1: the till opens on one tablet only
   till_device_bound_at?: string | null; // when a tablet was bound; null = none yet
+  extra_owner_numbers?: { name: string; phone: string; added_at?: string | null }[]; // wa-gw-4: more numbers for the WhatsApp assistant
   // till-5a: printed on receipts; `placeholders` lists the fields still at their placeholder.
   address?: string | null;
   contact_phone?: string | null;

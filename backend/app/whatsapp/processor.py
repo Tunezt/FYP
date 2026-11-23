@@ -1,7 +1,7 @@
 """Inbound message processing — runs in the background after the webhook 200.
 
 Pipeline per message:
-  resolve business (sender phone vs businesses.owner_phone)
+  resolve business (sender phone vs businesses.owner_phone / extra_owner_numbers)
   → branch on message.type (text / image / document)
   → reply via the Cloud API
   → persist a request_logs row (raw query, classified intent, latency, status)
@@ -65,11 +65,13 @@ def _log_status(status: dict) -> None:
 
 
 async def _resolve_business(sender: str) -> Business | None:
+    """The cafe whose owner_phone, or one of whose extra owner numbers
+    (wa-gw-4, set in Pengaturan), is the sender. A number belongs to one cafe."""
+    from app.services.owner_numbers import owner_number_filter
+
     async with plain_session() as session:
         return (
-            await session.execute(
-                select(Business).where(Business.owner_phone == normalize_phone(sender))
-            )
+            await session.execute(select(Business).where(owner_number_filter(normalize_phone(sender))).limit(1))
         ).scalar_one_or_none()
 
 
@@ -270,8 +272,9 @@ async def _handle_image(business: Business, message: dict) -> tuple[str, str | N
         return "vision", "Fotonya nggak kebaca — coba kirim ulang ya."
 
     # Immediate ack — vision parsing takes far longer than a text round-trip.
+    # To whoever sent it: with extra owner numbers (wa-gw-4) that is not always the owner.
     await send_text(
-        business.owner_phone, "Fotonya sudah kuterima, lagi kubaca dulu ya… 🧾"
+        message.get("from") or business.owner_phone, "Fotonya sudah kuterima, lagi kubaca dulu ya… 🧾"
     )
 
     image_bytes, mime_type = await download_media(media_id)
