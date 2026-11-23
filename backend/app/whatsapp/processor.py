@@ -447,5 +447,20 @@ async def _handle_document(business: Business, message: dict) -> tuple[str, str 
     async with tenant_session(business.id) as session:
         facts = await apply_stock_template(session, business, rows)
     facts["warnings"] = warnings
-    reply = await compose_reply(business, "(owner sent a stock template)", "document", facts)
+    # The import is already committed here. If the AI is down the owner must still be
+    # told it worked (fin-p1-7: a 503 made "Waduh, ada gangguan" hide a saved import).
+    try:
+        reply = await compose_reply(business, "(owner sent a stock template)", "document", facts)
+    except Exception:
+        logger.exception("compose failed after the stock import was saved; sending the fixed reply")
+        reply = stock_import_reply(facts, warnings)
     return "document", reply
+
+
+def stock_import_reply(facts: dict, warnings: list) -> str:
+    """Fixed Indonesian confirmation of a committed stock import (no AI)."""
+    made, updated = len(facts.get("items_created", [])), len(facts.get("items_updated", []))
+    text = f"Stok dari Excel sudah tersimpan ✅ {updated} barang diperbarui, {made} barang baru."
+    if warnings:
+        text += f" Ada {len(warnings)} baris yang perlu dicek."
+    return text

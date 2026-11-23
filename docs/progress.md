@@ -2824,3 +2824,11 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **Changed:** backend/app/ai/composer.py, backend/tests/test_composer_honesty.py (new)
 **Gates:** pytest on composer-using files: only the known clock flake (test_thesis_agreement, same on HEAD) fails; no migration or frontend change. Real check on gemini-3.5-flash-lite (2 calls): 2 active promos with 0 uses -> "Ada 2 promo yang lagi jalan ... belum ada yang pakai" (audit: "Belum ada promo"); a price question got the price and no offer.
 **Notes:** composer rules added: facts only / never explain why or how the data works / never offer actions it can't do / `is_active` true = running even with 0 uses. The prompt rules are checked by test; the behaviour only by the 2 real calls (a prompt rule is not a guarantee).
+
+
+### [fin-p1-7] A saved Excel stock import is never reported as failed
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/whatsapp/processor.py (`_handle_document`, `stock_import_reply`), backend/tests/test_stock_import_reply.py (new)
+**Gates:** see the final gate run in the push note of this batch.
+**Notes:** the import commits before the AI composes the reply; when the composer failed (503, quota) the owner saw "Waduh, ada gangguan" although the stock was already saved. Now any composer failure after the commit sends a fixed Indonesian line: "Stok dari Excel sudah tersimpan ✅ N barang diperbarui, M barang baru". Test reproduces it with a composer that raises.
