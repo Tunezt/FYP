@@ -243,6 +243,37 @@ Return JSON: {"unrelated": bool, "parsed": <same schema as the extraction>}.
   ONLY if nothing ambiguous remains; list any remaining ambiguities."""
 
 
+def _lines_sum(parsed: dict) -> float:
+    total = 0.0
+    for item in parsed.get("items") or []:
+        if isinstance(item, dict):
+            line = _num(item.get("line_total"))
+            total += line if line > 0 else _num(item.get("quantity")) * _num(item.get("unit_price"))
+    return total
+
+
+def _total_from_lines(before: dict, revised: dict) -> dict:
+    """After an owner correction the total is the sum of the lines, never the
+    model's carried-over number (audit P0-6: gula 5 kg -> 3 kg left the old
+    Rp 645.500 as the expense). A first parse whose lines already disagreed with
+    its written total is flagged, since the written total may hold tax or discount."""
+    new_sum = _lines_sum(revised)
+    if new_sum <= 0:
+        return revised
+    old_total = _num(before.get("total_amount"))
+    old_sum = _lines_sum(before)
+    revised["total_amount"] = round(new_sum, 2)
+    revised["ambiguities"] = [
+        a for a in (revised.get("ambiguities") or []) if not str(a).startswith("Jumlah semua baris")
+    ]
+    if old_total > 0 and old_sum > 0 and abs(old_total - old_sum) > _TOLERANCE:
+        revised["ambiguities"].append(
+            f"Total dihitung ulang dari baris ({new_sum:,.0f}); total di nota tadi {old_total:,.0f} "
+            "tidak sama dengan jumlah barisnya"
+        )
+    return revised
+
+
 async def revise_parse(parsed: dict, owner_message: str) -> dict:
     """Returns {"unrelated": bool, "parsed": dict}."""
     import json
@@ -261,6 +292,8 @@ async def revise_parse(parsed: dict, owner_message: str) -> dict:
         data = json.loads(text)
         revised = data.get("parsed", parsed)
         if isinstance(revised, dict):
+            if not data.get("unrelated", False):
+                revised = _total_from_lines(parsed, revised)
             revised = normalize_parse(revised)
         return {
             "unrelated": bool(data.get("unrelated", False)),
