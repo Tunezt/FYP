@@ -262,6 +262,9 @@ async def inventory(ctx: OwnerCtx):
                 avg_daily_usage=round(daily, 3) if daily > 0 else None,
                 days_remaining=r.get("days_remaining"),
                 below_reorder_threshold=bool(r.get("below_reorder_threshold", item.current_stock <= item.reorder_threshold)),
+                made_to_order=bool(r.get("made_to_order", False)),
+                servings_left=r.get("servings_left"),
+                limiting_ingredient=r.get("limiting_ingredient"),
                 prep_station=item.prep_station,
                 menu_category=item.menu_category,
             )

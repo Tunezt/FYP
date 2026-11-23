@@ -60,6 +60,25 @@ async def _match_items(session: AsyncSession, name_query: str) -> list[Item]:
 # ── get_stock ────────────────────────────────────────────────────────────────
 
 
+def _stock_fact(r: dict) -> dict:
+    if r.get("made_to_order"):
+        # Its own stock number never moves; the ingredients do (audit P0-4).
+        return {
+            "name": r["name"],
+            "made_to_order": True,
+            "note": "dibuat saat dipesan: tidak ada stok jadi, yang dihitung bahan-bahannya",
+            "servings_left": r["servings_left"],
+            "limiting_ingredient": r["limiting_ingredient"],
+        }
+    return {
+        "name": r["name"],
+        "current_stock": r["stock"],
+        "unit": r["unit"],
+        "reorder_threshold": r["reorder_threshold"],
+        "below_reorder_threshold": r["below_reorder_threshold"],
+    }
+
+
 @tool(
     types.FunctionDeclaration(
         name="get_stock",
@@ -93,16 +112,7 @@ async def get_stock(session: AsyncSession, business: Business, args: dict) -> di
             }
     return {
         "found": True,
-        "items": [
-            {
-                "name": r["name"],
-                "current_stock": r["stock"],
-                "unit": r["unit"],
-                "reorder_threshold": r["reorder_threshold"],
-                "below_reorder_threshold": r["below_reorder_threshold"],
-            }
-            for r in rows
-        ],
+        "items": [_stock_fact(r) for r in rows],
     }
 
 

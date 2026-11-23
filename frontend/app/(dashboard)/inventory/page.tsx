@@ -34,12 +34,18 @@ const EMPTY_DRAFT: Draft = {
 };
 
 function isAtRisk(item: InventoryItem): boolean {
+  if (item.made_to_order) return item.servings_left === 0;
   return (
     item.below_reorder_threshold || (item.days_remaining !== null && item.days_remaining <= 3)
   );
 }
 
 function riskPill(item: InventoryItem): { text: string; cls: string } {
+  if (item.made_to_order) {
+    // Ingredients run out, not the item: bad only when not one serving is left.
+    if (item.servings_left === 0) return { text: "bahan habis", cls: "pill-bad" };
+    return { text: "dibuat saat dipesan", cls: "pill-good" };
+  }
   const stock = Number(item.current_stock);
   if (stock <= 0) return { text: "habis", cls: "pill-bad" };
   if (item.days_remaining !== null && item.days_remaining <= 1)
@@ -413,14 +419,22 @@ function ItemRows({
                   {Number(item.sell_price) > 0
                     ? `jual ${formatRupiah(item.sell_price)}${item.menu_category ? ` · ${item.menu_category}` : ""} · ${item.prep_station ? PREP_STATION_LABEL[item.prep_station] : "tujuan belum diatur"}`
                     : "bahan baku"}
-                  {item.avg_daily_usage ? ` · ±${formatQty(Number(item.avg_daily_usage).toFixed(1))} ${item.unit}/hari` : ""}
+                  {item.made_to_order && item.limiting_ingredient ? ` · terbatas: ${item.limiting_ingredient}` : ""}
+                  {!item.made_to_order && item.avg_daily_usage ? ` · ±${formatQty(Number(item.avg_daily_usage).toFixed(1))} ${item.unit}/hari` : ""}
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="mb-0.5 text-sm font-semibold tabular-nums">
-                  {formatQty(item.current_stock)}{" "}
-                  <span className="ink-faint text-xs font-normal">{item.unit}</span>
-                </p>
+                {item.made_to_order ? (
+                  <p className="mb-0.5 text-sm font-semibold tabular-nums">
+                    {item.servings_left === null || item.servings_left === undefined ? "–" : `±${item.servings_left}`}{" "}
+                    <span className="ink-faint text-xs font-normal">porsi</span>
+                  </p>
+                ) : (
+                  <p className="mb-0.5 text-sm font-semibold tabular-nums">
+                    {formatQty(item.current_stock)}{" "}
+                    <span className="ink-faint text-xs font-normal">{item.unit}</span>
+                  </p>
+                )}
                 <span className={pill.cls}>{pill.text}</span>
               </div>
               <RowChevron />

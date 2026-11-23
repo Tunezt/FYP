@@ -36,6 +36,9 @@ export type InventoryItem = {
   avg_daily_usage: number | null;
   days_remaining: number | null;
   below_reorder_threshold: boolean;
+  made_to_order?: boolean; // has a recipe: current_stock is not a figure; ingredients are
+  servings_left?: number | null;
+  limiting_ingredient?: string | null;
   prep_station?: PrepStation | null; // prt-2: null = not decided yet
   menu_category?: string | null; // till-10: the till's and QR menu's section
 };

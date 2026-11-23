@@ -72,6 +72,10 @@ async def check_low_stock_for_item(
     item = await session.get(Item, item_id)
     if item is None:
         return None
+    from app.services.catalog import made_to_order_item_ids
+
+    if item_id in await made_to_order_item_ids(session):
+        return None  # its ingredients are consumed, not its own stock (audit P0-4)
     reading = await compute_item_velocity(session, item)
     threshold = Decimal(str(get_settings().low_stock_days_threshold))
     if reading.days_remaining is None or reading.days_remaining > threshold:

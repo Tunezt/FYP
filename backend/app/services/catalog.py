@@ -332,6 +332,43 @@ async def made_to_order_item_ids(session: AsyncSession) -> set[uuid.UUID]:
     return set(rows)
 
 
+async def servings_left_by_item(session: AsyncSession) -> dict[uuid.UUID, dict]:
+    """For every made-to-order item: how many servings the ingredients still
+    cover, and which ingredient runs out first (audit P0-4). The item's own
+    `current_stock` is never consumed for these, so it is not a stock figure.
+    Measured on the default variant (else the first active one with a recipe)."""
+    from app.services.units import UnitConversionMissing, convert_quantity
+
+    variants = (await session.execute(
+        select(ItemVariant).join(RecipeLine, RecipeLine.variant_id == ItemVariant.id)
+        .where(RecipeLine.is_active.is_(True), ItemVariant.is_active.is_(True))
+        .distinct().order_by(ItemVariant.is_default.desc(), ItemVariant.created_at)
+    )).scalars().all()
+    chosen: dict[uuid.UUID, ItemVariant] = {}
+    for v in variants:
+        chosen.setdefault(v.item_id, v)
+    out: dict[uuid.UUID, dict] = {}
+    for item_id, variant in chosen.items():
+        lines = await recipe_lines_for(session, variant.id, active_only=True)
+        best: Decimal | None = None
+        limiting: str | None = None
+        for line in lines:
+            comp = await session.get(Item, line.component_item_id)
+            if comp is None or line.quantity <= 0:
+                continue
+            stock = Decimal(comp.current_stock)
+            try:
+                if line.uom_id and comp.uom_id and line.uom_id != comp.uom_id:
+                    stock = await convert_quantity(session, stock, comp.uom_id, line.uom_id)
+            except UnitConversionMissing:
+                continue
+            n = max(stock, Decimal(0)) / Decimal(line.quantity)
+            if best is None or n < best:
+                best, limiting = n, comp.name
+        out[item_id] = {"servings_left": int(best) if best is not None else None, "limiting_ingredient": limiting}
+    return out
+
+
 async def modifier_catalog(session: AsyncSession, item_ids: list[uuid.UUID] | None = None):
     """{item_id: [(group, [modifiers])]} — active groups and modifiers only,
     in sort order. What the kiosk shows."""

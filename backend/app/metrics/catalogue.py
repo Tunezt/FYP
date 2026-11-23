@@ -314,15 +314,34 @@ def _stock_row(i: Item) -> dict:
     }
 
 
+async def _mark_made_to_order(session: AsyncSession, rows: list[dict]) -> list[dict]:
+    """A made-to-order item's own stock never moves (its ingredients are
+    consumed), so say that instead of the frozen number: servings left, the
+    limiting ingredient, no reorder flag, no days-remaining (audit P0-4)."""
+    from app.services.catalog import servings_left_by_item
+
+    mto = await servings_left_by_item(session)
+    for r in rows:
+        info = mto.get(r["item_id"])
+        r["made_to_order"] = info is not None
+        if info is not None:
+            r.update(info, below_reorder_threshold=False)
+            if "days_remaining" in r:
+                r["days_remaining"] = None
+    return rows
+
+
 @metric("stock_on_hand", description_id="Stok saat ini (per barang, atau satu barang bila dipilih)",
         description_en="Current stock (per item, or one item when given)", unit="qty", grains=("instant",), dimensions=("item",))
 async def stock_on_hand(session: AsyncSession, ctx: MetricContext) -> MetricResult:
     if ctx.item_id is not None:
         item = await session.get(Item, ctx.item_id)
-        return MetricResult(name="stock_on_hand", unit="qty", value=Decimal(item.current_stock) if item else None,
-                            rows=[_stock_row(item)] if item else [])
+        rows = await _mark_made_to_order(session, [_stock_row(item)] if item else [])
+        value = Decimal(item.current_stock) if item and not rows[0]["made_to_order"] else None
+        return MetricResult(name="stock_on_hand", unit="qty", value=value, rows=rows)
     items = (await session.execute(select(Item).order_by(Item.name))).scalars().all()
-    return MetricResult(name="stock_on_hand", unit="qty", value=None, rows=[_stock_row(i) for i in items])
+    return MetricResult(name="stock_on_hand", unit="qty", value=None,
+                        rows=await _mark_made_to_order(session, [_stock_row(i) for i in items]))
 
 
 @metric("stock_days_remaining", description_id="Perkiraan hari sampai stok habis pada laju penjualan 14 hari terakhir",
@@ -353,6 +372,7 @@ async def stock_days_remaining(session: AsyncSession, ctx: MetricContext) -> Met
         days = (Decimal(item.current_stock) / daily).quantize(Decimal("0.1")) if daily > 0 else None
         rows.append({**_stock_row(item), "daily_usage": float(daily.quantize(Decimal("0.001"))),
                      "days_remaining": float(days) if days is not None else None})
+    await _mark_made_to_order(session, rows)
     if ctx.item_id is not None:
         value = Decimal(str(rows[0]["days_remaining"])) if rows and rows[0]["days_remaining"] is not None else None
         return MetricResult(name="stock_days_remaining", unit="days", value=value, rows=rows)

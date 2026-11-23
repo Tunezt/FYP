@@ -56,6 +56,9 @@ class InventoryItem(BaseModel):
     avg_daily_usage: float | None
     days_remaining: float | None
     below_reorder_threshold: bool
+    made_to_order: bool = False       # P0-4: has a recipe, so current_stock is not a figure
+    servings_left: int | None = None
+    limiting_ingredient: str | None = None
     prep_station: str | None = None   # prt-2: bar · kitchen · none; None = not set
     menu_category: str | None = None  # till-10: the menu section; None = not sorted
 

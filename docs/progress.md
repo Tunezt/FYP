@@ -2749,3 +2749,30 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - CP2 deviations: six rows with reasons. Correction to the audit: LangChain is not entirely absent (`langchain_core` Documents, `langchain-google-genai` in requirements); orchestration and the vector store are not LangChain.
 **Deviation:** none.
 **Next:** run questions 16-30 and the RAG set on gemini-3.5-flash-lite (not Thu 26 Nov before 16:00 WITA), then fill docs/evaluation.md.
+### [fin-p0-6] A receipt correction no longer keeps the old total
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/ai/vision.py, backend/tests/test_revise_total.py (new)
+**Gates:** see the commit; pytest, alembic up/down/up, seed, npm run build all green before the push.
+**Notes:**
+- Audit P0-6: "ya tapi gulanya 3 kg bukan 2" changed the gula line, but the reply and the saved expense kept the model's old total (Rp 645.500 instead of 615.500).
+- `revise_parse` now sets `total_amount` to the sum of the line totals (quantity × unit price where a line has no total) after every real correction. The stale "jumlah baris tidak sama dengan total" note is dropped. If the first parse already disagreed with its written total (tax, discount), a "Total dihitung ulang dari baris" note is added, so the owner sees it before YA.
+- `commit_parse` and `build_draft` read the revised parse, so the shown total and the saved expense now agree; no change was needed in receipts.py or invoice_draft.py.
+- Tests (+5, LLM mocked): model returns the old, zero or right total, all give 615.500; an unrelated reply keeps the total; a first-parse disagreement is flagged.
+**Deviation:** none.
+**Next:** fin-p0-4.
+
+
+### [fin-p0-4] Made-to-order items say "dibuat saat dipesan", not a frozen stock number
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/services/catalog.py, backend/app/metrics/catalogue.py, backend/app/services/velocity.py, backend/app/ai/tools.py, backend/app/api/dashboard.py, backend/app/schemas/dashboard.py, frontend/app/(dashboard)/inventory/page.tsx, frontend/lib/types.ts, backend/tests/test_made_to_order_stock.py (new)
+**Gates:** see the commit.
+**Notes:**
+- Audit P0-4: Es Kopi Susu showed "48 cup" forever (its ingredients are consumed, not the item) and the nightly job sent "stok habis dalam ±3.8 hari".
+- New `servings_left_by_item`: servings the ingredients still cover on the default variant (units converted), plus the limiting ingredient.
+- `stock_on_hand` / `stock_days_remaining` rows of such items carry `made_to_order`, `servings_left`, `limiting_ingredient`, no days remaining, never below the reorder line. So `rule_stockout_risk`, `get_low_stock` and the dashboard count skip them; the post-sale / nightly `check_low_stock_for_item` returns early for them.
+- Bot `get_stock` answers `made_to_order` + servings left + limiting ingredient, no `current_stock`. `/api/items` carries the same fields; the Stok page shows "±N porsi", a "dibuat saat dipesan" pill and "terbatas: <bahan>" ("bahan habis" in red at 0).
+- Test (+1): latte sold once → bot says 82 servings, limited by Susu UHT; no alert from the sweep, the rule, the post-sale check or the bot's low-stock list; a plain ingredient still answers with its number.
+**Deviation:** none.
+**Next:** fin-demo.
