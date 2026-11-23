@@ -27,6 +27,21 @@ _seen_ids: OrderedDict[str, None] = OrderedDict()
 _SEEN_MAX = 2048
 
 
+# fin-n2-photo-before-pick: a photo from a number on several cafes arrives before
+# a cafe is picked. One per number is kept (the latest) and read right after the
+# pick; it expires after 15 minutes. In memory like the dedupe above: a restart
+# inside those minutes loses it, and the owner just resends.
+_PHOTO_WAIT_SECONDS = 15 * 60
+_held_photos: dict[str, tuple[float, dict]] = {}
+
+
+def _take_held_photo(phone: str) -> tuple[float, dict] | None:
+    held = _held_photos.pop(phone, None)
+    if held is None or time.monotonic() - held[0] > _PHOTO_WAIT_SECONDS:
+        return None
+    return held
+
+
 def _already_processed(message_id: str) -> bool:
     if message_id in _seen_ids:
         return True
@@ -117,9 +132,10 @@ async def _resolve_business(sender: str, text: str | None = None) -> tuple[Busin
         return current, f"🏪 {current.name}", None
 
 
-async def _process_message(message: dict) -> None:
+async def _process_message(message: dict, held_since: float | None = None) -> None:
+    """`held_since` is set when a photo held before the cafe pick is read again."""
     message_id = message.get("id", "")
-    if message_id and _already_processed(message_id):
+    if held_since is None and message_id and _already_processed(message_id):
         logger.info("Skipping duplicate webhook delivery %s", message_id)
         return
 
@@ -143,8 +159,20 @@ async def _process_message(message: dict) -> None:
 
     if pick_reply is not None:
         # wa-gw-5: a number on several cafes picking one; no cafe's data is read.
+        phone = normalize_phone(sender)
+        if msg_type == "image":
+            _held_photos[phone] = (held_since if held_since is not None else time.monotonic(), message)
+            if held_since is not None:
+                return  # still no cafe after a reply: the list was just sent, keep waiting quietly
+            pick_reply += (
+                "\n\nFotonya kusimpan dulu, kubaca begitu kamu pilih. "
+                "(I kept your photo and will read it as soon as you pick.)"
+            )
         await send_text(sender, pick_reply)
         logger.info("Asked %s which cafe to use (type=%s)", sender, msg_type)
+        if msg_type == "text" and (held := _take_held_photo(phone)) is not None:
+            # A real pick reads the photo now; an unclear reply parks it again, same clock.
+            await _process_message(held[1], held_since=held[0])
         return
 
     if business is None:

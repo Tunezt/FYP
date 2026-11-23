@@ -2968,3 +2968,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Tests: same photo twice (even with a different read) + YA still saves; BATAL saves nothing; same supplier/date/total with another photo; different total/day/supplier = no warning; a correction keeps the warning.
 **Deviation:** none.
 **Next:** [fin-n2-photo-before-pick].
+
+### [fin-n2-photo-before-pick] A photo sent before picking a cafe is kept, not dropped
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/whatsapp/processor.py (`_held_photos`, `_take_held_photo`, `held_since` replay), backend/tests/test_photo_before_pick.py (new)
+**Gates:** same full run as [fin-n1-dup-receipt] (the two changes were gated together on one tree): pytest 871 passed, 5 test_invariants failures that need seeded data; alembic up/down/up ok; seed ok; frontend untouched.
+**Notes:**
+- A photo from a number on several cafes gets the list plus "Fotonya kusimpan dulu, kubaca begitu kamu pilih". One photo per number is kept (a newer one replaces it), 15 minutes.
+- The pick (number or name) reads it right away for the cafe picked: confirmation line, "Fotonya sudah kuterima", then the normal read-back under the cafe header. An unclear reply parks it again on the same clock without a second list.
+- Limit: held in memory (like the webhook dedupe), so a restart inside the 15 minutes loses it and the owner resends. Text only was never dropped; Excel files are not held.
+- Tests: read for the cafe picked (and not the other), unclear reply then pick, latest photo only, expiry, nothing replayed twice.
+**Deviation:** none.
+**Next:** none.
