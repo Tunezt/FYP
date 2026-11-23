@@ -62,6 +62,22 @@ async def add_owner_number(session: AsyncSession, business: Business, name: str,
     business.extra_owner_numbers = current + [{"name": name[:60], "phone": phone, "added_at": added_at}]
 
 
+# wa-gw-5: what a number on several cafes types to pick again.
+SWITCH_COMMANDS = {"ganti toko", "switch business", "switch store"}
+
+
+def chosen_business(businesses: list[Business], phone: str) -> Business | None:
+    """The cafe `phone` last picked on WhatsApp, among those it reaches."""
+    return next((b for b in businesses if phone in (b.active_owner_numbers or [])), None)
+
+
+def choose_business(businesses: list[Business], phone: str, chosen: Business | None) -> None:
+    """Remembers `chosen` as the cafe `phone` talks to; None forgets the choice."""
+    for b in businesses:
+        kept = [p for p in (b.active_owner_numbers or []) if p != phone]
+        b.active_owner_numbers = kept + [phone] if b is chosen else kept
+
+
 def remove_owner_number(business: Business, phone: str) -> None:
     current = list(business.extra_owner_numbers or [])
     kept = [n for n in current if n.get("phone") != normalize_phone(phone)]

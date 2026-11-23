@@ -1,7 +1,8 @@
 """Inbound message processing — runs in the background after the webhook 200.
 
 Pipeline per message:
-  resolve business (sender phone vs businesses.owner_phone / extra_owner_numbers)
+  resolve business (sender phone vs businesses.owner_phone / extra_owner_numbers;
+  a number on several cafes picks one, remembered: wa-gw-5)
   → branch on message.type (text / image / document)
   → reply via the Cloud API
   → persist a request_logs row (raw query, classified intent, latency, status)
@@ -64,15 +65,44 @@ def _log_status(status: dict) -> None:
         logger.info("Delivery %s to %s (%s)", state, recipient, message_id)
 
 
-async def _resolve_business(sender: str) -> Business | None:
-    """The cafe whose owner_phone, or one of whose extra owner numbers
-    (wa-gw-4, set in Pengaturan), is the sender. A number belongs to one cafe."""
-    from app.services.owner_numbers import owner_number_filter
+async def _resolve_business(sender: str, text: str | None = None) -> tuple[Business | None, str | None, str | None]:
+    """(business, header, reply). The cafe whose owner_phone, or one of whose
+    extra owner numbers (wa-gw-4), is the sender; header None.
 
+    A number on several cafes (wa-gw-5) answers from the one it picked, and the
+    header names it on every reply. With no pick yet, or after "ganti toko",
+    `reply` is the numbered list and business is None; a number from that list
+    picks, and `reply` confirms it."""
+    from app.services.owner_numbers import SWITCH_COMMANDS, choose_business, chosen_business, owner_number_filter
+
+    phone = normalize_phone(sender)
     async with plain_session() as session:
-        return (
-            await session.execute(select(Business).where(owner_number_filter(normalize_phone(sender))).limit(1))
-        ).scalar_one_or_none()
+        found = list(
+            (
+                await session.execute(
+                    select(Business).where(owner_number_filter(phone)).order_by(Business.name, Business.id)
+                )
+            ).scalars().all()
+        )
+        if len(found) <= 1:
+            return (found[0] if found else None), None, None
+        said = " ".join((text or "").lower().split()).rstrip(".")
+        current = chosen_business(found, phone)
+        if said in SWITCH_COMMANDS:
+            choose_business(found, phone, None)
+            current = None
+        elif current is None and said.isdecimal() and 1 <= int(said) <= len(found):
+            current = found[int(said) - 1]
+            choose_business(found, phone, current)
+            return None, None, f"Oke, sekarang pakai data *{current.name}* ✅\nKetik *ganti toko* kapan saja untuk pindah."
+        if current is None:
+            listing = "\n".join(f"{i}. {b.name}" for i, b in enumerate(found, 1))
+            return None, None, (
+                "Nomor ini terhubung ke beberapa usaha. Mau pakai data yang mana? Balas angkanya:\n"
+                f"{listing}\n\nNanti ketik *ganti toko* untuk pindah. "
+                "(This number reaches several businesses: reply with a number; type *switch business* to change.)"
+            )
+        return current, f"🏪 {current.name}", None
 
 
 async def _process_message(message: dict) -> None:
@@ -96,7 +126,14 @@ async def _process_message(message: dict) -> None:
             logger.info("whatsapp receipt request: %s", intent)
             return
 
-    business = await _resolve_business(sender)
+    text = message.get("text", {}).get("body", "") if msg_type == "text" else None
+    business, header, pick_reply = await _resolve_business(sender, text)
+
+    if pick_reply is not None:
+        # wa-gw-5: a number on several cafes picking one; no cafe's data is read.
+        await send_text(sender, pick_reply)
+        logger.info("Asked %s which cafe to use (type=%s)", sender, msg_type)
+        return
 
     if business is None:
         # Unknown number: no reply at all (owner's decision 2026-11-22). The bot
@@ -126,7 +163,7 @@ async def _process_message(message: dict) -> None:
                 "(I can handle text, receipt photos, and Excel files.)"
             )
         if reply:
-            await send_text(sender, reply)
+            await send_text(sender, f"{header}\n{reply}" if header else reply)
     except Exception:
         status = "error"
         logger.exception("Error handling %s message from %s", msg_type, sender)

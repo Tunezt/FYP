@@ -2666,3 +2666,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Test (+1): a number owning another cafe is refused, a number owning the demo under another name is refused, its own demo is returned for replacement, an extra number elsewhere and a fresh number pass.
 **Deviation:** not a roadmap task; owner's instruction.
 **Next:** wa-gw-5 (one number on two cafes: the bot asks which), then the owner seeds the live demo.
+
+
+### [wa-gw-5] One WhatsApp number on two cafes: the bot asks which, and remembers
+**Date:** 2026-11-23
+**Status:** done
+**Changed:** backend/alembic/versions/0051_active_owner_numbers.py (new), backend/app/models/models.py, backend/app/services/owner_numbers.py, backend/app/whatsapp/processor.py, backend/tests/test_number_on_two_cafes.py (new), backend/tests/test_role_separation.py
+**Gates:** pytest 780 passed, 0 skipped, 0 failed (18.30 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; seed OK; npm run build OK.
+**Notes:**
+- Owner's decision (2026-11-23, via the coordinator): his number stays an extra assistant number on the family restaurant (to test it later) and also owns the presentation demo (demo-2).
+- Found: the bot matched the sender with an unordered `LIMIT 1`, so a number on two cafes was answered from whichever row Postgres returned first.
+- Now: a number on one cafe is answered exactly as before. A number on several gets a numbered list of the cafes (sorted by name) on its first message, and no cafe's data is read until it replies with a number. The pick is stored in `businesses.active_owner_numbers` (jsonb, default []; on `businesses` because the bot needs it before it knows the tenant, and `businesses` has no RLS by design; additive, downgrade drops it). Every answer then starts with a line naming the cafe ("🏪 Poernama Demo"). "ganti toko" or "switch business" (any case) forgets the pick and shows the list again.
+- Unchanged: strangers get silence; `STRUK <kode>` is answered before any list; OTP login still goes by `owner_phone` only, so the number logs in to the cafe it owns.
+- Not changed: adding an extra number in Pengaturan still refuses a number another cafe already uses (409, wa-gw-4). The demo seed does not go through that door, so the owner's setup works; loosening it is a separate decision.
+- Test (+6): one-cafe number answered with no list or header; two cafes ask once, then answer from the pick with the header and remember it in the DB; a number after the pick is a normal message; switching works by both commands; a stranger stays silent, also for "ganti toko"; STRUK answered with no list. The role-separation test's resolver mock returns the new (business, header, reply) shape.
+**Deviation:** not a roadmap task; owner's instruction.
+**Next:** push; after the Railway deploy (migration 0051 runs on start) the owner seeds the live demo with his number.

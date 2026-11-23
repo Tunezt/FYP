@@ -101,7 +101,7 @@ async def test_whatsapp_from_unregistered_number_never_reaches_business_logic():
         "text": {"body": "berapa penjualan hari ini?"},
     }
     with (
-        patch.object(processor, "_resolve_business", new=AsyncMock(return_value=None)),
+        patch.object(processor, "_resolve_business", new=AsyncMock(return_value=(None, None, None))),
         patch.object(processor, "send_text", new=AsyncMock()) as sender,
         patch.object(processor, "_handle_text", new=AsyncMock()) as handler,
     ):
