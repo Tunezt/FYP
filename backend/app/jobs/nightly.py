@@ -10,6 +10,8 @@ never a cross-tenant query):
      the alert policy (M10-T2): dedup, same-as-last-week suppression, at most
      five new alerts a night
   4. deliver unsent alerts via the approved WhatsApp Utility TEMPLATE
+  5. the owner's daily summary, and on Monday last week's (jobs/summary.py,
+     fin-p1-3); a failure here never undoes the alerts already sent
 
 Delivery MUST use the template: this job runs unprompted, almost certainly
 outside the 24-hour session window, and Meta rejects free-form messages there.
@@ -26,6 +28,7 @@ from app.core.db import engine, plain_session, tenant_session
 from app.models import Alert, Business, Item
 from app.jobs.delivery import deliver_unsent
 from app.jobs.rules import run_rules
+from app.jobs.summary import send_summary
 from app.services.anomaly import refresh_baselines
 from app.services.velocity import check_low_stock_for_item
 
@@ -51,7 +54,13 @@ async def process_business(business: Business) -> int:
     """Runs the full nightly pass for one business; returns alerts delivered."""
     async with tenant_session(business.id) as session:
         await nightly_pass(session, business)
-        return await deliver_unsent(session, business)
+        delivered = await deliver_unsent(session, business)
+        try:
+            async with session.begin_nested():  # a failure rolls back only the summary's reads
+                await send_summary(session, business)
+        except Exception:
+            logger.exception("Summary failed for business %s", business.id)
+        return delivered
 
 
 async def main() -> None:
