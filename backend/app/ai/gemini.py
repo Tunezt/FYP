@@ -14,12 +14,18 @@ from app.core.config import get_settings
 
 logger = logging.getLogger("gemini")
 
+API_VERSION = "v1beta"
 EMBEDDING_DIMS = 768  # matches vector(768) on receipts.embedding
 
 
 @lru_cache
 def _client() -> genai.Client:
-    return genai.Client(api_key=get_settings().google_api_key)
+    # Pinned on purpose (wa-gw-7): google-genai 3.x defaults to "v1", where
+    # function calling is refused with a 400 — the live bot died on that.
+    return genai.Client(
+        api_key=get_settings().google_api_key,
+        http_options=types.HttpOptions(api_version=API_VERSION),
+    )
 
 
 async def force_tool_call(

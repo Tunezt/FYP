@@ -2696,3 +2696,14 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Gate noise: pytest runs killed by low RAM (MemoryError) left two test cafes in the local DB, which failed test_every_business_has_every_standard_posting_rule and the restore drill; removed those two local test rows, full suite then green.
 **Deviation:** not a roadmap task; owner's instruction.
 **Next:** push when the owner approves.
+
+
+### [wa-gw-7] Live bot "ada gangguan": pin Gemini API v1beta and the AI libraries
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/ai/gemini.py, backend/requirements.txt, backend/tests/test_gemini_api_version.py (new)
+**Gates:** pytest 787 passed, 0 skipped on the full run; 2 failed + 1 error there were test debris from a shared-DB collision with another worker (RLS Test A/B rows), the same files pass on a clean DB (32 passed); alembic upgrade/downgrade -1/upgrade OK; seed OK; npm run build OK.
+**Notes:**
+- Cause (Railway log, deploy 43777549): `400 INVALID_ARGUMENT 'Function calling is not enabled for api version v1. Use api version v1beta instead.'` Railway built an unpinned google-genai 3.6.1 (local 2.10.0); 3.x defaults to API v1. Not a quota problem; key hash identical live vs local.
+- Fix: `HttpOptions(api_version="v1beta")` in gemini.py; google-genai==2.10.0, langchain-core==1.4.8, langchain-google-genai==4.2.7 pinned exactly so a rebuild cannot change them.
+**Next:** deploy, confirm no 400 in Railway logs; then wa-gw-8.
