@@ -149,3 +149,43 @@ async def test_struk_is_answered_before_any_list(two_cafes, sent):
         await _say(mine, "STRUK ZZZZ9999")
     assert handler.await_count == 0
     assert len(sent) == 1 and "tidak ditemukan" in sent[0]["text"]
+
+
+# wa-gw-6: the picker also takes the business name (owner typed "demo" and got the list again).
+@pytest.mark.parametrize(
+    "reply, expected",
+    [
+        ("2", "demo"),                # the list number
+        ("  B   DEMO ", "demo"),      # exact name, any case, extra spaces
+        ("Demo", "demo"),             # unique partial word
+        ("ibu.", "resto"),            # a trailing full stop is ignored
+    ],
+)
+async def test_picker_takes_number_name_or_unique_partial(session_factory, two_cafes, sent, reply, expected):
+    mine, ids, _ = two_cafes
+    with gateway() as handler:
+        await _say(mine, reply)
+        assert handler.await_count == 0 and sent[-1]["text"].startswith("Oke, sekarang pakai data")
+        await _say(mine, "halo")
+    assert handler.await_args.args[0].id == ids[expected]
+
+
+@pytest.mark.parametrize("reply", ["e", "toko lain", "3"])   # "e" is in both names; the others in none
+async def test_picker_unclear_reply_shows_the_list_again(session_factory, two_cafes, sent, reply):
+    mine, ids, _ = two_cafes
+    with gateway() as handler:
+        await _say(mine, reply)
+        assert handler.await_count == 0
+        text = sent[-1]["text"]
+        assert text.startswith("Belum jelas") and "1. A Resto Ibu" in text and "2. B Demo" in text
+        await _say(mine, "demo")   # and it still works afterwards
+        assert sent[-1]["text"].startswith("Oke, sekarang pakai data *B Demo*")
+    async with session_factory() as s:
+        assert mine in (await s.get(Business, ids["demo"])).active_owner_numbers
+
+
+async def test_switch_command_shows_the_list_without_the_unclear_line(two_cafes, sent):
+    mine, _ids, _ = two_cafes
+    with gateway():
+        await _say(mine, "ganti toko")
+    assert not sent[-1]["text"].startswith("Belum jelas") and "1. A Resto Ibu" in sent[-1]["text"]

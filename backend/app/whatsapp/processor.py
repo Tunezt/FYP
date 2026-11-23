@@ -73,7 +73,13 @@ async def _resolve_business(sender: str, text: str | None = None) -> tuple[Busin
     header names it on every reply. With no pick yet, or after "ganti toko",
     `reply` is the numbered list and business is None; a number from that list
     picks, and `reply` confirms it."""
-    from app.services.owner_numbers import SWITCH_COMMANDS, choose_business, chosen_business, owner_number_filter
+    from app.services.owner_numbers import (
+        SWITCH_COMMANDS,
+        choose_business,
+        chosen_business,
+        owner_number_filter,
+        pick_from_reply,
+    )
 
     phone = normalize_phone(sender)
     async with plain_session() as session:
@@ -91,16 +97,16 @@ async def _resolve_business(sender: str, text: str | None = None) -> tuple[Busin
         if said in SWITCH_COMMANDS:
             choose_business(found, phone, None)
             current = None
-        elif current is None and said.isdecimal() and 1 <= int(said) <= len(found):
-            current = found[int(said) - 1]
-            choose_business(found, phone, current)
-            return None, None, f"Oke, sekarang pakai data *{current.name}* ✅\nKetik *ganti toko* kapan saja untuk pindah."
+        elif current is None and (picked := pick_from_reply(found, said)) is not None:
+            choose_business(found, phone, picked)
+            return None, None, f"Oke, sekarang pakai data *{picked.name}* ✅\nKetik *ganti toko* kapan saja untuk pindah."
         if current is None:
             listing = "\n".join(f"{i}. {b.name}" for i, b in enumerate(found, 1))
+            unclear = "Belum jelas yang mana. " if said and said not in SWITCH_COMMANDS else ""
             return None, None, (
-                "Nomor ini terhubung ke beberapa usaha. Mau pakai data yang mana? Balas angkanya:\n"
+                f"{unclear}Nomor ini terhubung ke beberapa usaha. Mau pakai data yang mana? Balas angka atau nama usahanya:\n"
                 f"{listing}\n\nNanti ketik *ganti toko* untuk pindah. "
-                "(This number reaches several businesses: reply with a number; type *switch business* to change.)"
+                "(This number reaches several businesses: reply with a number or the name; type *switch business* to change.)"
             )
         return current, f"🏪 {current.name}", None
 

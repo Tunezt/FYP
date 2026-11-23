@@ -66,6 +66,21 @@ async def add_owner_number(session: AsyncSession, business: Business, name: str,
 SWITCH_COMMANDS = {"ganti toko", "switch business", "switch store"}
 
 
+def pick_from_reply(businesses: list[Business], said: str) -> Business | None:
+    """The one cafe a picker reply names (wa-gw-6): its list number, its exact
+    name, or a text found inside exactly one name ("demo" -> "Poernama Demo").
+    `said` is already lower-cased and space-collapsed. None when none or
+    several match."""
+    if said.isdecimal() and 1 <= int(said) <= len(businesses):
+        return businesses[int(said) - 1]
+    if not said:
+        return None
+    names = [" ".join(b.name.lower().split()) for b in businesses]
+    exact = [b for b, n in zip(businesses, names) if n == said]
+    hits = exact or [b for b, n in zip(businesses, names) if said in n]
+    return hits[0] if len(hits) == 1 else None
+
+
 def chosen_business(businesses: list[Business], phone: str) -> Business | None:
     """The cafe `phone` last picked on WhatsApp, among those it reaches."""
     return next((b for b in businesses if phone in (b.active_owner_numbers or [])), None)

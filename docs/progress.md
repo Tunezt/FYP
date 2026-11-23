@@ -2682,3 +2682,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Test (+6): one-cafe number answered with no list or header; two cafes ask once, then answer from the pick with the header and remember it in the DB; a number after the pick is a normal message; switching works by both commands; a stranger stays silent, also for "ganti toko"; STRUK answered with no list. The role-separation test's resolver mock returns the new (business, header, reply) shape.
 **Deviation:** not a roadmap task; owner's instruction.
 **Next:** push; after the Railway deploy (migration 0051 runs on start) the owner seeds the live demo with his number.
+
+
+### [wa-gw-6] The cafe picker also takes the business name
+**Date:** 2026-11-23
+**Status:** done
+**Changed:** backend/app/services/owner_numbers.py, backend/app/whatsapp/processor.py, backend/tests/test_number_on_two_cafes.py
+**Gates:** pytest 788 passed, 0 skipped, 0 failed (23.55 WIB); alembic upgrade head / downgrade -1 / upgrade head OK; seed OK; npm run build OK.
+**Notes:**
+- Live bug 23 Nov: the bot listed "1. Poernama 2. Poernama Demo", the owner typed "demo" and got the same list again.
+- `pick_from_reply` (owner_numbers.py): the list number, or the exact name (case and extra spaces ignored), or text found inside exactly one name ("demo" picks "Poernama Demo"). Two or more matches, or none, show the list again with "Belum jelas yang mana." in front. "ganti toko" / "switch business" unchanged (list, no such line). The prompt now says "Balas angka atau nama usahanya".
+- Tests (+8): number, exact name with spaces and caps, partial "demo", partial with a trailing full stop, ambiguous, no match, number out of range, switch command shows no "not clear" line.
+- Gate noise: pytest runs killed by low RAM (MemoryError) left two test cafes in the local DB, which failed test_every_business_has_every_standard_posting_rule and the restore drill; removed those two local test rows, full suite then green.
+**Deviation:** not a roadmap task; owner's instruction.
+**Next:** push when the owner approves.
