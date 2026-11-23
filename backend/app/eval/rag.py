@@ -66,7 +66,8 @@ def sweep_table(alone: list[dict], guarded: list[dict]) -> str:
     return "\n".join(out)
 
 
-async def run(pace: float, routing: bool, do_sweep: bool = False) -> str:
+async def run(pace: float, routing: bool, do_sweep: bool = False, questions: list[RagQuestion] = RAG_QUESTIONS,
+              label: str = "M9-T7 RAG run") -> str:
     from app.ai import tools as tools_module
     from app.ai.gemini import force_tool_call
     from app.ai.router import CLARIFY, OUT_OF_SCOPE, _CLASSIFIER_SYSTEM
@@ -94,7 +95,7 @@ async def run(pace: float, routing: bool, do_sweep: bool = False) -> str:
             await embed_receipt(session, rec)
             await asyncio.sleep(pace if do_sweep else 1.0)
         retrieved, rows, ranked = [], [], []
-        for q in RAG_QUESTIONS:
+        for q in questions:
             # one embedding call per question; the cut-off is applied afterwards, so a sweep costs no more
             docs = await search_receipts(session, business.id, q.text, max_distance=2.0, lexical=False)
             words = key_words(q.text)
@@ -112,14 +113,14 @@ async def run(pace: float, routing: bool, do_sweep: bool = False) -> str:
             await asyncio.sleep(pace if do_sweep else 1.0)
         await session.rollback()
 
-    s = score(RAG_QUESTIONS, retrieved)
+    s = score(questions, retrieved)
 
     def pct(v):
         return "n/a" if v is None else f"{v:.0%}"
 
     settings = get_settings()
     out = [
-        f"### M9-T7 RAG run - {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC",
+        f"### {label} - {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC",
         "",
         f"Embedding model: {settings.gemini_embedding_model}; classifier model: "
         f"{settings.gemini_flash_model if routing else 'not called (retrieval only)'}. "
@@ -138,9 +139,9 @@ async def run(pace: float, routing: bool, do_sweep: bool = False) -> str:
         out.append(f"| {q.text} | {','.join(sorted(q.relevant)) or 'none'} | {','.join(keys) or 'none'} | {route or '-'} |")
     if do_sweep:
         cutoffs = [round(0.30 + 0.05 * i, 2) for i in range(8)]
-        out += ["", f"Cut-off sweep over the same retrieved distances ({len(RAG_QUESTIONS)} questions, "
-                    f"{len(RAG_RECEIPTS)} receipts, {len(RAG_RECEIPTS) + len(RAG_QUESTIONS)} embedding calls):", "",
-                sweep_table(sweep(RAG_QUESTIONS, ranked, cutoffs, False), sweep(RAG_QUESTIONS, ranked, cutoffs, True)), "", "Distances (best first), A = answerable, U = unanswerable, (x) = key word missing from that receipt:", ""]
+        out += ["", f"Cut-off sweep over the same retrieved distances ({len(questions)} questions, "
+                    f"{len(RAG_RECEIPTS)} receipts, {len(RAG_RECEIPTS) + len(questions)} embedding calls):", "",
+                sweep_table(sweep(questions, ranked, cutoffs, False), sweep(questions, ranked, cutoffs, True)), "", "Distances (best first), A = answerable, U = unanswerable, (x) = key word missing from that receipt:", ""]
         for (q, _k, _r), r in zip(rows, ranked):
             out.append(f"- {'A' if q.relevant else 'U'} {q.text}: " + ", ".join(f"{k}={d:.2f}{'' if ok else '(x)'}" for k, d, ok in r))
     return "\n".join(out)
@@ -150,9 +151,14 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--routing", action="store_true")
     ap.add_argument("--sweep", action="store_true", help="also sweep the distance cut-off 0.30-0.65")
+    ap.add_argument("--heldout", action="store_true", help="score the blind held-out set (app.eval.rag_heldout) instead")
     ap.add_argument("--no-append", action="store_true")
     a = ap.parse_args()
-    body = asyncio.run(run(7.0 if a.sweep else 13.0, a.routing, a.sweep))
+    qs, label = RAG_QUESTIONS, "M9-T7 RAG run"
+    if a.heldout:
+        from app.eval.rag_heldout import RAG_HELDOUT_QUESTIONS
+        qs, label = list(RAG_HELDOUT_QUESTIONS), "M9-T7 RAG run, blind held-out set"
+    body = asyncio.run(run(7.0 if a.sweep else 13.0, a.routing, a.sweep, qs, label))
     print(body)
     if not a.no_append:
         import pathlib

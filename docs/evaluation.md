@@ -476,3 +476,134 @@ other words ("susu kental manis" for a receipt that says "SKM") will be missed (
 safe direction), and the guard checks words, not meaning ("pernah beli susu" will cite any receipt with "susu").
 Test by re-running the sweep on Ibu Diah's real receipts and questions once they exist, and widen `_SYNONYMS`
 from the misses.
+
+## Held-out result (fin-rag-heldout) - 2026-11-24
+
+Why: the 100% above was measured on the same 22 questions the cut-off and the lexical guard's word lists were
+tuned on. A second agent wrote 30 new questions blind (`backend/app/eval/rag_heldout.py`: 15 answerable, 15
+unanswerable, same 10 receipts), without reading the first set or `rag.py`. Run once with the **current settings,
+not retuned**: cut-off 0.45 + lexical guard. Command: `python -m app.eval.rag --heldout --sweep`.
+Model: **gemini-embedding-001**, 40 embedding calls (10 receipts + 30 questions, 7 s pace), no generate calls.
+
+| set | settings | hit@1 | recall | precision | false match (unanswerable) |
+|---|---|---|---|---|---|
+| tuned set (22 q, above) | 0.45 + guard | 100% | 100% | 100% | 0% |
+| **held-out set (30 q)** | **0.45 + guard** | **0%** | **0%** | **0%** | **0%** |
+| held-out set | 0.45, guard off | 100% | 100% | (not separating) | 100% |
+| held-out set | 0.30, guard off (best cut-off alone) | 93% | 93% | - | 73% |
+
+What it says (measured on this set):
+
+- **The guard rejects every receipt on realistic phrasing.** It needs *every* key word of the question in the
+  receipt text, and the stop-word and synonym lists were written for the tuning questions. Blind questions
+  carry words no receipt contains: filler (`bareng`, `tolong`, `cariin`, `please`, `and`), dates (`oktober`,
+  `2026`, `tgl 26 okt`), amounts (`765rb`, `sejuta seratus lima puluh ribu`) and untranslated English
+  (`white sugar`, `palm sugar`, `lettuce`, `wheat flour`). Example: "nota Toko Sinar Jaya tanggal 2 Oktober
+  2026 tolong cariin" keeps `sinar jaya tanggal oktober 2026 cariin`; the right receipt (r1) fails on
+  `tanggal`, `oktober`, `cariin`. So the bot answers "no receipt found" to all 30: safe (it never cites a
+  wrong receipt) but useless for the answerable half.
+- **The embedding ranking itself is good:** with the guard off, the right receipt is first for 15 of 15
+  answerable questions. But it also returns receipts for every unanswerable one (100% false match at 0.45;
+  73% even at 0.30), because near-misses ("gula batu di Sinar Jaya", "Toko Sinar Baru", "CV Kopi Nusani") sit
+  as close as true answers (best distance 0.21-0.35 for unanswerable, 0.17-0.30 for answerable). Distance alone cannot separate them, here too.
+- **So the tuned-set 100% was overfitted.** The honest numbers for the report are the held-out row: the
+  current RAG never cites a wrong receipt, and finds the right one only when the question uses the receipt's
+  own words (as in the demo: "pernah beli gula aren dari toko manis?").
+- Not changed here, on purpose: retuning on this set would make it a tuning set too. **Guess (not measured):**
+  a softer rule (at least one item-or-supplier word must match, dates and amounts parsed as filters, filler
+  words ignored) would recover most answerable questions; it needs a NEW blind set to be measured honestly.
+
+<details><summary>Held-out run output (per question, sweep, distances)</summary>
+
+### M9-T7 RAG run, blind held-out set - 2026-11-23 19:59 UTC
+
+Embedding model: gemini-embedding-001; classifier model: not called (retrieval only). 10 receipts, 15 answerable + 15 unanswerable questions, top-5, distance cut-off 0.45 + lexical guard.
+
+| metric | value |
+|---|---|
+| precision of returned results | 0% |
+| hit@1 | 0% |
+| recall | 0% |
+| MRR | 0.00 |
+| false match on unanswerable | 0% |
+
+| question | relevant | returned (best first) | routed to |
+|---|---|---|---|
+| nota white sugar yg bareng susu kotak itu mana ya? | r1 | none | - |
+| ada bon biji kopi dua jenis, arabika sama robusta, awal oktober 2026? | r2 | none | - |
+| Find the wheat flour and eggs purchase from 9 October 2026 please | r3 | none | - |
+| yg beli palm sugar 5 kilo di Sinar Jaya, bonnya masih ada? | r4 | none | - |
+| cariin pembelian fresh milk sekalian creamer dong | r5 | none | - |
+| bon arabika tgl 26 okt 2026 yg 765rb itu | r6 | none | - |
+| Where's the receipt for lettuce and tomatoes from Pasar Induk? | r7 | none | - |
+| mentega sm telor awal nov 2026 beli di mana ya, ada notanya? | r8 | none | - |
+| need the bon for disposable cups + straws, seribu cup dua ribu straw | r9 | none | - |
+| bon cheese 2 kilo barengan susu dari Dairy Fresh ada gak? | r10 | none | - |
+| nota Toko Sinar Jaya tanggal 2 Oktober 2026 tolong cariin | r1 | none | - |
+| Kopi Nusantara yg totalnya sejuta seratus lima puluh ribu, kirim bonnya dong | r2 | none | - |
+| cari struk belanja 580rb di Maju Makmur bulan oktober 2026 | r3 | none | - |
+| the Dairy Fresh invoice on October 20, 2026, can you find it? | r5 | none | - |
+| yg abis 140 rebu buat sayur di pasar induk, itu nota mana? | r7 | none | - |
+| pernah beli gula batu di Sinar Jaya? cariin notanya | none | none | - |
+| ada bon oat milk dari Dairy Fresh gak? | none | none | - |
+| invoice kopi liberika di Kopi Nusantara yg dulu itu mana | none | none | - |
+| tepung beras dari UD Maju Makmur ada struknya? | none | none | - |
+| Find our mozzarella receipt from PT Dairy Fresh | none | none | - |
+| bon gelas kertas seribu pcs dr Kemasan Prima ada? | none | none | - |
+| selada yg kita beli di Pasar Indah, tolong cari bonnya | none | none | - |
+| nota gula pasir dr Toko Sinar Baru ada ga | none | none | - |
+| did we buy robusta beans from CV Kopi Nusani? show the receipt | none | none | - |
+| cariin bon gula aren dari UD Maju Makmur | none | none | - |
+| ada nota telur dari Toko Sinar Jaya? | none | none | - |
+| fresh milk dari CV Kopi Nusantara, invoice-nya mana ya? | none | none | - |
+| bon sedotan dari Pasar Induk dong | none | none | - |
+| pernah restok sirup vanila buat latte? cari nota belinya | none | none | - |
+| got a receipt for dishwashing liquid from Toko Bersih Sentosa? | none | none | - |
+
+Cut-off sweep over the same retrieved distances (30 questions, 10 receipts, 40 embedding calls):
+
+| cut-off | alone: hit@1 | recall | false match | + lexical: hit@1 | recall | precision | false match |
+|---|---|---|---|---|---|---|---|
+| 0.30 | 93% | 93% | 73% | 0% | 0% | 0% | 0% |
+| 0.35 | 100% | 100% | 100% | 0% | 0% | 0% | 0% |
+| 0.40 | 100% | 100% | 100% | 0% | 0% | 0% | 0% |
+| 0.45 | 100% | 100% | 100% | 0% | 0% | 0% | 0% |
+| 0.50 | 100% | 100% | 100% | 0% | 0% | 0% | 0% |
+| 0.55 | 100% | 100% | 100% | 0% | 0% | 0% | 0% |
+| 0.60 | 100% | 100% | 100% | 0% | 0% | 0% | 0% |
+| 0.65 | 100% | 100% | 100% | 0% | 0% | 0% | 0% |
+
+Distances (best first), A = answerable, U = unanswerable, (x) = key word missing from that receipt:
+
+- A nota white sugar yg bareng susu kotak itu mana ya?: r1=0.30(x), r4=0.32(x), r5=0.32(x), r10=0.32(x), r8=0.36(x)
+- A ada bon biji kopi dua jenis, arabika sama robusta, awal oktober 2026?: r2=0.21(x), r6=0.24(x), r9=0.34(x), r7=0.34(x), r5=0.35(x)
+- A Find the wheat flour and eggs purchase from 9 October 2026 please: r3=0.28(x), r8=0.31(x), r1=0.32(x), r4=0.33(x), r5=0.33(x)
+- A yg beli palm sugar 5 kilo di Sinar Jaya, bonnya masih ada?: r4=0.25(x), r1=0.27(x), r8=0.35(x), r6=0.35(x), r3=0.36(x)
+- A cariin pembelian fresh milk sekalian creamer dong: r5=0.25(x), r10=0.27(x), r1=0.32(x), r4=0.32(x), r8=0.33(x)
+- A bon arabika tgl 26 okt 2026 yg 765rb itu: r6=0.19(x), r2=0.24(x), r5=0.31(x), r9=0.32(x), r7=0.32(x)
+- A Where's the receipt for lettuce and tomatoes from Pasar Induk?: r7=0.22(x), r10=0.32(x), r5=0.33(x), r8=0.33(x), r1=0.34(x)
+- A mentega sm telor awal nov 2026 beli di mana ya, ada notanya?: r8=0.20(x), r3=0.26(x), r10=0.27(x), r5=0.27(x), r7=0.29(x)
+- A need the bon for disposable cups + straws, seribu cup dua ribu straw: r9=0.25(x), r2=0.31(x), r5=0.32(x), r4=0.33(x), r1=0.33(x)
+- A bon cheese 2 kilo barengan susu dari Dairy Fresh ada gak?: r10=0.28(x), r5=0.30(x), r4=0.37(x), r1=0.37(x), r8=0.39(x)
+- A nota Toko Sinar Jaya tanggal 2 Oktober 2026 tolong cariin: r1=0.17(x), r4=0.18(x), r5=0.22(x), r8=0.23(x), r6=0.23(x)
+- A Kopi Nusantara yg totalnya sejuta seratus lima puluh ribu, kirim bonnya dong: r2=0.21(x), r6=0.23(x), r9=0.27(x), r5=0.29(x), r10=0.29(x)
+- A cari struk belanja 580rb di Maju Makmur bulan oktober 2026: r3=0.22(x), r8=0.25(x), r4=0.26(x), r1=0.27(x), r5=0.29(x)
+- A the Dairy Fresh invoice on October 20, 2026, can you find it?: r5=0.25(x), r10=0.27(x), r4=0.32(x), r1=0.32(x), r7=0.33(x)
+- A yg abis 140 rebu buat sayur di pasar induk, itu nota mana?: r7=0.21(x), r10=0.29(x), r8=0.30(x), r1=0.30(x), r5=0.30(x)
+- U pernah beli gula batu di Sinar Jaya? cariin notanya: r1=0.23(x), r4=0.23(x), r8=0.30(x), r3=0.31(x), r6=0.33(x)
+- U ada bon oat milk dari Dairy Fresh gak?: r5=0.29(x), r10=0.30(x), r4=0.37(x), r1=0.38(x), r7=0.40(x)
+- U invoice kopi liberika di Kopi Nusantara yg dulu itu mana: r2=0.24(x), r6=0.25(x), r10=0.34(x), r9=0.34(x), r4=0.34(x)
+- U tepung beras dari UD Maju Makmur ada struknya?: r3=0.33(x), r8=0.37(x), r1=0.42(x), r4=0.42(x), r10=0.43(x)
+- U Find our mozzarella receipt from PT Dairy Fresh: r10=0.29(x), r5=0.31(x), r8=0.38(x), r3=0.39(x), r1=0.40(x)
+- U bon gelas kertas seribu pcs dr Kemasan Prima ada?: r9=0.22(x), r2=0.33(x), r6=0.33(x), r5=0.34(x), r1=0.35(x)
+- U selada yg kita beli di Pasar Indah, tolong cari bonnya: r7=0.24(x), r10=0.34(x), r8=0.34(x), r6=0.35(x), r5=0.35(x)
+- U nota gula pasir dr Toko Sinar Baru ada ga: r1=0.21(x), r4=0.22(x), r8=0.27(x), r3=0.28(x), r6=0.29(x)
+- U did we buy robusta beans from CV Kopi Nusani? show the receipt: r2=0.23(x), r6=0.24(x), r9=0.33(x), r7=0.34(x), r10=0.34(x)
+- U cariin bon gula aren dari UD Maju Makmur: r4=0.32(x), r3=0.33(x), r8=0.34(x), r1=0.37(x), r10=0.42(x)
+- U ada nota telur dari Toko Sinar Jaya?: r1=0.22(x), r8=0.23(x), r4=0.23(x), r3=0.26(x), r10=0.29(x)
+- U fresh milk dari CV Kopi Nusantara, invoice-nya mana ya?: r10=0.25(x), r5=0.25(x), r2=0.26(x), r6=0.26(x), r4=0.30(x)
+- U bon sedotan dari Pasar Induk dong: r7=0.35(x), r9=0.36(x), r4=0.39(x), r10=0.39(x), r5=0.40(x)
+- U pernah restok sirup vanila buat latte? cari nota belinya: r2=0.30(x), r6=0.30(x), r1=0.30(x), r4=0.31(x), r5=0.31(x)
+- U got a receipt for dishwashing liquid from Toko Bersih Sentosa?: r10=0.32(x), r1=0.32(x), r5=0.32(x), r9=0.33(x), r4=0.33(x)
+
+</details>

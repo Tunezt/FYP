@@ -2895,3 +2895,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Re-running the demo seed makes a NEW business id (it deletes and recreates the business). A scope by id would silently stop covering the demo, so `NIGHTLY_BUSINESS_IDS` now also accepts owner phone numbers; the live value is `628115819400` (the Poernama Demo owner), which survives every re-seed. Ibu Diah's business is skipped.
 - Test: the existing safety-switch test gains a phone case.
 **Deviation:** none.
+
+### [fin-rag-heldout] Blind held-out RAG set: the tuned 100% does not hold
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/eval/rag_heldout.py (new, written blind by another agent), backend/app/eval/rag.py (`--heldout` flag), docs/evaluation.md ("Held-out result")
+**Gates:** see the commit.
+**Notes:**
+- Current settings, not retuned (cut-off 0.45 + lexical guard), 30 blind questions on the same 10 receipts, 40 calls on gemini-embedding-001: hit@1 0%, recall 0%, false match 0% (tuned set: 100% / 100% / 0%).
+- Cause (measured): the guard needs every key word in the receipt; blind phrasing carries dates, amounts, filler and English words no receipt contains. The bot never cites a wrong receipt, but finds one only when the question uses the receipt's own words (the demo question does).
+- With the guard off the embedding ranks the right receipt first 15/15, but matches every unanswerable question too (100% at 0.45, 73% at 0.30).
+**Deviation:** none.
+**Next:** a softer guard (one item/supplier word, dates/amounts as filters) needs a NEW blind set to be measured; not done here on purpose.
