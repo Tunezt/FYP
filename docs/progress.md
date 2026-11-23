@@ -2907,3 +2907,11 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - With the guard off the embedding ranks the right receipt first 15/15, but matches every unanswerable question too (100% at 0.45, 73% at 0.30).
 **Deviation:** none.
 **Next:** a softer guard (one item/supplier word, dates/amounts as filters) needs a NEW blind set to be measured; not done here on purpose.
+
+### [fin-test-alert-quality] test_alert_quality no longer depends on the hour
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/tests/test_alert_quality.py
+**Gates:** see the commit.
+**Notes:** reproduced at 02:55 WIB on clean main: "night 6 days ago wrote ['anomaly']". Sales were written at `now - 6h` and the nightly pass ran at `now - 1h`; between 01:00 and 06:00 WIB those land on different WIB days, so a night saw a day with no sales. Now both use the shared `on_day` helper from fin-test-clock. Passes at the real 02:55 and with `FYP_TEST_CLOCK_WIB` = 00:30, 06:30, 12:00, 23:50 (5/5 each). Tests only; no product bug.
+**Deviation:** none.

@@ -27,7 +27,7 @@ from app.services.pricing import ensure_pricing_settings
 from app.services.stock import open_item_stock
 from app.services.velocity import check_low_stock_for_item
 
-from tests.conftest import seed_books
+from tests.conftest import on_day, seed_books
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 D = Decimal
@@ -63,7 +63,7 @@ async def _set_tenant(session, business_id):
 
 async def _sell_day(s, c, day_offset: int, hours: int = 6):
     """The café's normal day: one sale per cashier, 2 or 3 Kopi + 1 Roti."""
-    when = NOW - timedelta(days=day_offset, hours=hours)
+    when = on_day(day_offset, hours)   # on that WIB day at any hour (fin-test-clock)
     qty = D(2) if day_offset % 2 == 0 else D(3)
     for staff in (c["sari"], c["budi"]):
         created = await create_order(s, business_id=c["bid"], staff_id=staff,
@@ -115,7 +115,7 @@ async def test_a_simulated_stable_week_produces_zero_alerts(session_factory, sho
             await _set_tenant(s, c["bid"])
             await _sell_day(s, c, day)
             biz = await s.get(Business, c["bid"])
-            night = NOW - timedelta(days=day, hours=1)
+            night = on_day(day, 1)   # same WIB day as that day's sales, after them
             written = await nightly_pass(s, biz, now=night)
             assert written == [], f"night {day} days ago wrote {[a.type for a in written]}"
             await s.commit()
@@ -138,7 +138,7 @@ async def test_a_persistent_condition_is_said_once_a_week_not_every_night(sessio
         async with session_factory() as s:
             await _set_tenant(s, c["bid"])
             biz = await s.get(Business, c["bid"])
-            written = await nightly_pass(s, biz, now=NOW - timedelta(days=day, hours=1))
+            written = await nightly_pass(s, biz, now=on_day(day, 1))
             kinds.append([a.type for a in written])
             (await s.get(Item, c["roti"])).current_stock = D(6)   # nothing delivered, still 3 days left
             await s.commit()
