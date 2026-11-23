@@ -11,7 +11,10 @@ returned as langchain_core Documents so the orchestration layer stays on
 LangChain abstractions.
 """
 import logging
+import re
+import unicodedata
 import uuid
+from difflib import SequenceMatcher
 from datetime import datetime
 
 from langchain_core.documents import Document
@@ -25,8 +28,62 @@ logger = logging.getLogger("rag")
 
 TOP_K = 5
 # Cosine distance beyond this is noise, not a match (distance = 1 - similarity).
-# Chosen by the sweep in docs/evaluation.md (`python -m app.eval.rag --sweep`).
-MAX_DISTANCE = 0.35
+# Chosen by the sweep in docs/evaluation.md (`python -m app.eval.rag --sweep`); the lexical guard below does the rejecting.
+MAX_DISTANCE = 0.45
+
+
+# -- Lexical guard ----------------------------------------------------------
+# A vector search always returns its nearest receipts, even when the thing asked
+# about was never bought. A match is only accepted if the question's key words
+# (item or supplier) really occur in that receipt's text.
+_STOP = set("""
+pernah beli membeli dibeli ngebeli belanja bought buy ever did have has had we i you my our kita saya aku
+kapan terakhir last when biasanya usually mana dimana di dari ke ada ga gak nggak tidak apa apakah yang dan atau
+aja saja ya sih dong brp berapa harga price much how many supplier suppliers nota struk receipt bon order pesan
+toko pt cv ud before from the a an of for to is are was were do does sudah udah belum lagi itu ini with any
+where what which who bisa tolong cek lihat tampilkan show find cari history riwayat
+""".split())
+# English and category words the owner may use for what is written in Indonesian on the receipt.
+_SYNONYMS = {
+    "cheese": ["keju"], "milk": ["susu"], "sugar": ["gula"], "egg": ["telur"], "eggs": ["telur"],
+    "butter": ["mentega"], "coffee": ["kopi"], "flour": ["tepung"], "cream": ["krimer"],
+    "cup": ["gelas"], "cups": ["gelas"], "straw": ["sedotan"], "straws": ["sedotan"],
+    "sayur": ["sayuran", "selada", "tomat", "wortel", "bayam", "kol"],
+    "vegetable": ["sayur", "selada", "tomat"], "vegetables": ["sayur", "selada", "tomat"],
+    "tomato": ["tomat"], "lettuce": ["selada"],
+}
+
+
+def _fold(text: str) -> str:
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+
+
+def key_words(query: str) -> list[str]:
+    """The words of a question that name the thing asked about (stop words dropped)."""
+    seen: list[str] = []
+    for w in re.findall(r"[a-z0-9]+", _fold(query)):
+        if w not in _STOP and len(w) >= 3 and w not in seen:
+            seen.append(w)
+    return seen
+
+
+def _close(a: str, b: str) -> bool:
+    if a == b:
+        return True
+    if min(len(a), len(b)) < 4:
+        return False
+    if (a.startswith(b) or b.startswith(a)) and abs(len(a) - len(b)) <= 3:  # sayur / sayuran
+        return True
+    return SequenceMatcher(None, a, b).ratio() >= 0.85  # one-letter slips: arabika / arabica
+
+
+def mentions(text: str, words: list[str]) -> bool:
+    """True if every key word (or a synonym, or a close spelling) occurs in `text`.
+    No key words (a question that names nothing) = nothing to check = True.
+    shortcut: ALL words must match, so a half-right name ("Bangunan Jaya" vs "Sinar Jaya")
+    is rejected; the synonym list is tiny, widen it if real questions miss."""
+    have = re.findall(r"[a-z0-9]+", _fold(text))
+    return all(any(_close(alt, h) for alt in [w, *_SYNONYMS.get(w, [])] for h in have) for w in words)
 
 
 def receipt_to_document_text(receipt: Receipt) -> str:
@@ -66,11 +123,12 @@ async def embed_receipt(session: AsyncSession, receipt: Receipt) -> None:
 
 async def search_receipts(
     session: AsyncSession, business_id: uuid.UUID, query: str, k: int = TOP_K,
-    max_distance: float | None = None,
+    max_distance: float | None = None, lexical: bool = True,
 ) -> list[Document]:
     """Top-k receipt matches for a natural-language question, as LangChain
     Documents (page_content = the embedded text, metadata = provenance)."""
     cutoff = MAX_DISTANCE if max_distance is None else max_distance
+    words = key_words(query) if lexical else []
     query_vec = await embed_text(query)
     distance = Receipt.embedding.cosine_distance(query_vec).label("distance")
     rows = (
@@ -86,9 +144,12 @@ async def search_receipts(
     for receipt, dist in rows:
         if dist is not None and float(dist) > cutoff:
             continue
+        text = receipt_to_document_text(receipt)
+        if not mentions(text, words):
+            continue
         documents.append(
             Document(
-                page_content=receipt_to_document_text(receipt),
+                page_content=text,
                 metadata={
                     "receipt_id": str(receipt.id),
                     "supplier": receipt.supplier,

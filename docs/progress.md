@@ -2871,3 +2871,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Proof: with `FYP_TEST_CLOCK_WIB=HH:MM` (the Python clock set with `time-machine`, an opt-in that only runs when the variable is set) the five files pass at 00:30, 06:30, 12:00 and 23:50 WIB, 21 of 21 each time, and at the real 00:48 WIB. A global clock pin was tried first and rejected: the database's own `now()` stays real, and with the Python clock moved hours away the print-queue age tests (print_bridge, open_bills, prep_routing) fail for that reason alone, which real life never does.
 - Restore drill: it dumped the shared local database, so any half-built cafe from an aborted run (or an empty database) failed its invariants phase. It now builds its own throwaway database (migrated and seeded in a subprocess, dropped after), so the drill passes with a junk cafe in the shared database (checked). `test_invariants.py` itself still scans the shared database; seed it once (`python -m app.seed`) before the suite on a fresh local database.
 **Deviation:** none.
+
+### [fin-rag-lexical] Receipts are cited only if the question's key words are in them; cut-off back up to 0.45
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/services/rag.py, backend/app/eval/rag.py, backend/tests/test_rag_lexical.py (new), backend/tests/test_rag_cutoff.py, docs/evaluation.md
+**Gates:** see the commit; the local test database was dropped, recreated (alembic + scripts/db-bootstrap.sql + seed) before the run.
+**Notes:**
+- `search_receipts(..., lexical=True)`: key words (question words and company words dropped) must all occur in the receipt text; close spelling, accents and a tiny English/category synonym list tolerated; a question with no key words is not checked.
+- Sweep (gemini-embedding-001, 32 calls): cut-off 0.45 + guard = hit@1 100%, recall 100%, precision 100%, false match 0%; cut-off alone best (0.35) = 80% / 85% / 25%.
+- Overfitting caveat in docs/evaluation.md: lists written with this question set in mind; re-check on real receipts.
+**Deviation:** none.
+**Next:** none.

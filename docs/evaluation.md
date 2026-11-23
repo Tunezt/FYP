@@ -411,3 +411,68 @@ Distances (best first), A = answerable, U = unanswerable:
 - The set is small and synthetic; the right value on Ibu Diah's real receipts (more of them, real photos' text)
   may differ. Re-run the sweep once her receipts are in the live database.
 - The earlier result table above ("cut-off 0.65") stays as the before-picture.
+
+## RAG lexical guard and final cut-off (fin-rag-lexical) - 2026-11-23
+
+Why: a distance cut-off alone still left 25% of the unanswerable questions matched at the best value (0.35)
+and cost 10 points of hit@1: the embedding rates a made-up supplier close to any receipt that has a supplier
+line. The guard: a receipt is accepted only if **every key word of the question** (item or supplier; question
+words like "pernah beli", "kapan terakhir", "nota dari" dropped) occurs in that receipt's text, with case and
+accents ignored, one-letter spelling slips and plural forms tolerated (`sayur`/`sayuran`, `arabika`/`arabica`),
+and a small English/category synonym list (`cheese` -> `keju`, `sayur` -> `selada`, `tomat`, ...). A question
+that names nothing is not checked. Code: `key_words`, `mentions` in `backend/app/services/rag.py`; tests
+`tests/test_rag_lexical.py`, `tests/test_rag_cutoff.py`. Model: **gemini-embedding-001**; same 10 receipts, 10
+answerable + 12 unanswerable questions, top-5, 32 embedding calls (7 s pace). "(x)" marks a result the guard
+removes.
+
+Cut-off sweep over the same retrieved distances (22 questions, 10 receipts, 32 embedding calls):
+
+| cut-off | alone: hit@1 | recall | false match | + lexical: hit@1 | recall | precision | false match |
+|---|---|---|---|---|---|---|---|
+| 0.30 | 30% | 30% | 17% | 30% | 30% | 30% | 0% |
+| 0.35 | 80% | 85% | 25% | 90% | 85% | 90% | 0% |
+| 0.40 | 80% | 90% | 75% | 90% | 90% | 90% | 0% |
+| 0.45 | 90% | 100% | 100% | 100% | 100% | 100% | 0% |
+| 0.50 | 90% | 100% | 100% | 100% | 100% | 100% | 0% |
+| 0.55 | 90% | 100% | 100% | 100% | 100% | 100% | 0% |
+| 0.60 | 90% | 100% | 100% | 100% | 100% | 100% | 0% |
+| 0.65 | 90% | 100% | 100% | 100% | 100% | 100% | 0% |
+
+Distances (best first), A = answerable, U = unanswerable, (x) = key word missing from that receipt:
+
+- A kapan terakhir beli susu uht: r10=0.31(x), r5=0.32(x), r4=0.33, r1=0.33, r8=0.38(x)
+- A pernah beli gula aren?: r4=0.30, r1=0.36(x), r6=0.40(x), r10=0.41(x), r8=0.41(x)
+- A biasanya beli arabica di mana: r6=0.31, r2=0.31, r9=0.41(x), r7=0.42(x), r10=0.42(x)
+- A beli telur dari supplier mana aja: r8=0.32, r3=0.36, r10=0.38(x), r5=0.39(x), r7=0.40(x)
+- A have I bought cheese before: r10=0.40, r7=0.43(x), r5=0.43(x), r8=0.44(x), r4=0.44(x)
+- A nota dari Dairy Fresh ada ga: r10=0.19, r5=0.20, r8=0.29(x), r4=0.31(x), r1=0.31(x)
+- A kapan terakhir beli gelas plastik: r9=0.30, r1=0.40(x), r4=0.40(x), r10=0.41(x), r5=0.41(x)
+- A pernah beli tepung terigu?: r3=0.30, r8=0.38(x), r1=0.38(x), r10=0.39(x), r4=0.40(x)
+- A harga beli mentega terakhir brp: r8=0.28, r5=0.33(x), r10=0.33(x), r1=0.34(x), r3=0.34(x)
+- A beli sayur di mana ya: r7=0.34, r4=0.41(x), r10=0.42(x), r8=0.42(x), r1=0.42(x)
+- U pernah beli daging sapi?: r10=0.38(x), r4=0.40(x), r8=0.41(x), r5=0.41(x), r1=0.41(x)
+- U did i ever buy caviar: r8=0.44(x), r3=0.45(x), r7=0.46(x), r10=0.46(x), r4=0.46(x)
+- U pernah beli ikan salmon?: r10=0.39(x), r7=0.40(x), r8=0.40(x), r5=0.41(x), r3=0.42(x)
+- U nota dari Toko Bangunan Jaya ada ga: r9=0.27(x), r1=0.28(x), r4=0.28(x), r8=0.28(x), r3=0.28(x)
+- U did we ever buy printer paper: r9=0.42(x), r6=0.43(x), r2=0.44(x), r4=0.44(x), r8=0.44(x)
+- U kapan terakhir beli beras: r4=0.37(x), r3=0.37(x), r8=0.37(x), r1=0.37(x), r10=0.38(x)
+- U beli minyak goreng di mana: r8=0.40(x), r4=0.41(x), r7=0.41(x), r10=0.42(x), r1=0.42(x)
+- U pernah order dari PT Samudra Frozen?: r10=0.39(x), r5=0.40(x), r3=0.41(x), r8=0.42(x), r1=0.42(x)
+- U have I bought vanilla syrup before: r4=0.42(x), r6=0.43(x), r1=0.43(x), r2=0.44(x), r8=0.45(x)
+- U harga beli ayam terakhir brp: r8=0.32(x), r10=0.35(x), r3=0.35(x), r7=0.36(x), r5=0.36(x)
+- U nota dari CV Sumber Rejeki ada ga: r10=0.29(x), r6=0.29(x), r8=0.30(x), r5=0.30(x), r2=0.31(x)
+- U pernah beli teh celup?: r6=0.39(x), r9=0.39(x), r2=0.40(x), r3=0.40(x), r7=0.41(x)
+
+
+**Decision: `MAX_DISTANCE` 0.35 -> 0.45, lexical guard on.** From 0.45 up the guarded result is identical: hit@1,
+recall and precision 100%, false match on unanswerable **0%** (cut-off alone at 0.45: 100% false match; at its
+best, 0.35: hit@1 80%, recall 85%, 25% false match). The guard does the rejecting; the cut-off only bounds
+semantic noise, and 0.45 recovers "have I bought cheese before" (distance 0.40).
+
+Caveats (labelled): **measured** on this set only; the set is 10 synthetic receipts and 22 questions.
+**Guess:** the stop-word and synonym lists were written with these question styles in mind (the `cheese` and
+`sayur` synonyms were needed for two answerable questions), so 100% is partly fitted; real owner questions with
+other words ("susu kental manis" for a receipt that says "SKM") will be missed (a wrongly refused question, the
+safe direction), and the guard checks words, not meaning ("pernah beli susu" will cite any receipt with "susu").
+Test by re-running the sweep on Ibu Diah's real receipts and questions once they exist, and widen `_SYNONYMS`
+from the misses.
