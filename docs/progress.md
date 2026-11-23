@@ -2816,3 +2816,11 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **Changed:** backend/app/ai/composer.py, backend/tests/test_composer_language.py (new)
 **Gates:** pytest on every file using the composer: see run; no migration or frontend change. Real check on gemini-3.5-flash-lite (2 calls): "how much did I sell today?" and "what's my best selling item this week?" both answered in English (audit: Indonesian 3 of 3).
 **Notes:** `detect_language` in composer.py counts English vs Indonesian/Malay words in the owner's message; English -> a hard "WHOLE reply MUST be English" instruction; unsure ("halo", "3") -> the business default. Malay "jualan semalam" stays Indonesian/Malay.
+
+
+### [fin-p1-6] Composer honesty: facts only, no offers it can't keep, promos running vs used
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/ai/composer.py, backend/tests/test_composer_honesty.py (new)
+**Gates:** pytest on composer-using files: only the known clock flake (test_thesis_agreement, same on HEAD) fails; no migration or frontend change. Real check on gemini-3.5-flash-lite (2 calls): 2 active promos with 0 uses -> "Ada 2 promo yang lagi jalan ... belum ada yang pakai" (audit: "Belum ada promo"); a price question got the price and no offer.
+**Notes:** composer rules added: facts only / never explain why or how the data works / never offer actions it can't do / `is_active` true = running even with 0 uses. The prompt rules are checked by test; the behaviour only by the 2 real calls (a prompt rule is not a guarantee).
