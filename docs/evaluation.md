@@ -633,7 +633,7 @@ question like "beli telur dari supplier mana aja" has two right receipts; it cos
 |---|---|---|---|---|---|---|
 | tuned (22 q) | tuned on (cut-off, old word lists) | 100% | 100% | 100% | 0% | 1.00 |
 | held-out 1 (30 q) | **seen once during the redesign** (it showed the 0%) | 100% | 100% | 100% | 7% (1 of 15) | 1.00 |
-| held-out 2 (30 q) | untouched until the design was committed | see below | | | | |
+| **held-out 2 (30 q)** | **untouched: written by another agent, opened and scored once after the design was committed, nothing changed after** | **73%** | **73%** | **73%** | **0%** | 1.00 |
 
 Measured on gemini-embedding-001 + the judge, 2026-11-24, `python -m app.eval.rag [--heldout]`.
 
@@ -735,5 +735,84 @@ Embedding model: gemini-embedding-001; classifier model: not called (retrieval o
 | bon sedotan dari Pasar Induk dong | none | none | - | 1 |
 | pernah restok sirup vanila buat latte? cari nota belinya | none | none | - | 1 |
 | got a receipt for dishwashing liquid from Toko Bersih Sentosa? | none | none | - | 1 |
+
+</details>
+
+## Held-out 2: the final, untouched number (fin-rag-heldout2) - 2026-11-24
+
+A second blind set (`backend/app/eval/rag_heldout2.py`, 15 answerable + 15 unanswerable, written by another agent
+and kept closed until `[fin-rag-judge]` was committed) was scored **exactly once** with
+`python -m app.eval.rag --questions app.eval.rag_heldout2 --no-append`, 2026-11-24 04:31 WIB. Nothing was
+changed after it. **This is the number for the report.**
+
+| metric | held-out 2 |
+|---|---|
+| hit@1 | **73%** (11 of 15) |
+| recall | **73%** |
+| precision of returned results | 73% (every returned receipt was right; the 4 misses returned nothing) |
+| false match on unanswerable | **0%** (0 of 15) |
+| extra model calls | 1.00 judge call per question |
+
+What the 4 misses were (read from the run below and its log):
+
+- **3 of the 4 were the judge failing, not judging wrongly.** The free-tier models were overloaded at that hour
+  (12 × 503, 2 × 504, 3 × daily 429 across the chain); 8 of the 30 judge calls failed, 3 of them on answerable
+  questions (r1 "gula putih 10 kilo", r6 "arabika Rp765.000", r8 "maju makmur butter 5 kilo"). On the live bot
+  these get "Maaf, catatan nota belum bisa kucek sekarang … coba tanya lagi", not "no receipt".
+- **1 of the 4 is a real miss:** "struk belanja 9/10/2026 yg total lima ratus delapan puluh ribu" (r3) names
+  no item or supplier, only a date and an amount written in words; the judge said no.
+- Where the judge did answer: recall 12 of 13 answerable (92%), false match 0 of 10 unanswerable.
+
+Honest reading: on wording it has never seen, the design cites no wrong receipt (0 false matches on both blind
+sets), and finds the right one whenever the free model answers, except for a date-plus-amount-only question.
+Its weak point is the **free tier's availability**: at a busy hour a quarter of the judge calls failed. The bot
+says so plainly instead of guessing; paid Gemini (or a retry later) removes that failure mode.
+
+<details><summary>Raw run (held-out 2, scored once)</summary>
+
+### M9-T7 RAG run, app.eval.rag_heldout2 - 2026-11-23 21:31 UTC
+
+Embedding model: gemini-embedding-001; classifier model: not called (retrieval only). 10 receipts, 15 answerable + 15 unanswerable questions, top-5, distance cut-off 0.45, verified by word match else one judge call (gemini-3.5-flash-lite first): 30 judge calls, 1.00 per question; 8 judge call(s) failed (the bot would say it cannot check receipts right now): yg beli gula putih 10 kilo itu nota mana ya?; bon arabika yg totalnya Rp765.000 itu kirim lg dong; maju makmur, butter 5 kilo sama telor, bon novembernya mana yah; nota tepung beras 25 kilo dari Maju Makmur mana ya; susu segar 30 liter belinya di Sinar Jaya ada notanya?; bon keju dua kilo dari UD Maju Makmur dong; Pasar Induk drinking straws 2000 biji ada receiptnya?; ada struk chicken breast buat sandwich gak? lupa belinya kapan.
+
+| metric | value |
+|---|---|
+| precision of returned results | 73% |
+| hit@1 | 73% |
+| recall | 73% |
+| MRR | 0.73 |
+| false match on unanswerable | 0% |
+
+| question | relevant | returned (best first) | routed to | judge calls |
+|---|---|---|---|---|
+| yg beli gula putih 10 kilo itu nota mana ya? | r1 | none | - | 1 |
+| Ada struk Kopi Nusantara yg arabika sama robustanya dibeli barengan? | r2 | r2 | - | 1 |
+| Tolong cariin nota terigu 25kg bareng telor sepuluh kilo dong | r3 | r3 | - | 1 |
+| Sinar Jaya yg gula merah aren tgl 16 okt 2026, ada bonnya? | r4 | r4 | - | 1 |
+| Can you find the fresh milk and creamer receipt from 20 October 2026? | r5 | r5 | - | 1 |
+| bon arabika yg totalnya Rp765.000 itu kirim lg dong | r6 | none | - | 1 |
+| Nota lettuce sama tomatoes dari pasar induk ada ga? | r7 | r7 | - | 1 |
+| maju makmur, butter 5 kilo sama telor, bon novembernya mana yah | r8 | none | - | 1 |
+| Need the receipt for 1,000 plastic cups and 2,000 drinking straws please | r9 | r9 | - | 1 |
+| Dairy Fresh yg ada cheese dua kilo tanggal 12 nov 2026 itu nota mana? | r10 | r10 | - | 1 |
+| bon Sinar Jaya tanggal 2 Oktober 2026, total 596rb kan? mau liat | r1 | r1 | - | 1 |
+| struk belanja 9/10/2026 yg total lima ratus delapan puluh ribu ada? | r3 | none | - | 1 |
+| Kopi Nusantara tgl 26 Oktober 2026 kita beli apa aja? cariin notanya | r6 | r6 | - | 1 |
+| kemasn prima yg 8 november 2026 total 470k, minta struknya pls | r9 | r9 | - | 1 |
+| Cari nota susu tanggal 12 November 2026, jumlah bayar 720 ribu | r10 | r10 | - | 1 |
+| pernah stok susu oat buat latte? kirim bonnya dong | none | none | - | 1 |
+| yoghurt Dairy Fresh yg kemaren itu ada struknya ga | none | none | - | 1 |
+| Any receipt for matcha powder for our drinks? | none | none | - | 1 |
+| kopi liberika dari Nusantara pernah beli brp kilo ya? cari notanya | none | none | - | 1 |
+| Sinar Jaya ada bon gula batu nggak? | none | none | - | 1 |
+| nota tepung beras 25 kilo dari Maju Makmur mana ya | none | none | - | 1 |
+| minyak goreng buat dapur pernah belanja kan? bonnya ada? | none | none | - | 1 |
+| Kemasan Prima paper cups seribu pcs ada invoice-nya? | none | none | - | 1 |
+| cari bon gula pasir dari Toko Sinar Abadi ya, bukan toko lain | none | none | - | 1 |
+| PT Dairy First fresh milk receipt ada gak? | none | none | - | 1 |
+| susu segar 30 liter belinya di Sinar Jaya ada notanya? | none | none | - | 1 |
+| Nusantara pernah kirim gula pasir 10kg? minta bukti belinya | none | none | - | 1 |
+| bon keju dua kilo dari UD Maju Makmur dong | none | none | - | 1 |
+| Pasar Induk drinking straws 2000 biji ada receiptnya? | none | none | - | 1 |
+| ada struk chicken breast buat sandwich gak? lupa belinya kapan | none | none | - | 1 |
 
 </details>

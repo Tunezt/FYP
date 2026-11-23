@@ -2942,3 +2942,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - test_rag_cutoff: the "close receipt without the asked word" case now gets its "no" from a mocked judge (the old guard is gone by design); the new tests pin fast accept, one call for the rest, and failure = nothing cited.
 **Deviation:** none.
 **Next:** score the untouched second blind set once (fin-rag-heldout2).
+
+### [fin-rag-heldout2] Second blind RAG set, scored once: the final number
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/eval/rag_heldout2.py (cherry-picked 930d16d, written by another agent), docs/evaluation.md
+**Gates:** see the commit.
+**Notes:**
+- Opened only after [fin-rag-judge] was committed; scored exactly once, nothing changed after.
+- hit@1 73%, recall 73%, false match 0%, 1.00 judge call per question.
+- 3 of the 4 misses were judge calls failing on free-tier 503/504/429 (8 of 30 calls failed at 04:31 WIB); the bot answers those with "belum bisa kucek sekarang", not "not found". 1 real miss: a date + amount-only question (r3). Where the judge answered: recall 12/13, false match 0/10.
+**Deviation:** none.
+**Next:** none for RAG before the meeting; paid Gemini would remove the availability failures.
+
