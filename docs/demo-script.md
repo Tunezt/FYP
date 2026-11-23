@@ -7,7 +7,7 @@ The demo runs on the live business **Poernama Demo** (invented data, never the r
 1. **Re-seed the live demo** so the dates move up to now, the alerts exist and today has sales (the owner runs this in PowerShell, with `DATABASE_URL` from `backend/.env.production`):
    `python -m app.seed --phone 0811… --name "Poernama Demo" --owner "Pemilik" --yes`
    The run ends with `Nightly pass: 2 alert(s) ready: ['anomaly', 'stockout_risk']`. Each run makes a new business id, so log in again afterwards.
-2. **Send the staged receipt once, now.** From the demo number on WhatsApp send `docs/demo-receipt-toko-manis.jpg` (Toko Manis: Gula Aren 5 kg, Susu UHT 12 liter, Biji Arabica 2 kg, total Rp 684.000), then reply **YA**. This gives the receipt-history question (Act 2) something to find, and fills Keuangan → Nota. The seed itself never calls Gemini, so this one photo is the only setup that does.
+2. **Send the staged receipt once, now.** From the demo number on WhatsApp send `docs/demo-receipt-toko-manis.jpg` (Toko Manis: Gula Aren 5 kg, Susu UHT 12 liter, Biji Arabica 2 kg, total Rp 684.000), then reply **YA** (the very first send: no warning). This gives the receipt-history question (Act 2) something to find, and fills Keuangan → Nota. The seed itself never calls Gemini, so this one photo is the only setup that does.
 3. The WhatsApp number is on two cafes (the family restaurant and the demo): the first message gets a list "Balas angka atau nama usahanya". Reply **demo**. `ganti toko` switches back.
 4. Gemini: use the billed key (the free tier allows only a few requests a minute and a few a day, enough for rehearsal but not for a live room). Space the bot questions a few seconds apart.
 5. Open: dashboard `poernama-zeta.vercel.app/login` (owner number + PIN `1234`; or the WhatsApp code), the kiosk tab (Settings → Layar kasir), and WhatsApp on the phone.
@@ -36,10 +36,10 @@ On WhatsApp (owner phone), send in sequence:
 | `how much did I sell today?` | same pipeline, English: today has sales up to the current hour. |
 | `bulan ini untung ga?` | multi-table aggregation (revenue, COGS, expenses, net) |
 | `stok gula aren ternyata tinggal 3` | manual stock correction, confirmed back |
-| *photo `docs/demo-receipt-toko-manis.jpg`* | immediate ack → vision parse → confirmation gate: "Ini yang aku baca… Balas YA" |
+| *photo `docs/demo-receipt-toko-manis.jpg`* | immediate ack → vision parse → confirmation gate: "Ini yang aku baca… Balas YA". The same photo was saved the evening before, so the read-back now ends with "⚠️ Nota ini mirip nota Toko Manis <tanggal> Rp 684.000 yang sudah tersimpan… Balas YA kalau ini pembelian baru, atau BATAL" (fin-n1-dup-receipt): say it out loud, this is the system refusing to double the books silently. For the demo it is a second purchase on purpose, so carry on. |
 | `ya tapi gulanya 3 kg bukan 5` | correction flow: the revised read shows Gula Aren 3 kg and the **total recomputed to Rp 608.000** (it was 684.000) |
 | `YA` | commits: expense + stock + receipt, all in one reply, with the corrected total |
-| `pernah beli gula aren dari toko manis?` | RAG over the embedded receipt history (pgvector): answers from both receipts, the one sent the evening before (5 kg) and the one just confirmed (3 kg). The same photo saved twice is two purchases to the system: there is no duplicate-receipt check yet. |
+| `pernah beli gula aren dari toko manis?` | RAG over the embedded receipt history (pgvector): answers from both receipts, the one sent the evening before (5 kg) and the one just confirmed (3 kg). The owner confirmed the duplicate warning on purpose, so it is two purchases (the check warns, it never blocks: a real second purchase of the same goods looks the same). |
 
 ## Act 3 — proactive, not just reactive (1 min)
 

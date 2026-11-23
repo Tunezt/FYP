@@ -8,6 +8,7 @@ Gate rule — a correctness requirement, not polish:
       commit after an affirmative reply. NEVER silently write a low-confidence
       parse.
 """
+import hashlib
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -218,6 +219,67 @@ async def commit_parse(
         logger.exception("Embedding failed for receipt %s (non-fatal)", receipt.id)
 
     return facts
+
+
+# ── duplicate receipt check (fin-n1-dup-receipt) ─────────────────────────────
+
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+
+
+def image_hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+async def find_duplicate_receipt(session: AsyncSession, parsed: dict) -> Receipt | None:
+    """A saved receipt of this business that this photo likely repeats: the same
+    image bytes, or the same supplier + date + total (a different photo of the
+    same nota). Only receipts: a stock-book count is absolute, so a repeat is harmless."""
+    if parsed.get("document_type", "receipt") != "receipt":
+        return None
+    digest = parsed.get("image_sha256")
+    if digest:
+        hit = (
+            await session.execute(
+                select(Receipt).where(Receipt.parsed_data["image_sha256"].astext == digest).limit(1)
+            )
+        ).scalar_one_or_none()
+        if hit is not None:
+            return hit
+    supplier = " ".join(str(parsed.get("supplier") or "").lower().split())
+    day = _parse_date(parsed.get("date"))
+    total = _dec(parsed.get("total_amount"))
+    if not (supplier and day and total > 0):
+        return None
+    rows = (
+        await session.execute(
+            select(Receipt).where(
+                Receipt.occurred_at >= day,
+                Receipt.occurred_at < day + timedelta(days=1),
+                Receipt.total_amount == total,
+            )
+        )
+    ).scalars().all()
+    return next((r for r in rows if " ".join((r.supplier or "").lower().split()) == supplier), None)
+
+
+def duplicate_warning(dup: Receipt) -> str:
+    """Appended to the read-back, so the last thing the owner reads before replying."""
+    wib = dup.occurred_at.astimezone(timezone(timedelta(hours=7)))
+    who = " ".join(w.capitalize() if w.islower() else w for w in (dup.supplier or "pembelian").split())
+    when = f"{wib.day} {_MONTHS[wib.month - 1]}"
+    amount = f"Rp {dup.total_amount:,.0f}".replace(",", ".") if dup.total_amount else "tanpa total"
+    return (
+        f"⚠️ Nota ini mirip nota {who} {when} {amount} yang sudah tersimpan. "
+        "Kalau dicatat lagi, pengeluaran dan stok jadi dobel. "
+        "Balas *YA* kalau ini pembelian baru, atau *BATAL*.\n"
+        f"(This looks like the receipt already saved: {who}, {when}, {amount}. Saving it again "
+        "doubles the expense and stock. Reply YA only if it is a new purchase, or BATAL.)"
+    )
+
+
+async def with_duplicate_note(session: AsyncSession, parsed: dict, prompt: str) -> str:
+    dup = await find_duplicate_receipt(session, parsed)
+    return prompt if dup is None else f"{prompt}\n\n{duplicate_warning(dup)}"
 
 
 # ── pending confirmation lifecycle ───────────────────────────────────────────

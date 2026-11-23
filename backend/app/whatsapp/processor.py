@@ -309,6 +309,8 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
             # Anything else: maybe a correction, maybe an unrelated question.
             revision = await revise_parse(payload["parsed"], text)
             if not revision["unrelated"]:
+                if payload["parsed"].get("image_sha256"):
+                    revision["parsed"] = {**revision["parsed"], "image_sha256": payload["parsed"]["image_sha256"]}
                 if pending.kind == "menu_draft":
                     from app.services.menu_draft import build_menu_draft, menu_draft_summary
 
@@ -326,7 +328,11 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
                         session, business, revision["parsed"], payload["image_path"],
                         kind="goods_receipt", extra={"draft": draft},
                     )
-                    return "vision_revise", _draft_prompt(draft)
+                    from app.services.receipts import with_duplicate_note
+
+                    return "vision_revise", await with_duplicate_note(
+                        session, revision["parsed"], _draft_prompt(draft)
+                    )
                 await create_pending(session, business, revision["parsed"], payload["image_path"])
                 return "vision_revise", _confirmation_prompt(revision["parsed"])
             # Unrelated → keep the pending and answer normally below.
@@ -361,7 +367,9 @@ async def _handle_image(business: Business, message: dict) -> tuple[str, str | N
     if "menu" in caption:
         return await _handle_menu_photo(business, image_bytes, mime_type, image_path)
 
-    parsed = await parse_business_document(image_bytes, mime_type)
+    from app.services.receipts import image_hash, with_duplicate_note
+
+    parsed = {**await parse_business_document(image_bytes, mime_type), "image_sha256": image_hash(image_bytes)}
 
     if parsed.get("document_type") == "other" or not parsed.get("items"):
         return (
@@ -380,7 +388,7 @@ async def _handle_image(business: Business, message: dict) -> tuple[str, str | N
 
             draft = await build_draft(session, business, parsed)
             await create_pending(session, business, parsed, image_path, kind="goods_receipt", extra={"draft": draft})
-            return "vision", _draft_prompt(draft)
+            return "vision", await with_duplicate_note(session, parsed, _draft_prompt(draft))
 
         await create_pending(session, business, parsed, image_path)
         prompt = _confirmation_prompt(parsed)

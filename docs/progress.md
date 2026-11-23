@@ -2955,3 +2955,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **Deviation:** none.
 **Next:** none for RAG before the meeting; paid Gemini would remove the availability failures.
 
+
+### [fin-n1-dup-receipt] A receipt read twice warns before YA
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/services/receipts.py (`image_hash`, `find_duplicate_receipt`, `duplicate_warning`, `with_duplicate_note`), backend/app/whatsapp/processor.py (hash stored in the parse; warning appended to the goods-receipt read-back, also after a correction), backend/tests/test_duplicate_receipt.py (new), docs/demo-script.md
+**Gates:** pytest 871 passed + 5 test_invariants failures that need seeded data (`assert 0 > 0`; they pass once `app.seed` has run, 21 passed with the new tests); alembic up/down/up ok; seed ok; frontend untouched, `npm run build` not run (no node_modules in this worktree).
+**Notes:**
+- A saved receipt of this business is a likely repeat when the image bytes hash the same (sha256 kept in `receipts.parsed_data.image_sha256`, no schema change) or supplier + date + total match. Only receipts; a stock-book count is absolute, so a repeat is harmless.
+- The read-back ends with: "⚠️ Nota ini mirip nota Toko Manis 20 Nov Rp 684.000 yang sudah tersimpan… Balas *YA* kalau ini pembelian baru, atau *BATAL*." plus the English line. It warns, never blocks: YA still saves a real second purchase.
+- Limit: receipts saved before this change have no hash; they are still caught by supplier + date + total. The dashboard scan already refuses the same upload path (409).
+- Tests: same photo twice (even with a different read) + YA still saves; BATAL saves nothing; same supplier/date/total with another photo; different total/day/supplier = no warning; a correction keeps the warning.
+**Deviation:** none.
+**Next:** [fin-n2-photo-before-pick].
