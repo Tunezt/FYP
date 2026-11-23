@@ -174,6 +174,7 @@ async def test_picker_takes_number_name_or_unique_partial(session_factory, two_c
 async def test_picker_unclear_reply_shows_the_list_again(session_factory, two_cafes, sent, reply):
     mine, ids, _ = two_cafes
     with gateway() as handler:
+        await _say(mine, "halo")   # the list is shown first; only a reply to it can be unclear
         await _say(mine, reply)
         assert handler.await_count == 0
         text = sent[-1]["text"]
@@ -188,4 +189,12 @@ async def test_switch_command_shows_the_list_without_the_unclear_line(two_cafes,
     mine, _ids, _ = two_cafes
     with gateway():
         await _say(mine, "ganti toko")
+    assert not sent[-1]["text"].startswith("Belum jelas") and "1. A Resto Ibu" in sent[-1]["text"]
+
+
+async def test_the_first_message_gets_the_list_without_the_unclear_line(two_cafes, sent):
+    # wa-gw-6 regression: "halo" as the very first message opened with "Belum jelas yang mana."
+    mine, _ids, _ = two_cafes
+    with gateway():
+        await _say(mine, "halo")
     assert not sent[-1]["text"].startswith("Belum jelas") and "1. A Resto Ibu" in sent[-1]["text"]

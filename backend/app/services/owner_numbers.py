@@ -89,8 +89,24 @@ def chosen_business(businesses: list[Business], phone: str) -> Business | None:
 def choose_business(businesses: list[Business], phone: str, chosen: Business | None) -> None:
     """Remembers `chosen` as the cafe `phone` talks to; None forgets the choice."""
     for b in businesses:
-        kept = [p for p in (b.active_owner_numbers or []) if p != phone]
+        kept = [p for p in (b.active_owner_numbers or []) if p not in (phone, asked_marker(phone))]
         b.active_owner_numbers = kept + [phone] if b is chosen else kept
+
+
+def asked_marker(phone: str) -> str:
+    return f"asked:{phone}"
+
+
+def was_asked(businesses: list[Business], phone: str) -> bool:
+    """True once the cafe list has been shown to `phone` and no pick was made yet,
+    so only a reply to the list can be "unclear" (not the very first message)."""
+    return any(asked_marker(phone) in (b.active_owner_numbers or []) for b in businesses)
+
+
+def mark_asked(businesses: list[Business], phone: str) -> None:
+    first = businesses[0]
+    if not was_asked(businesses, phone):
+        first.active_owner_numbers = [*(first.active_owner_numbers or []), asked_marker(phone)]
 
 
 def remove_owner_number(business: Business, phone: str) -> None:

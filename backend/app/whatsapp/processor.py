@@ -80,7 +80,9 @@ async def _resolve_business(sender: str, text: str | None = None) -> tuple[Busin
         choose_business,
         chosen_business,
         owner_number_filter,
+        mark_asked,
         pick_from_reply,
+        was_asked,
     )
 
     phone = normalize_phone(sender)
@@ -104,7 +106,9 @@ async def _resolve_business(sender: str, text: str | None = None) -> tuple[Busin
             return None, None, f"Oke, sekarang pakai data *{picked.name}* ✅\nKetik *ganti toko* kapan saja untuk pindah."
         if current is None:
             listing = "\n".join(f"{i}. {b.name}" for i, b in enumerate(found, 1))
-            unclear = "Belum jelas yang mana. " if said and said not in SWITCH_COMMANDS else ""
+            # Only a reply to a list we already showed can be "unclear"; the first message never is.
+            unclear = "Belum jelas yang mana. " if said and said not in SWITCH_COMMANDS and was_asked(found, phone) else ""
+            mark_asked(found, phone)
             return None, None, (
                 f"{unclear}Nomor ini terhubung ke beberapa usaha. Mau pakai data yang mana? Balas angka atau nama usahanya:\n"
                 f"{listing}\n\nNanti ketik *ganti toko* untuk pindah. "

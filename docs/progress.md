@@ -2787,3 +2787,11 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Measured on the free key (24 Nov): gemini-2.5-flash 20 req/DAY; gemini-3.5-flash-lite 15 req/MIN (daily not measured, >=35 used without a daily 429); gemini-2.5-flash-lite 404 (retired for new users, not used); 3.1-flash-lite / 3.5-flash / 3.6-flash 503/504 on most probes (limits unknown, kept last in the chain).
 - Calls per text question: 2 (classify + compose) by design; clarify/out_of_scope already 1. Not reduced: composing the answer in a second call keeps the language and tone quality.
 **Next:** owner may later enable billing for a steady primary model.
+
+
+### [wa-gw-9] The cafe picker no longer opens with "Belum jelas yang mana." on the first message
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/services/owner_numbers.py, backend/app/whatsapp/processor.py, backend/tests/test_number_on_two_cafes.py
+**Gates:** pytest on every file touching whatsapp/processor/owner numbers: 204 passed, 1 failed (test_thesis_agreement: clock flake after 00:00 WIB, same on HEAD); no migration, no frontend change.
+**Notes:** wa-gw-6 regression. The list now stores an `asked:<phone>` marker in `active_owner_numbers` (no schema change); only a reply to a list already shown can be "unclear". A pick or "ganti toko" clears it. Test +1; the unclear-reply test now sends "halo" first.
