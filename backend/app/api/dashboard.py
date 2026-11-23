@@ -24,7 +24,7 @@ from app.models import (
     Account, Alert, Approval, Business, Expense, GoodsReceipt, Item, ItemVariant, Modifier, ModifierGroup, PoLine, PostingRule,
     PurchaseOrder, Receipt, RecipeLine, Sale, Staff, Supplier, Uom, UomConversion,
 )
-from app.schemas.pos import OrderSummaryOut, OrdersPage, ReceiptOut, RefundIn, ReversalIn, ReversalOut
+from app.schemas.pos import DayTotal, OrderSummaryOut, OrdersPage, OwnerOrdersPage, ReceiptOut, RefundIn, ReversalIn, ReversalOut
 from app.schemas.dashboard import (
     ApprovalRow,
     BackdatedSaleIn,
@@ -1848,7 +1848,7 @@ async def list_shifts(ctx: OwnerCtx, limit: int = Query(default=30, ge=1, le=200
 # ── Orders: find one, read it, reverse it (M15-T11) ─────────────────────────
 
 
-@router.get("/orders", response_model=OrdersPage)
+@router.get("/orders", response_model=OwnerOrdersPage)
 async def owner_orders(
     ctx: OwnerCtx,
     q: str = Query(default="", max_length=40),
@@ -1872,7 +1872,37 @@ async def owner_orders(
     rows, total = await list_orders(
         ctx.session, q=q, limit=limit, offset=offset, staff_id=staff_id, since=start, until=end,
     )
-    return OrdersPage(total=total, rows=[OrderSummaryOut(**vars(r)) for r in rows])
+    return OwnerOrdersPage(
+        total=total,
+        rows=[OrderSummaryOut(**vars(r)) for r in rows],
+        days=await _day_totals(ctx.session, business, rows, q=q, staff_id=staff_id),
+    )
+
+
+async def _day_totals(session, business, rows, *, q: str, staff_id) -> dict[str, DayTotal]:
+    """Whole-day count and takings for every business day that shows on this
+    page, under the same cashier/search filter, so the header is the day's
+    number and not the sum of the rows that happened to load (fin-p0-8)."""
+    from app.services.orders import list_orders
+
+    if not rows:
+        return {}
+    keys = {business_day(r.sold_at, business.timezone, business.day_start_hour) for r in rows}
+    start = day_bounds(min(keys), business.timezone, business.day_start_hour)[0]
+    end = day_bounds(max(keys), business.timezone, business.day_start_hour)[1]
+    # shortcut: one fetch of the shown days' orders; a day over 5000 bills would
+    # undercount, far beyond a cafe's day.
+    everything, _ = await list_orders(session, q=q, staff_id=staff_id, since=start, until=end, limit=5000)
+    days: dict[str, DayTotal] = {}
+    for r in everything:
+        key = business_day(r.sold_at, business.timezone, business.day_start_hour)
+        if key not in keys:
+            continue
+        d = days.setdefault(key.isoformat(), DayTotal(count=0, total=Decimal(0)))
+        d.count += 1
+        if r.status != "voided":
+            d.total += r.total
+    return days
 
 
 @router.get("/orders/{order_id}/receipt", response_model=ReceiptOut)

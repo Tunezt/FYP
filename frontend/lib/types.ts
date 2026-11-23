@@ -170,7 +170,12 @@ export type OrderRow = {
   service_date?: string | null;
 };
 
-export type OrdersPage = { total: number; rows: OrderRow[] };
+export type OrdersPage = {
+  total: number;
+  rows: OrderRow[];
+  /** Whole-day figures per business day (YYYY-MM-DD) for the days on this page. */
+  days?: Record<string, { count: number; total: string }>;
+};
 
 export type ReceiptLine = {
   name: string;

@@ -171,6 +171,7 @@ export default function SalesPage() {
         />
         <TransactionHistory
           orders={sales.data?.rows ?? []}
+          days={sales.data?.days}
           loading={sales.loading}
           error={sales.error}
           onRetry={sales.reload}

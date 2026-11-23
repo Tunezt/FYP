@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useOwnerData } from "@/lib/hooks";
 import { daySubLabel, groupByDay, timeLabel } from "@/lib/dates";
 import { formatQty, formatRupiah } from "@/lib/format";
-import type { OrderRow, Receipt } from "@/lib/types";
+import type { OrderRow, OrdersPage, Receipt } from "@/lib/types";
 import { DayGroup, EmptyState, ErrorState, Glass, ItemIcon, Skeleton } from "@/components/ui";
 import { IconChevronDown, IconReceipt } from "@/components/icons";
 
@@ -131,6 +131,7 @@ function TransactionRow({ order, tz }: { order: OrderRow; tz?: string }) {
 
 export function TransactionHistory({
   orders,
+  days,
   loading,
   error,
   onRetry,
@@ -139,6 +140,8 @@ export function TransactionHistory({
   dayStart,
 }: {
   orders: OrderRow[];
+  /** Whole-day figures from the server; the loaded rows are only one page. */
+  days?: OrdersPage["days"];
   loading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -181,10 +184,12 @@ export function TransactionHistory({
       {groups.map((group) => {
         // Voided bills stay in the list (nothing is deleted) but must not be
         // counted into the day's takings.
-        const dayTotal = group.rows.reduce(
-          (sum, o) => sum + (o.status === "voided" ? 0 : Number(o.total)),
-          0
-        );
+        const whole = days?.[group.key];
+        const dayCount = whole?.count ?? group.rows.length;
+        const dayTotal =
+          whole !== undefined
+            ? Number(whole.total)
+            : group.rows.reduce((sum, o) => sum + (o.status === "voided" ? 0 : Number(o.total)), 0);
         return (
           <DayGroup
             key={group.key}
@@ -192,7 +197,7 @@ export function TransactionHistory({
             sub={daySubLabel(group.date, tz, dayStart)}
             meta={
               <>
-                <span className="ink-faint font-normal">{group.rows.length} transaksi</span>
+                <span className="ink-faint font-normal">{dayCount} transaksi</span>
                 <span className="ink-faint mx-1.5" aria-hidden>·</span>
                 {formatRupiah(dayTotal)}
               </>

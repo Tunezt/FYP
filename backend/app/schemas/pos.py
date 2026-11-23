@@ -352,6 +352,18 @@ class OrdersPage(BaseModel):
     rows: list[OrderSummaryOut]
 
 
+class DayTotal(BaseModel):
+    count: int          # every bill of the day, voided ones included
+    total: Decimal      # takings: voided bills left out
+
+
+class OwnerOrdersPage(OrdersPage):
+    """The owner's list also carries each shown day's whole-day figures, so a
+    day header never sums only the rows that fit on this page (fin-p0-8).
+    Keys are business days, YYYY-MM-DD."""
+    days: dict[str, DayTotal] = {}
+
+
 class ReversalIn(BaseModel):
     manager_pin: str = Field(min_length=4, max_length=6, pattern=r"^\d{4,6}$")
     note: str | None = Field(default=None, max_length=200)
