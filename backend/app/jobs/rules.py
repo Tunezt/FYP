@@ -204,6 +204,10 @@ async def rule_takings_anomaly(session: AsyncSession, business: Business, now: d
     recorded expenses (the two the legacy detector watched), one alert each."""
     moment = now or datetime.now(timezone.utc)
     windows = local_day_windows(business, BASELINE_DAYS + 1, now=moment)
+    from app.jobs.summary import _DAYS, _date
+
+    day = business_day(moment, business.timezone, business.day_start_hour)
+    day_name = f"{_DAYS[day.weekday()]} {_date(day)}"
     found: list[RuleAlert] = []
     for metric_name, registry_metric, label in _ANOMALY_SERIES:
         daily = await series(session, business, registry_metric, windows)
@@ -221,7 +225,8 @@ async def rule_takings_anomaly(session: AsyncSession, business: Business, now: d
         found.append(RuleAlert(
             type="anomaly", rule_key=f"anomaly:{metric_name}:{local_day(business, moment)}", metric=metric_name,
             severity="high" if abs(z) > 4 else "medium",
-            message=f"{label} hari ini {_rp(today)} — jauh {direction} normal (rata-rata 30 hari {_rp(mean)}, z={z:.1f})",
+            # The day by name, not "hari ini": the alert is read the next morning too (fin-demo-walk).
+            message=f"{label} {day_name} {_rp(today)} — jauh {direction} normal (rata-rata 30 hari {_rp(mean)}, z={z:.1f})",
             details={"today": today, "mean": round(mean, 2), "stddev": round(stddev, 2), "z": round(z, 2)},
         ))
     return found

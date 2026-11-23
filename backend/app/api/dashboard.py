@@ -2086,7 +2086,7 @@ async def record_backdated_sale(payload: BackdatedSaleIn, ctx: OwnerCtx):
         # A sale from paper is not a licence to go below zero: the same atomic
         # guard applies, and the whole entry rolls back rather than half-landing.
         raise HTTPException(
-            status_code=409, detail=f"Stok tidak cukup — {exc.item_name} tersisa {exc.available}"
+            status_code=409, detail=f"Stok tidak cukup — {exc.item_name} tersisa {Decimal(exc.available).normalize():f}"
         )
     except ItemNotFound:
         raise HTTPException(status_code=404, detail="Barang tidak ditemukan")

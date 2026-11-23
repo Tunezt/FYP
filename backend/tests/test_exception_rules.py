@@ -231,5 +231,7 @@ async def test_takings_anomaly_fires_exactly_once(session_factory, shop):
         assert len(found) == 1 and found[0].type == "anomaly" and found[0].details["z"] > 3
         first = await run_rules(s, biz)
         assert [a.type for a in first] == ["anomaly"] and "jauh di atas normal" in first[0].message
+        # names its day, never "hari ini": the owner may read it the next morning (fin-demo-walk)
+        assert "hari ini" not in first[0].message and any(d in first[0].message for d in ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"))
         assert await run_rules(s, biz) == [] and len(await _alerts(s, "anomaly")) == 1
         await s.commit()

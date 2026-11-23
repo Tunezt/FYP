@@ -20,9 +20,9 @@ The demo runs on the live business **Poernama Demo** (invented data, never the r
 
 > "Ibu Diah runs a café. Her staff aren't going to learn an ERP. So the till is one screen."
 
-1. Kiosk tab → tap **Sari** → PIN `2345` → the sale screen.
+1. Kiosk tab → tap **Sari** → PIN `2345` → the sale screen. If it says "Buka shift dulu", type the float (`200000`) and tap **Buka shift**: the till takes no money until a shift is open.
 2. Sell 2× Es Kopi Susu. Point out: no stock number on it. It is **made to order**: the till takes the beans, milk and sugar out of stock instead.
-3. The stock guard: try to sell **13 × Croissant**. Croissant has 12 on the shelf, so the till refuses with "Stok tidak cukup – Croissant tersisa 12". This is an atomic SQL guard, not a UI check.
+3. The stock guard: add **Croissant** and keep tapping **+**. Croissant has 12 on the shelf, so the + greys out at 12 and the line says "Stok tidak cukup untuk menambah lagi". The screen is only the first line of defence: the same rule is an atomic SQL guard, so an order for 13 sent straight to the till API is refused with 409 "Stok tidak cukup — Croissant tersisa 12" (`tests/test_menu.py`, or the API call in Act 5). Tap **Kosongkan** afterwards.
 4. Big targets, forced light theme for a bright counter.
 
 ## Act 2 — the owner never opens an app (3 min)
@@ -31,7 +31,7 @@ On WhatsApp (owner phone), send in sequence:
 
 | Send | What it demonstrates |
 |---|---|
-| `stok es kopi susu berapa?` | made-to-order wording: "dibuat saat dipesan", about 198 porsi left, limited by Susu UHT (200 before Act 1). Not a frozen number. |
+| `stok es kopi susu berapa?` | made-to-order wording: "dibuat saat dipesan", about 300 porsi left (measured 298 after the evening-before receipt and the Act 1 sale), limited by Susu UHT. Not a frozen number. |
 | `stok croissant berapa?` | a stocked item: 12 pcs. The number the till guard used. |
 | `how much did I sell today?` | same pipeline, English: today has sales up to the current hour. |
 | `bulan ini untung ga?` | multi-table aggregation (revenue, COGS, expenses, net) |
@@ -39,11 +39,11 @@ On WhatsApp (owner phone), send in sequence:
 | *photo `docs/demo-receipt-toko-manis.jpg`* | immediate ack → vision parse → confirmation gate: "Ini yang aku baca… Balas YA" |
 | `ya tapi gulanya 3 kg bukan 5` | correction flow: the revised read shows Gula Aren 3 kg and the **total recomputed to Rp 608.000** (it was 684.000) |
 | `YA` | commits: expense + stock + receipt, all in one reply, with the corrected total |
-| `pernah beli gula aren dari toko manis?` | RAG over the embedded receipt history (pgvector): answers from the receipt sent before the demo |
+| `pernah beli gula aren dari toko manis?` | RAG over the embedded receipt history (pgvector): answers from both receipts, the one sent the evening before (5 kg) and the one just confirmed (3 kg). The same photo saved twice is two purchases to the system: there is no duplicate-receipt check yet. |
 
 ## Act 3 — proactive, not just reactive (1 min)
 
-1. Dashboard → **Peringatan**: two alerts already exist: the sales spike of yesterday (Rp 1.447.000 against a normal of about Rp 475.000, z = 7) and **Croissant**: stock lasts about 5 days, next delivery usually 7. Es Kopi Susu and Americano do not appear: made-to-order items are never alerted on their own number.
+1. Dashboard → **Peringatan**: two alerts already exist: the sales spike of the day before ("Penjualan <hari> <tanggal> Rp 1.447.000 — jauh di atas normal", against a normal of about Rp 475.000, z = 7) and **Croissant**: stock lasts about 5 days, next delivery usually 7. Es Kopi Susu and Americano do not appear: made-to-order items are never alerted on their own number.
 2. One line of theory: the same nightly pass sends these to the owner's WhatsApp. The seed runs the rules but never sends (check the Railway cron `30 16 * * *` exists if the real send is shown).
 
 ## Act 4 — the dashboard (2 min)

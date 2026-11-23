@@ -2915,3 +2915,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **Gates:** see the commit.
 **Notes:** reproduced at 02:55 WIB on clean main: "night 6 days ago wrote ['anomaly']". Sales were written at `now - 6h` and the nightly pass ran at `now - 1h`; between 01:00 and 06:00 WIB those land on different WIB days, so a night saw a day with no sales. Now both use the shared `on_day` helper from fin-test-clock. Passes at the real 02:55 and with `FYP_TEST_CLOCK_WIB` = 00:30, 06:30, 12:00, 23:50 (5/5 each). Tests only; no product bug.
 **Deviation:** none.
+
+### [fin-demo-walk] Demo-script walk on the real code path: three small fixes
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** frontend/components/pos/OrderPanel.tsx, backend/app/api/pos.py, backend/app/api/dashboard.py, backend/app/jobs/rules.py, backend/tests/test_menu.py, backend/tests/test_exception_rules.py, docs/demo-script.md
+**Gates:** see the commit.
+**Notes:**
+- Walked every step of docs/demo-script.md on a fresh local seed of Poernama Demo: WhatsApp through `process_webhook_payload` (picker, business, agent, tools) with real Gemini via the fallback chain (sends captured, storage dry-run), the till and the dashboard in headless Chromium at 1366 and 390 px. Results table: FYP-finish-verdict.md.
+- Till: at the shelf limit the + went grey with no word of why (Act 1 step 3 promised a refusal). The line now says "Stok tidak cukup untuk menambah lagi".
+- Stock messages said "Croissant tersisa 12.000", which an Indonesian reads as twelve thousand; now "tersisa 12" (POS and dashboard back-dated sale). Test asserts the format.
+- The sales-anomaly alert said "Penjualan hari ini Rp 1.447.000" while the dashboard showed it the next morning next to today's Rp 44.000; it now names its day ("Penjualan Senin 23 Nov ..."). Test asserts no "hari ini".
+- demo-script: open-shift step, the till's real stock-guard behaviour, ~300 porsi (not 198), the RAG answer lists both Toko Manis receipts.
+**Deviation:** none.
+**Next:** no duplicate-receipt check: the same photo confirmed twice is recorded twice (expense and stock). Not built (needs a design decision).

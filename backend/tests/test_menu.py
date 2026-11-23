@@ -296,6 +296,8 @@ async def test_a_settlement_that_fails_leaves_the_ticket_open_and_untouched(clie
         await s.commit()
     resp = await client.post(f"/pos/tickets/{ticket['id']}/settle", headers=_auth(c["pos"]), json=_cash(108000))
     assert resp.status_code == 409 and "Stok tidak cukup" in resp.json()["detail"]
+    # "tersisa 3", never "3.000", which an Indonesian reads as three thousand (fin-demo-walk)
+    assert resp.json()["detail"].endswith("tersisa 3"), resp.json()["detail"]
     async with session_factory() as s:
         await _set_tenant(s, c["bid"])
         row = await s.get(Order, uuid.UUID(ticket["id"]))

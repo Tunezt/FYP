@@ -310,6 +310,12 @@ export function OrderPanel({
                               {l.qty} × {formatRupiah(l.unitPrice)}
                             </p>
                           )}
+                          {/* Why the + went grey: the shelf has no more (fin-demo-walk). */}
+                          {l.qty >= l.maxQty && (
+                            <p className="mt-0.5 text-xs font-medium" style={{ color: "var(--warn)" }}>
+                              Stok tidak cukup untuk menambah lagi
+                            </p>
+                          )}
                         </button>
                         <p className="shrink-0 text-right text-[15px] font-semibold tabular-nums">
                           {formatRupiah(l.unitPrice * l.qty - l.discount)}

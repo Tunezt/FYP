@@ -357,7 +357,7 @@ async def pos_record_sale(payload: SaleIn, ctx: PosCtx):
     except InsufficientStock as exc:
         raise HTTPException(
             status_code=409,
-            detail=f"Stok tidak cukup — {exc.item_name} tersisa {exc.available}",
+            detail=f"Stok tidak cukup — {exc.item_name} tersisa {_qty_text(exc.available)}",
         )
 
     # Synchronous velocity check (Section 7): sudden depletion surfaces now,
@@ -591,7 +591,7 @@ async def pos_create_order(payload: OrderIn, ctx: PosCtx):
     except InsufficientStock as exc:
         raise HTTPException(
             status_code=409,
-            detail=f"Stok tidak cukup — {exc.item_name} tersisa {exc.available}",
+            detail=f"Stok tidak cukup — {exc.item_name} tersisa {_qty_text(exc.available)}",
         )
     except PaymentMismatch as exc:
         raise HTTPException(
@@ -726,7 +726,7 @@ async def pos_settle_ticket(order_id: uuid.UUID, payload: TicketSettleIn, ctx: P
     except ModifierSelectionInvalid:
         raise HTTPException(status_code=409, detail="Pilihan tambahan di pesanan ini sudah tidak berlaku — batalkan dan buat ulang di kasir")
     except InsufficientStock as exc:
-        raise HTTPException(status_code=409, detail=f"Stok tidak cukup — {exc.item_name} tersisa {exc.available}")
+        raise HTTPException(status_code=409, detail=f"Stok tidak cukup — {exc.item_name} tersisa {_qty_text(exc.available)}")
     except PaymentMismatch as exc:
         raise HTTPException(status_code=422, detail=f"Pembayaran {_rp(exc.paid)} tidak sama dengan total {_rp(exc.total)}")
 
