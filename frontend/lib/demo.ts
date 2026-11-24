@@ -287,7 +287,7 @@ const EXPENSE_SPECS: [string, string, number, number, ExpenseRow["source"]][] = 
   ["bahan baku", "Susu UHT 2 dus", 408_000, 3, "receipt"],
   ["operasional", "Listrik & air bulan ini", 850_000, 6, "manual"],
   ["gaji", "Gaji mingguan Sari & Budi", 1_200_000, 7, "manual"],
-  ["bahan baku", "Roti & pastry dari Toko Manis", 320_000, 9, "receipt"],
+  ["bahan baku", "Roti & pastry dari Toko Supply", 320_000, 9, "receipt"],
   ["lainnya", "Service mesin espresso", 350_000, 14, "manual"],
   ["operasional", "Kemasan cup + sedotan", 275_000, 18, "receipt"],
   ["bahan baku", "Matcha bubuk 1kg", 385_000, 22, "manual"],
@@ -326,7 +326,7 @@ const RECEIPTS: ReceiptRow[] = [
   },
   {
     id: "demo-receipt-3",
-    supplier: "Toko Manis",
+    supplier: "Toko Supply",
     total_amount: "320000",
     occurred_at: jktIso(9, 7),
     created_at: jktIso(9, 7),

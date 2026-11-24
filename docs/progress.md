@@ -2981,3 +2981,12 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Tests: read for the cafe picked (and not the other), unclear reply then pick, latest photo only, expiry, nothing replayed twice.
 **Deviation:** none.
 **Next:** none.
+
+### [demo-supplier-rename] Demo supplier renamed Toko Manis -> Toko Supply
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** docs/demo-receipt-toko-supply.jpg (was demo-receipt-toko-manis.jpg; printed name now TOKO SUPPLY, same items and total Rp 684.000), docs/demo-script.md, docs/evaluation.md (one note line), backend/app/seed.py, frontend/lib/demo.ts, backend tests that used the name as sample data.
+- Owner's choice: Poernama is the cafe, Toko Supply is where it buys ingredients. Older entries above keep the old name as history.
+- Vision read of the new image (gemini-3.5-flash-lite): supplier "TOKO SUPPLY", 3 lines (Gula Aren 5 kg, Susu UHT 12 liter, Biji Arabica 2 kg), total 684000, confidence high.
+**Deviation:** none.
+**Next:** re-run the seed on live before the next presentation so the demo cafe carries the new supplier name.

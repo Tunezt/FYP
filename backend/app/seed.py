@@ -59,7 +59,7 @@ from app.services.units import ensure_standard_uoms
 
 # Suppliers (M5-T1): (name, phone, address)
 SUPPLIERS = [
-    ("Toko Manis", "0812-3456-7890", "Pasar Anyar Blok C-4"),
+    ("Toko Supply", "0812-3456-7890", "Pasar Anyar Blok C-4"),
     ("Grosir Barokah", "0813-9876-5432", "Jl. Melati No. 12"),
     ("Pak Udin Sayur", "0857-1122-3344", "Pasar pagi"),
 ]

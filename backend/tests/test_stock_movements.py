@@ -139,7 +139,7 @@ async def test_receipt_commit_creates_adds_and_sets(session_factory, business):
         existing_id = existing.id
 
     parsed_receipt = {
-        "document_type": "receipt", "supplier": "Toko Manis", "date": "2026-09-01",
+        "document_type": "receipt", "supplier": "Toko Supply", "date": "2026-09-01",
         "items": [
             {"name": "Gula Aren", "quantity": 3, "unit": "kg", "unit_price": 38000, "line_total": 114000},
             {"name": "Susu UHT", "quantity": 12, "unit": "liter", "unit_price": 17000, "line_total": 204000},

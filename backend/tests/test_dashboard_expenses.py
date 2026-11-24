@@ -83,7 +83,7 @@ async def _make_shop(session_factory, name="Nota Test"):
         await _set_tenant(s, bid)
         await seed_books(s, bid)
         uoms = await ensure_standard_uoms(s, bid)
-        await create_supplier(s, bid, name="Toko Manis")
+        await create_supplier(s, bid, name="Toko Supply")
         owner = Staff(business_id=bid, name="Ibu Diah", role="owner", pin_hash=hash_pin("1234"))
         gula = Item(business_id=bid, name="Gula Aren", unit="kg", current_stock=Decimal(4), cost_price=Decimal(30000), uom_id=uoms["kg"].id)
         susu = Item(business_id=bid, name="Susu UHT", unit="liter", current_stock=Decimal(10), cost_price=Decimal(17000), uom_id=uoms["liter"].id)
@@ -112,7 +112,7 @@ async def shop(session_factory):
 
 
 INVOICE = {
-    "document_type": "receipt", "supplier": "toko manis", "date": "2026-09-30",
+    "document_type": "receipt", "supplier": "toko supply", "date": "2026-09-30",
     "items": [
         {"name": "Gula Aren", "quantity": 3, "unit": "kg", "unit_written": True, "unit_price": 38000, "unit_price_written": True, "line_total": 114000},
         {"name": "susu uht", "quantity": 2500, "unit": "ml", "unit_written": True, "unit_price": 20, "unit_price_written": True, "line_total": 50000},
@@ -206,7 +206,7 @@ async def test_scanning_reads_the_nota_and_writes_nothing(client, session_factor
     draft = body["draft"]
     assert [m["item_name"] for m in draft["matched"]] == ["Gula Aren", "Susu UHT"]
     assert [q["name_read"] for q in draft["questions"]] == ["Kecap BH", "Plastik"]
-    assert draft["supplier_name"] == "Toko Manis"
+    assert draft["supplier_name"] == "Toko Supply"
     async with session_factory() as s:
         await _set_tenant(s, c["bid"])
         assert (await s.get(Item, c["gula"])).current_stock == Decimal("4.000")
@@ -223,7 +223,7 @@ async def test_confirming_the_checked_lines_writes_what_whatsapp_ya_writes(clien
     path = f"{c['bid']}/{uuid.uuid4()}.jpg"
     with patch("app.services.rag.embed_receipt", new=AsyncMock()):
         resp = await client.post("/api/receipts/confirm", headers=_auth(c["owner"]), json={
-            "image_path": path, "supplier": "toko manis", "nota_date": "2026-09-30", "total_amount": 190000,
+            "image_path": path, "supplier": "toko supply", "nota_date": "2026-09-30", "total_amount": 190000,
             "lines": [
                 {"name": "Gula Aren", "quantity": 2, "unit": "kg", "unit_price": 38000, "line_total": 76000},
                 {"name": "susu uht", "quantity": 2500, "unit": "ml", "unit_price": 20, "line_total": 50000},

@@ -78,7 +78,7 @@ async def legacy_business(session_factory):
             s.add(OrderLine(business_id=bid, order_id=order.id, item_id=kopi.id, quantity=Decimal(2),
                             unit_price=Decimal(22000), line_total=Decimal(44000)))
         s.add(Receipt(  # a purchase photo whose commit added 5 kg of gula at 38.000
-            business_id=bid, image_url="receipts/legacy.jpg", supplier="Toko Manis",
+            business_id=bid, image_url="receipts/legacy.jpg", supplier="Toko Supply",
             total_amount=Decimal(190000), created_at=now - timedelta(days=10),
             parsed_data={"document_type": "receipt", "items": [
                 {"name": "Gula Aren", "quantity": 5, "unit": "kg", "unit_price": 38000, "line_total": 190000},

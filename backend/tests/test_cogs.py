@@ -208,7 +208,7 @@ async def test_receipt_photo_purchase_moves_the_average(session_factory, shop):
         await s.commit()
         gula_id = gula.id
     parsed = {
-        "document_type": "receipt", "supplier": "Toko Manis", "date": "2026-09-01",
+        "document_type": "receipt", "supplier": "Toko Supply", "date": "2026-09-01",
         "items": [{"name": "Gula Aren", "quantity": 3, "unit": "kg", "unit_price": 38000, "line_total": 114000}],
         "total_amount": 114000, "confidence": "high", "ambiguities": [],
     }

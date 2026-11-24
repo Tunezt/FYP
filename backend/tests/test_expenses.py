@@ -169,7 +169,7 @@ async def test_ledger_amount_is_only_the_uncapitalised_remainder(session_factory
     async with session_factory() as s:
         await _set_tenant(s, shop)
         expense = await record_expense(
-            s, shop, amount=Decimal(181000), category="bahan baku", description="Nota Toko Manis",
+            s, shop, amount=Decimal(181000), category="bahan baku", description="Nota Toko Supply",
             source="receipt", ledger_amount=Decimal(17000),
         )
         nothing_left = await record_expense(

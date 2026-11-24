@@ -21,7 +21,7 @@ from app.whatsapp.gateway import GatewayMessageIn, to_cloud_payload
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 NOTA = {
-    "document_type": "receipt", "supplier": "Toko Manis", "date": "2026-11-20", "confidence": "high",
+    "document_type": "receipt", "supplier": "Toko Supply", "date": "2026-11-20", "confidence": "high",
     "ambiguities": [], "total_amount": 100000,
     "items": [{"name": "Gula Aren", "quantity": 4, "unit": "kg", "unit_price": 25000, "line_total": 100000}],
 }

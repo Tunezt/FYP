@@ -22,7 +22,7 @@ from app.whatsapp.processor import _handle_image, _handle_text
 from tests.conftest import seed_books
 
 DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
-WARNING = "Nota ini mirip nota Toko Manis 20 Nov Rp 684.000 yang sudah tersimpan"
+WARNING = "Nota ini mirip nota Toko Supply 20 Nov Rp 684.000 yang sudah tersimpan"
 
 
 @pytest.fixture
@@ -55,7 +55,7 @@ async def shop(session_factory):
         await _set_tenant(s, bid)
         await seed_books(s, bid)
         uoms = await ensure_standard_uoms(s, bid)
-        await create_supplier(s, bid, name="Toko Manis")
+        await create_supplier(s, bid, name="Toko Supply")
         gula = Item(business_id=bid, name="Gula Aren", unit="kg", current_stock=Decimal(4), cost_price=Decimal(30000), uom_id=uoms["kg"].id)
         s.add(gula)
         await s.flush()
@@ -70,7 +70,7 @@ async def shop(session_factory):
         await s.commit()
 
 
-def _nota(total=684000, supplier="Toko Manis", date="2026-11-20"):
+def _nota(total=684000, supplier="Toko Supply", date="2026-11-20"):
     return {
         "document_type": "receipt", "supplier": supplier, "date": date, "confidence": "high", "ambiguities": [],
         "items": [{"name": "Gula Aren", "quantity": 4, "unit": "kg", "unit_written": True,
@@ -117,7 +117,7 @@ async def test_the_same_photo_twice_warns_and_a_real_second_purchase_can_still_b
     biz, _ = await _photo(session_factory, shop, _nota())
     await _ya(biz)
     # Same bytes: caught by the image hash even if the read of supplier/total differs this time.
-    biz, reply = await _photo(session_factory, shop, _nota(total=608000, supplier="Toko Manis 2"))
+    biz, reply = await _photo(session_factory, shop, _nota(total=608000, supplier="Toko Supply 2"))
     assert WARNING in reply and "Balas *YA* kalau ini pembelian baru, atau *BATAL*" in reply
     assert "already saved" in reply and reply.index("Balas *YA* untuk mencatat") < reply.index("mirip")
     assert await _saved(session_factory, shop) == [1, 1, 1]            # warned, nothing written
@@ -137,7 +137,7 @@ async def test_batal_after_the_warning_saves_nothing(session_factory, shop):
 async def test_same_supplier_date_total_with_another_photo_warns(session_factory, shop):
     biz, _ = await _photo(session_factory, shop, _nota(), image=b"photo-1")
     await _ya(biz)
-    _, reply = await _photo(session_factory, shop, _nota(supplier=" toko  MANIS "), image=b"photo-other")
+    _, reply = await _photo(session_factory, shop, _nota(supplier=" toko  SUPPLY "), image=b"photo-other")
     assert WARNING in reply
 
 
@@ -145,7 +145,7 @@ async def test_a_correction_keeps_the_image_hash_so_the_warning_survives_it(sess
     biz, _ = await _photo(session_factory, shop, _nota())
     await _ya(biz)
     biz, _ = await _photo(session_factory, shop, _nota(total=500000, date="2026-11-22"))   # same bytes
-    revised = {"unrelated": False, "parsed": _nota(total=684000, date="2026-11-20", supplier="toko manis")}
+    revised = {"unrelated": False, "parsed": _nota(total=684000, date="2026-11-20", supplier="toko supply")}
     with patch("app.ai.vision.revise_parse", new=AsyncMock(return_value=revised)):
         intent, reply = await _handle_text(biz, "totalnya 684.000, tanggal 20 Nov")
     assert intent == "vision_revise" and WARNING in reply

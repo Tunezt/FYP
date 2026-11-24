@@ -54,7 +54,7 @@ async def _set_tenant(session, business_id):
 
 @pytest.fixture
 async def shop(session_factory):
-    """Gula Aren 4 kg @30.000, Susu UHT 10 l @17.000, Biji Arabica 2 kg; supplier Toko Manis."""
+    """Gula Aren 4 kg @30.000, Susu UHT 10 l @17.000, Biji Arabica 2 kg; supplier Toko Supply."""
     async with session_factory() as s:
         biz = Business(name="Invoice Draft Test", owner_phone=f"62984{uuid.uuid4().hex[:9]}")
         s.add(biz)
@@ -64,7 +64,7 @@ async def shop(session_factory):
         await _set_tenant(s, bid)
         await seed_books(s, bid)
         uoms = await ensure_standard_uoms(s, bid)
-        toko = await create_supplier(s, bid, name="Toko Manis")
+        toko = await create_supplier(s, bid, name="Toko Supply")
         gula = Item(business_id=bid, name="Gula Aren", unit="kg", current_stock=Decimal(4), cost_price=Decimal(30000), uom_id=uoms["kg"].id)
         susu = Item(business_id=bid, name="Susu UHT", unit="liter", current_stock=Decimal(10), cost_price=Decimal(17000), uom_id=uoms["liter"].id)
         beans = Item(business_id=bid, name="Biji Arabica", unit="kg", current_stock=Decimal(2), cost_price=Decimal(140000), uom_id=uoms["kg"].id)
@@ -84,7 +84,7 @@ async def shop(session_factory):
 
 
 INVOICE = {
-    "document_type": "receipt", "supplier": "toko manis", "date": "2026-09-01",
+    "document_type": "receipt", "supplier": "toko supply", "date": "2026-09-01",
     "items": [
         {"name": "Gula Aren", "quantity": 3, "unit": "kg", "unit_written": True, "unit_price": 38000, "unit_price_written": True, "line_total": 114000},
         {"name": "susu uht", "quantity": 2500, "unit": "ml", "unit_written": True, "unit_price": 20, "unit_price_written": True, "line_total": 50000},
@@ -107,7 +107,7 @@ async def test_draft_matches_lines_and_surfaces_the_unmatched_one_as_a_question(
         await _set_tenant(s, c["bid"])
         biz = await s.get(Business, c["bid"])
         draft = await build_draft(s, biz, INVOICE)
-    assert draft["supplier_id"] == str(c["supplier"]) and draft["supplier_name"] == "Toko Manis"
+    assert draft["supplier_id"] == str(c["supplier"]) and draft["supplier_name"] == "Toko Supply"
     assert [(m["name_read"], m["item_name"], m["uom_id"] is not None) for m in draft["matched"]] == [
         ("Gula Aren", "Gula Aren", False),      # same unit as stock
         ("susu uht", "Susu UHT", True),         # ml → converted at receipt time
@@ -117,7 +117,7 @@ async def test_draft_matches_lines_and_surfaces_the_unmatched_one_as_a_question(
     text_out = draft_summary(draft)
     assert "❓ 1 pcs Kecap BH" in text_out and "Akan dilewati" in text_out
     assert "✅ 2500 ml susu uht" in text_out and "✅ 3 kg Gula Aren" in text_out
-    assert "Supplier: Toko Manis" in text_out and "Balas *YA*" in text_out and "2 baris" in text_out
+    assert "Supplier: Toko Supply" in text_out and "Balas *YA*" in text_out and "2 baris" in text_out
 
 
 async def test_fuzzy_match_and_ambiguity_ask_rather_than_guess(session_factory, shop):

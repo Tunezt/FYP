@@ -75,10 +75,10 @@ def _parsed(supplier: str, total: int, items: int = 1) -> dict:
 async def test_create_update_and_rules(session_factory, shop):
     async with session_factory() as s:
         await _set_tenant(s, shop)
-        toko = await create_supplier(s, shop, name="Toko Manis", phone="0812", address="Pasar Anyar")
+        toko = await create_supplier(s, shop, name="Toko Supply", phone="0812", address="Pasar Anyar")
         assert toko.is_active and toko.phone == "0812"
         with pytest.raises(SupplierInvalid) as exc:
-            await create_supplier(s, shop, name="toko manis")
+            await create_supplier(s, shop, name="toko supply")
         assert exc.value.code == "duplicate"
         with pytest.raises(SupplierInvalid) as exc:
             await create_supplier(s, shop, name="  ")

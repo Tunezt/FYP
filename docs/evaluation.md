@@ -816,3 +816,5 @@ Embedding model: gemini-embedding-001; classifier model: not called (retrieval o
 | ada struk chicken breast buat sandwich gak? lupa belinya kapan | none | none | - | 1 |
 
 </details>
+
+> 2026-11-24: the demo supplier was renamed Toko Manis -> Toko Supply (owner choice); entries above keep the old name as history.
