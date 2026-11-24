@@ -251,9 +251,6 @@ async def register(payload: RegisterIn):
             require_shift=True,   # till-4: same as app.bootstrap, the two must not drift
             receipt_mode="ask",   # till-5b: the customer's receipt only when asked
         )
-        from app.services.business_profile import apply_placeholders
-
-        apply_placeholders(business)   # till-5a: as app.bootstrap
         session.add(business)
         await session.flush()
         business_id = business.id

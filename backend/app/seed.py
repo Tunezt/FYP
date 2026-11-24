@@ -72,7 +72,7 @@ from app.services.accounts import ensure_standard_chart
 from app.services.cash import record_cash_movement
 from app.services.posting_rules import ensure_standard_rules
 from app.services.points import ensure_loyalty_settings
-from app.services.business_profile import apply_placeholders, apply_tax_placeholder, wordmark_logo
+from app.services.business_profile import apply_tax_placeholder, wordmark_logo
 from app.services.pricing import ensure_pricing_settings
 from app.services.customers import create_customer
 from app.services.promos import create_promo
@@ -255,7 +255,6 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
             require_shift=True,   # till-4
             receipt_mode="ask",   # till-5b: the customer's receipt only when asked
         )
-        apply_placeholders(business)   # till-5a
         # The header of a demo receipt reads like a café's, not like a blank form.
         business.address = "Jl. Kenanga No. 21, Kebayoran Baru, Jakarta Selatan"
         business.contact_phone = "021-5550-0123"

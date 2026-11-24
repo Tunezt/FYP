@@ -45,7 +45,7 @@ from app.models import Business, Staff
 from app.services.accounts import ensure_standard_chart
 from app.services.points import ensure_loyalty_settings
 from app.services.posting_rules import ensure_standard_rules
-from app.services.business_profile import apply_placeholders, apply_tax_placeholder
+from app.services.business_profile import apply_tax_placeholder
 from app.services.pricing import ensure_pricing_settings
 from app.services.units import ensure_standard_uoms
 from app.whatsapp.client import normalize_phone, to_international_phone
@@ -110,7 +110,6 @@ async def bootstrap(
             require_shift=True,   # till-4: the owner's rule for every new café
             receipt_mode="ask",   # till-5b: the customer's receipt only when asked
         )
-        apply_placeholders(business)   # till-5a: marked placeholders until the owner types the real ones
         session.add(business)
         await session.flush()
         business_id = business.id

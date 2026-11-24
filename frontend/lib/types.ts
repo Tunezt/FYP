@@ -96,11 +96,10 @@ export type Business = {
   till_device_lock?: boolean; // kasir-1: the till opens on one tablet only
   till_device_bound_at?: string | null; // when a tablet was bound; null = none yet
   extra_owner_numbers?: { name: string; phone: string; added_at?: string | null }[]; // wa-gw-4: more numbers for the WhatsApp assistant
-  // till-5a: printed on receipts; `placeholders` lists the fields still at their placeholder.
+  // till-5a: printed on receipts; empty ones are left off the paper.
   address?: string | null;
   contact_phone?: string | null;
   instagram?: string | null;
-  placeholders?: string[];
   receipt_mode?: "always" | "ask"; // till-5b: the customer's receipt only when asked
   receipt_logo?: boolean; // till-12: the wordmark prints at the top of receipts
   receipt_footer?: string | null; // till-12: the café's own closing line

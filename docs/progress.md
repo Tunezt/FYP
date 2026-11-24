@@ -3020,3 +3020,10 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Known gap found: draft_purchase_order's reply tells the owner to send the PO "dari dashboard (Stok > Pesanan pembelian)", a page that does not exist.
 **Deviation:** none.
 **Next:** run the seed on live (command in the hand-back), then send the staged receipt once.
+
+## [ui-struk-placeholders] Receipt-header examples are grey placeholders, nothing fake is stored (2026-11-24)
+**Done:** a new cafe (bootstrap, register) starts with Alamat, Nomor telepon, Instagram empty; Pengaturan > Data di struk shows the example as an HTML placeholder (no "Contoh" label, no red border) and one calm line while address or phone is missing; red only for a typed, invalid phone or Instagram. An empty detail is left off the paper, QR and WhatsApp receipt.
+**Changed:** auth.py, bootstrap.py, schemas/auth.py (no `placeholders` field), business_profile.py (`apply_placeholders` and `RECEIPT_PLACEHOLDERS` removed), seed.py (keeps the showcase values, only drops `apply_placeholders`), migration 0052 (clears values still exactly equal to the three old examples; downgrade is a deliberate no-op), settings/page.tsx, types.ts, two receipt tests (+1 new: empty details left off), runbook.
+**Gates:** fresh local DB: alembic up/down/up, seed, npm build, pytest 882 passed (render queue, one run, 653 s). First run hit a Postgres "out of memory" while a dev server ran beside it; re-run clean.
+**Notes:** "Lorem" remains only in migration 0052 (it must match the old strings) and in older entries of this file. No before screenshot: the old UI is gone from the tree; shots are in Documents/Side Project/FYP-shots-ui-struk-placeholders.
+**Deviation:** none. **Next:** run `alembic upgrade head` on live so Poernama stops printing the examples.

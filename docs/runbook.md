@@ -324,10 +324,11 @@ Changing it later is safe — nothing is rewritten, every report simply re-cuts 
 same sales on the new boundary — but the daily numbers either side of the change
 will not line up with the ones printed before it, so do it once, at setup.
 
-**Then replace the receipt placeholders.** A new cafe starts with obvious fakes,
-marked *Contoh* in Dashboard → Pengaturan → Data di struk: *Jl. Lorem Ipsum No. 1,
-Kota Dolor*, *0812-0000-0000*, *@poernama.cafe*. Type the real address, phone and
-Instagram before the first receipt is printed. The tax starts as *PBJT 10%,
+**Then type the receipt details.** A new cafe starts with Alamat, Nomor telepon
+and Instagram empty (Dashboard → Pengaturan → Data di struk shows a grey example
+in each box and a calm note while the address or phone is missing). An empty one
+is left off the receipt; type the real address, phone and Instagram before the
+first receipt is printed. The tax starts as *PBJT 10%,
 included in the menu price*; confirm the rate (and whether it is included or
 added on top) with the regency's Bapenda and set it under *Pajak, service &
 pembulatan*.

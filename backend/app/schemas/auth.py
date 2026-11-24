@@ -45,7 +45,7 @@ class BusinessOut(BaseModel):
     timezone: str
     day_start_hour: int          # M15-T4: the hour the business day starts, 0..23
     require_shift: bool = False  # till-4: no sale at the till without an open shift
-    # till-5a: the café's details on its receipts, and which are still placeholders.
+    # till-5a: the café's details on its receipts; empty ones are left off the paper.
     address: str | None = None
     contact_phone: str | None = None
     instagram: str | None = None
@@ -62,13 +62,6 @@ class BusinessOut(BaseModel):
     @classmethod
     def _has_logo(cls, value):
         return bool(value)
-
-    @computed_field
-    @property
-    def placeholders(self) -> list[str]:
-        from app.services.business_profile import placeholder_fields
-
-        return placeholder_fields(self)
     onboarding_completed_at: datetime | None
 
     model_config = {"from_attributes": True}

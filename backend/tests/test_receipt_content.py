@@ -28,7 +28,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.security import create_token, hash_pin
 from app.main import app
 from app.models import Business, Item, Payment, PrintJob, Staff
-from app.services.business_profile import RECEIPT_PLACEHOLDERS, apply_placeholders, apply_tax_placeholder, tax_line_label
+from app.services.business_profile import apply_tax_placeholder, tax_line_label
+
+# The details the test café types in Pengaturan (nothing is stored by default).
+CAFE_DETAILS = {"address": "Jl. Hasan Basri No. 27, Banjarmasin", "contact_phone": "0812-5550-0142", "instagram": "@poernama.kopi"}
 from app.services.catalog import create_modifier, create_modifier_group, create_variant, ensure_default_variant
 from app.services.pricing import ensure_pricing_settings
 from app.services.stock import open_item_stock
@@ -74,7 +77,8 @@ async def _set_tenant(session, business_id):
 async def cafe(session_factory):
     async with session_factory() as s:
         biz = Business(name="Poernama", owner_phone=f"62988{uuid.uuid4().hex[:9]}")
-        apply_placeholders(biz)
+        for field, value in CAFE_DETAILS.items():
+            setattr(biz, field, value)
         s.add(biz)
         await s.commit()
         bid = biz.id
@@ -161,8 +165,8 @@ async def test_the_paper_receipt_has_the_cafe_the_tax_and_the_change(client, ses
     paper = _paper_lines(doc)
     joined = "\n".join(paper)
     assert paper[0].strip() == "POERNAMA"
-    assert RECEIPT_PLACEHOLDERS["address"] in joined
-    assert "0812-0000-0000 - IG @poernama.cafe" in joined                       # "·" is "-" on paper (ASCII only)
+    assert CAFE_DETAILS["address"] in joined
+    assert "0812-5550-0142 - IG @poernama.kopi" in joined                       # "·" is "-" on paper (ASCII only)
     assert "PESANAN" in joined                                                     # the big number stays
     assert any(l.startswith("Kasir") and l.endswith("Sari") for l in paper)   # till-12: label and value
     assert any(l.startswith("Subtotal") and l.endswith("Rp 48.000") for l in paper)
@@ -191,7 +195,7 @@ async def test_the_size_is_written_by_one_rule_everywhere(client, session_factor
         sizes = {l["name"]: l["size"] for l in view["lines"]}
         assert sizes == {LONG_NAME: "Standar", "Roti": None}
         assert view["tax_label"] == "PB1" and view["tax_rate"] == "0.1000"
-        assert view["business_address"] == RECEIPT_PLACEHOLDERS["address"]
+        assert view["business_address"] == CAFE_DETAILS["address"]
     doc = await _receipt_doc(session_factory, c, sale["id"])
     items = {b["name"]: b.get("size") for b in doc["blocks"] if b["t"] == "item_priced"}
     assert items == {LONG_NAME: "Standar", "Roti": None}
@@ -223,14 +227,25 @@ async def test_cash_handed_over_must_cover_the_cash_payment(client, session_fact
     assert "Kembali" not in "\n".join(_paper_lines(doc))
 
 
-async def test_the_owner_replaces_the_placeholders(client, cafe):
+async def test_empty_details_are_left_off_the_receipt(client, session_factory, cafe):
+    """ui-struk-placeholders: nothing fake is stored, and a detail the owner has
+    not typed (or cleared) is simply not printed, on paper or on any screen."""
     c = cafe
-    before = (await client.get("/api/business", headers=c["owner"])).json()
-    assert sorted(before["placeholders"]) == ["address", "contact_phone", "instagram"]
+    cleared = await client.patch("/api/business", headers=c["owner"], json={"address": "", "contact_phone": "", "instagram": ""})
+    assert cleared.status_code == 200 and "placeholders" not in cleared.json()
+    sale = await _sell(client, c, [{"method": "qris", "amount": 52800}])
+    paper = "\n".join(_paper_lines(await _receipt_doc(session_factory, c, sale["id"])))
+    assert "Banjarmasin" not in paper and "IG" not in paper and "0812" not in paper
+    till = (await client.get(f"/pos/orders/{sale['id']}/receipt", headers=c["pos"])).json()
+    assert not till["business_address"] and not till["business_phone"] and not till["business_instagram"]
+
+
+async def test_the_owner_types_the_details_and_the_tax_label(client, cafe):
+    c = cafe
     after = await client.patch("/api/business", headers=c["owner"], json={
         "address": "Jl. Merdeka 12, Bandung", "contact_phone": "0811-2233-4455",
     })
-    assert after.status_code == 200 and after.json()["placeholders"] == ["instagram"]
+    assert after.status_code == 200 and after.json()["address"] == "Jl. Merdeka 12, Bandung"
     label = await client.patch("/api/pricing-settings", headers=c["owner"], json={"tax_label": "Pajak Resto"})
     assert label.status_code == 200 and label.json()["tax_label"] == "Pajak Resto"
     quote = await client.post("/pos/quote", headers=c["pos"], json={"lines": [{"item_id": str(c["roti"]), "quantity": 1}]})

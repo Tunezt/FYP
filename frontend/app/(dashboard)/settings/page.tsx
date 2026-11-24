@@ -1081,9 +1081,6 @@ const DETAIL_FIELDS: { key: "address" | "contact_phone" | "instagram" | "receipt
   { key: "receipt_footer", label: "Catatan di bawah struk (opsional)", hint: "mis. WiFi: Poernama · sandi: kopienak", max: 200 },
 ];
 
-/** Address, phone and Instagram under the café's name on every receipt
- *  (till-5a). New cafés start with obvious placeholders; each one still at its
- *  placeholder is marked "Contoh" so nobody prints "Jl. Lorem Ipsum" by mistake. */
 // wa-gw-4: the WhatsApp assistant answers the owner's number and these, and
 // nobody else. Login codes and the nightly report still go to the owner only.
 function AssistantNumbers({ business, loading, onSaved }: { business: Business | null; loading: boolean; onSaved: () => void }) {
@@ -1200,6 +1197,26 @@ function AssistantNumbers({ business, loading, onSaved }: { business: Business |
   );
 }
 
+/** What is wrong with a receipt detail the owner has typed, or null. Empty is
+ *  never an error: an empty detail is simply left off the receipt. */
+function detailProblem(key: string, raw: string): string | null {
+  const v = raw.trim();
+  if (!v) return null;
+  if (key === "contact_phone") {
+    const digits = v.replace(/\D/g, "").length;
+    if (!/^\+?[\d\s().-]+$/.test(v) || digits < 8 || digits > 15) {
+      return "Nomor telepon tidak valid — pakai angka saja, mis. 0811-2233-4455.";
+    }
+  }
+  if (key === "instagram" && !/^@?[A-Za-z0-9._]{1,30}$/.test(v)) {
+    return "Instagram tidak valid — huruf, angka, titik atau garis bawah, mis. @namakafe.";
+  }
+  return null;
+}
+
+/** Address, phone and Instagram under the café's name on every receipt
+ *  (till-5a). A new café starts with all three empty, the example is a grey
+ *  placeholder, and an empty one is left off the receipt. */
 function ReceiptDetails({ business, loading, onSaved }: { business: Business | null; loading: boolean; onSaved: () => void }) {
   const mutate = useOwnerMutation();
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
@@ -1211,7 +1228,13 @@ function ReceiptDetails({ business, loading, onSaved }: { business: Business | n
     instagram: business?.instagram ?? "",
     receipt_footer: business?.receipt_footer ?? "",
   };
-  const placeholders = business?.placeholders ?? [];
+  // The receipt needs an address and a number; Instagram is a bonus.
+  const missing = [
+    !current.address.trim() && "alamat",
+    !current.contact_phone.trim() && "nomor telepon",
+  ].filter(Boolean);
+  const problems = DETAIL_FIELDS.map((f) => [f.key, detailProblem(f.key, current[f.key])] as const);
+  const hasProblem = problems.some(([, p]) => p);
 
   async function save() {
     setBusy(true);
@@ -1245,9 +1268,9 @@ function ReceiptDetails({ business, loading, onSaved }: { business: Business | n
         <Skeleton className="h-40" />
       ) : (
         <Plate className="space-y-3 px-6 py-5">
-          {placeholders.length > 0 && !draft && (
-            <p className="notice notice-warn text-sm" role="status">
-              Masih contoh — ganti dengan data asli sebelum struk pertama dicetak.
+          {missing.length > 0 && (
+            <p className="surface-inset ink-soft rounded-2xl px-4 py-3 text-sm" role="status">
+              Isi {missing.join(" dan ")} sebelum struk pertama dicetak — yang kosong tidak dicetak.
             </p>
           )}
           {/* till-12: the signage lettering at the top of every receipt */}
@@ -1282,27 +1305,30 @@ function ReceiptDetails({ business, loading, onSaved }: { business: Business | n
             </span>
           </label>
           {DETAIL_FIELDS.map((f) => {
-            const isPlaceholder = !draft && placeholders.includes(f.key);
+            const problem = problems.find(([k]) => k === f.key)?.[1] ?? null;
             return (
               <label key={f.key} className="block">
-                <span className="ink-soft mb-1.5 flex items-center gap-2 text-[13px] font-medium">
-                  {f.label}
-                  {isPlaceholder && <span className="pill-warn text-[11px]">Contoh</span>}
-                </span>
+                <span className="ink-soft mb-1.5 flex items-center gap-2 text-[13px] font-medium">{f.label}</span>
                 <input
                   className="field"
                   maxLength={f.max}
                   value={current[f.key]}
                   placeholder={f.hint}
                   onChange={(e) => setDraft({ ...current, [f.key]: e.target.value })}
-                  aria-invalid={isPlaceholder || undefined}
+                  aria-invalid={problem ? true : undefined}
+                  aria-describedby={problem ? `detail-${f.key}-err` : undefined}
                 />
+                {problem && (
+                  <span id={`detail-${f.key}-err`} className="mt-1 block text-xs text-[color:var(--bad)]">
+                    {problem}
+                  </span>
+                )}
               </label>
             );
           })}
           {error && <p className="notice notice-bad">{error}</p>}
           {draft && (
-            <button onClick={save} disabled={busy} className="btn-accent px-5 py-2.5 text-sm">
+            <button onClick={save} disabled={busy || hasProblem} className="btn-accent px-5 py-2.5 text-sm">
               {busy ? "Menyimpan…" : "Simpan data struk"}
             </button>
           )}

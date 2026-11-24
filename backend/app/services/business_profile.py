@@ -2,9 +2,10 @@
 
 Decision 3 of the owner's plan (1 Oct 2026): the receipt shows an address, a
 phone number and an Instagram handle from the café's settings, never written
-into the receipt code. Until Ibu Diah gives the real ones they are clearly
-fake placeholders, and the settings page marks every field still equal to one
-of them, so nobody mistakes "Jl. Lorem Ipsum" for an address.
+into the receipt code. ui-struk-placeholders (24 Nov 2026): a new café starts
+with all three empty and an empty one is left off the receipt; the settings
+page shows an example as a grey HTML placeholder and a calm note while one is
+missing. Nothing fake is ever stored, so nothing fake can be printed.
 
 The tax is the regional restaurant tax — legally PBJT makanan dan minuman
 since UU 1/2022 (HKPD), formerly Pajak Restoran / "PB1" — at most 10%, set per
@@ -30,27 +31,8 @@ from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 
-RECEIPT_PLACEHOLDERS: dict[str, str] = {
-    "address": "Jl. Lorem Ipsum No. 1, Kota Dolor",
-    "contact_phone": "0812-0000-0000",
-    "instagram": "@poernama.cafe",
-}
-
 TAX_LABEL_PLACEHOLDER = "PB1"
 TAX_RATE_PLACEHOLDER = Decimal("0.10")
-
-
-def placeholder_fields(business) -> list[str]:
-    """Which receipt details are still the placeholders."""
-    return [f for f, v in RECEIPT_PLACEHOLDERS.items() if (getattr(business, f, None) or "").strip() == v]
-
-
-def apply_placeholders(business) -> None:
-    """A new café starts with the marked placeholders, to be replaced in
-    Pengaturan before the first real receipt."""
-    for field, value in RECEIPT_PLACEHOLDERS.items():
-        if not getattr(business, field, None):
-            setattr(business, field, value)
 
 
 # till-12: the Poernama wordmark ("Horizon Swash", the signage lettering) as

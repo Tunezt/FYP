@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.security import create_token, hash_pin
 from app.main import app
 from app.models import Business, Item, PrintJob, RequestLog, Staff
-from app.services.business_profile import apply_placeholders, apply_tax_placeholder
+from app.services.business_profile import apply_tax_placeholder
 from app.services.catalog import ensure_default_variant
 from app.services.pricing import ensure_pricing_settings
 from app.services.stock import open_item_stock
@@ -79,7 +79,7 @@ async def _set_tenant(session, business_id):
 async def cafe(session_factory):
     async with session_factory() as s:
         biz = Business(name="Poernama", owner_phone=f"62990{uuid.uuid4().hex[:9]}", receipt_mode="ask")
-        apply_placeholders(biz)
+        biz.address, biz.contact_phone, biz.instagram = "Jl. Hasan Basri No. 27, Banjarmasin", "0812-5550-0142", "@poernama.kopi"
         s.add(biz)
         await s.commit()
         bid = biz.id
@@ -135,7 +135,7 @@ async def test_a_customer_sends_struk_and_gets_the_receipt(client, session_facto
     send_text.assert_awaited_once()
     to, body = send_text.await_args.args
     assert to == CUSTOMER
-    assert body.startswith("*POERNAMA*") and "Jl. Lorem Ipsum No. 1, Kota Dolor" in body
+    assert body.startswith("*POERNAMA*") and "Jl. Hasan Basri No. 27, Banjarmasin" in body
     assert "1× Kopi Susu — Rp 22.000" in body and "*Total: Rp 24.200*" in body
     assert "PB1 10%: Rp 2.200" in body
     assert "Tunai Rp 24.200 · diterima Rp 50.000 · kembali Rp 25.800" in body
