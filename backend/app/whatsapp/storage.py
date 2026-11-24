@@ -17,6 +17,7 @@ from app.core.config import get_settings, is_placeholder
 
 logger = logging.getLogger("storage")
 
+DEMO_PREFIX = "demo/"
 _EXT_BY_MIME = {
     "image/jpeg": "jpg",
     "image/png": "png",
@@ -57,7 +58,12 @@ async def upload_receipt_image(business_id: uuid.UUID, data: bytes, mime_type: s
 
 
 async def create_signed_url(object_path: str, expires_in: int = 600) -> str | None:
-    """Short-lived signed URL for dashboard display. None in dry-run."""
+    """Short-lived signed URL for dashboard display. None in dry-run.
+
+    `demo/<file>` is the demo café's own receipt photo (app.seed): a static file
+    the dashboard ships in /demo-receipts, not an object in the private bucket."""
+    if object_path.startswith(DEMO_PREFIX):
+        return "/demo-receipts/" + object_path[len(DEMO_PREFIX):]
     settings = get_settings()
     if _dry_run():
         return None

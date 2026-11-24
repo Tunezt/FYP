@@ -3004,3 +3004,19 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Content column widened from 48 to 56 rem.
 **Deviation:** the brief said nested list from 1024 px; the sidebar widens only at 1280, so 1024-1279 keeps chips.
 **Next:** [ui-struk-placeholders].
+
+### [demo-showcase-seed] The demo cafe shows every feature and case
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/seed.py (rewritten), backend/app/seed_data.py (new: the invented content), backend/app/seed_receipt_embeddings.json (new), backend/app/whatsapp/storage.py (`demo/<file>` receipt photos resolve to a static file), backend/tests/test_showcase_seed.py (new), frontend/public/demo-receipts/*.jpg (4 generated receipt photos), scripts/demo_receipt_images.py, scripts/demo_receipt_embeddings.py, scripts/showcase_shots.py, scripts/showcase_pos_shots.py, docs/showcase-map.md (new), docs/demo-script.md
+**Gates:** fresh local DB (alembic up / down -1 / up, seed), pytest in 4 parts under the render lock: 880 passed + 1 failed, 881 collected (was 875: +6 new). The one failure, `test_print_bridge::test_the_probe_is_honest_about_a_printer_that_answers_nothing`, is the known load-sensitive probe test; the whole file passes alone (39 passed). Seed prints `Nightly pass: 5 alert(s) ready: ['anomaly', 'margin_drop', 'stockout_risk', 'supplier_price', 'void_rate']`. `npm run build` passes.
+**Notes:**
+- Two months of history (was 30 days) so "this month vs last month" is fair; one planted spike yesterday; a growth trend; cost of coffee drinks +75% in the last 7 days (margin alert).
+- New: 5 suppliers, 12 goods receipts (Toko Supply beans Rp 145.000 -> 165.000 yesterday), 6 purchase orders in every status, 4 photographed receipts (receipt + expense + stock in, with stored search vectors), made-to-order recipes for 7 more drinks/dishes, Cappuccino and Pisang Goreng, 8 customers (a lapsed one, a new one, a birthday, points earned/spent/adjusted), 4 promos (3 used, 1 ended) and 6 voucher uses, cashiers Sari/Budi/Dewi(manager)/Rudi(inactive) with 14 days of shifts (Sari -5.000, Budi -20.000, Sari +2.000, cash in/out/bank drop/supplier payment), Budi's cancelled sales (void-rate alert) and one refund with manager approvals, two guests waiting from the table QR, kitchen tickets in all states, the five alert types (4 unread, 4 read incl. older nights).
+- No Gemini call in the seed. Search vectors were made once (4 embedding calls) by `scripts/demo_receipt_embeddings.py`; a test fails if a nota changes without re-running it.
+- Not seeded on purpose: printer bridge status (goes stale in 90 s, would be a stub shown as working), a second owner number (it would receive real alerts), a pending YA (60 min).
+- `seed()` takes `today=` so a test can seed the demo as if it were another day: `test_showcase_seed` checks all five alerts on three days. Without it the cap of 5 new alerts a night dropped void_rate on one of them (a 6th rule firing on Pisang Goreng).
+- WhatsApp check, real path, gemini-3.5-flash-lite (0 calls on 2.5-flash): 17 questions across all 15 tools answered from the new data (docs/showcase-map.md section 3).
+- Known gap found: draft_purchase_order's reply tells the owner to send the PO "dari dashboard (Stok > Pesanan pembelian)", a page that does not exist.
+**Deviation:** none.
+**Next:** run the seed on live (command in the hand-back), then send the staged receipt once.
