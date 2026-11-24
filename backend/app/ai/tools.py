@@ -647,7 +647,7 @@ async def get_promo_performance(session: AsyncSession, business: Business, args:
         description=(
             "Draft a purchase order to a supplier for the items and quantities the owner states "
             "('pesan ke Toko Jaya: gula 10 kg, kopi 5 kg'). Prices default to the last price paid to "
-            "that supplier. It is a DRAFT the owner confirms on the dashboard — nothing is sent."
+            "that supplier. It is a DRAFT only — nothing is sent to the supplier; the owner sends the list themselves."
         ),
         parameters=types.Schema(
             type=types.Type.OBJECT,
@@ -708,5 +708,5 @@ async def draft_purchase_order(session: AsyncSession, business: Business, args: 
         "drafted": True, "po_number": po.number, "status": po.status, "supplier": supplier.name,
         "subtotal": _num(sum((Decimal(l.line_total) for l in lines), Decimal(0))),
         "lines": resolved, "unknown_items": unknown,
-        "note": "Draft — konfirmasi dan kirim dari dashboard (Stok › Pesanan pembelian).",
+        "note": "Draft saja, belum dikirim ke supplier: kirim daftar ini sendiri ke mereka. Dashboard belum punya halaman pesanan. Kalau barang sudah datang, foto notanya ke chat ini; stok di halaman Stok ikut bertambah.",
     }
