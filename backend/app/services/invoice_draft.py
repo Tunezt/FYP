@@ -164,12 +164,14 @@ def draft_summary(draft: dict) -> str:
     for q in draft["questions"]:
         unit = q["unit_read"]
         lines.append(f"❓ {Decimal(q['quantity']):g} {unit} {q['name_read']} — {q['reason']}. Akan dilewati kecuali kamu koreksi.")
+    if lines and (draft["supplier_name"] or draft["supplier_text"] or Decimal(draft["total_amount"]) > 0):
+        lines.append("")
     if draft["supplier_name"]:
         lines.append(f"Supplier: {draft['supplier_name']}")
     elif draft["supplier_text"]:
         lines.append(f"Supplier: {draft['supplier_text']} (belum ada di daftar supplier — penerimaan tetap dicatat tanpa supplier)")
     if Decimal(draft["total_amount"]) > 0:
-        lines.append(f"Total: {_rp(draft['total_amount'])}")
+        lines.append(f"*Total: {_rp(draft['total_amount'])}*")
     for a in draft.get("ambiguities") or []:
         lines.append(f"⚠️ {a}")
     n = len(draft["matched"])

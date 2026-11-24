@@ -226,7 +226,7 @@ async def rule_takings_anomaly(session: AsyncSession, business: Business, now: d
             type="anomaly", rule_key=f"anomaly:{metric_name}:{local_day(business, moment)}", metric=metric_name,
             severity="high" if abs(z) > 4 else "medium",
             # The day by name, not "hari ini": the alert is read the next morning too (fin-demo-walk).
-            message=f"{label} {day_name} {_rp(today)} — jauh {direction} normal (rata-rata 30 hari {_rp(mean)}, z={z:.1f})",
+            message=f"{label} {day_name} {_rp(today)} — jauh {direction} normal (rata-rata 30 hari {_rp(mean)})",
             details={"today": today, "mean": round(mean, 2), "stddev": round(stddev, 2), "z": round(z, 2)},
         ))
     return found

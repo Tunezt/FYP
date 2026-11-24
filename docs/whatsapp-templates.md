@@ -41,6 +41,11 @@ Backend env: `WHATSAPP_OTP_TEMPLATE=login_otp`.
 Variables: `{{1}}` alert kind, `{{2}}` business name, `{{3}}` one-line detail. Replying
 opens a 24-hour session window, so the follow-up conversation is free-form.
 
+Several alerts in one run: `{{3}}` holds them joined by "; " (template parameters take
+no newlines). On the self-hosted gateway (no templates) the same alerts go out as a list
+instead: "⚠️ *5 peringatan untuk <cafe>*", one "- " line per alert, then "Balas pesan ini
+untuk detail." (fin-wa-format). A single alert keeps the one-line wording above.
+
 Backend env: `WHATSAPP_ALERT_TEMPLATE=business_alert`.
 
 ---

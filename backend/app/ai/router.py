@@ -25,9 +25,9 @@ from app.models import Business
 logger = logging.getLogger("ai.router")
 
 RECEIPT_CHECK_FAILED_REPLY = (
-    "Maaf, catatan nota belum bisa kucek sekarang — layanan AI-nya lagi sibuk. "
-    "Coba tanya lagi sebentar ya 🙏 "
-    "(I can't check your receipts right now, please try again in a minute.)"
+    "Maaf, catatan nota belum bisa kucek sekarang: layanan AI-nya lagi sibuk.\n"
+    "Coba tanya lagi sebentar ya 🙏\n"
+    "_(I can't check your receipts right now, please try again in a minute.)_"
 )
 
 CLARIFY = types.FunctionDeclaration(

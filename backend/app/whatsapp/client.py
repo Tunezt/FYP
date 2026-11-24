@@ -15,6 +15,7 @@ from collections import OrderedDict
 import httpx
 
 from app.core.config import get_settings, is_placeholder
+from app.whatsapp.markup import to_whatsapp
 
 logger = logging.getLogger("whatsapp")
 
@@ -67,6 +68,7 @@ async def send_text(to: str, body: str) -> None:
     """Free-form service message — only valid inside an open 24-hour session
     window (i.e. as a reply to an inbound message). Never use for proactive
     sends; those must go through send_template."""
+    body = to_whatsapp(body)
     if _gateway():
         await _gateway_send(to, body[:4096], log_hint=f"text -> {to}: {body[:200]}")
         return
@@ -88,7 +90,7 @@ async def send_template(to: str, template_name: str, body_params: list[str],
         # No templates on WhatsApp Web: the approved wording, sent as text.
         lang = language or settings.whatsapp_template_language
         if template_name == settings.whatsapp_alert_template and len(body_params) == 3:
-            body = _TEMPLATE_TEXT["en" if lang == "en" else "id"].format(*body_params)
+            body = _alert_text("en" if lang == "en" else "id", *body_params)
         else:
             body = "\n".join(body_params)
         await _gateway_send(to, body, log_hint=f"template {template_name} as text -> {to}: {body_params}")
@@ -103,7 +105,8 @@ async def send_template(to: str, template_name: str, body_params: list[str],
             "components": [
                 {
                     "type": "body",
-                    "parameters": [{"type": "text", "text": p} for p in body_params],
+                    # Meta refuses newlines in template parameters; several alerts read "a; b" there.
+                    "parameters": [{"type": "text", "text": p.replace(chr(10), "; ")} for p in body_params],
                 }
             ],
         },
@@ -178,6 +181,40 @@ _TEMPLATE_TEXT = {
     "en": "⚠️ {0} alert for {1}: {2}. Reply to this message for details.",
 }
 
+# Several alerts in one run arrive one per line in {2} (jobs/delivery.py; the Cloud
+# API path turns the newlines into "; "). On WhatsApp Web they become a list: the
+# header says whose cafe, each alert gets its own line, the action comes last.
+# Each alert's own text already says what kind it is, so the list drops the kinds line.
+_ALERT_LIST = {
+    "id": ("⚠️ *{0} peringatan untuk {1}*", "Balas pesan ini untuk detail."),
+    "en": ("⚠️ *{0} alerts for {1}*", "Reply to this message for details."),
+}
+_MORE = re.compile(r"\(\+(\d+) peringatan lain\)")  # delivery's overflow line
+# The one figure per alert the owner looks for, in this order: days left, a percentage, an amount.
+_KEY_FIGURE = (
+    re.compile(r"±\d+(?:[.,]\d+)? hari"),
+    re.compile(r"\d+(?:[.,]\d+)?%"),
+    re.compile(r"Rp \d{1,3}(?:\.\d{3})*"),
+)
+
+
+def _bold_key_figure(line: str) -> str:
+    for pattern in _KEY_FIGURE:
+        if m := pattern.search(line):
+            return f"{line[:m.start()]}*{m[0]}*{line[m.end():]}"
+    return line
+
+
+def _alert_text(lang: str, kinds: str, business: str, detail: str) -> str:
+    lines = [x.strip().rstrip(".") for x in detail.split("\n") if x.strip()]
+    if len(lines) < 2:
+        return _TEMPLATE_TEXT[lang].format(kinds, business, detail)
+    more = _MORE.fullmatch(lines[-1])
+    count = len(lines) - 1 + int(more[1]) if more else len(lines)
+    head, action = _ALERT_LIST[lang]
+    return "\n\n".join([head.format(count, business), "\n".join(f"- {_bold_key_figure(x)}" for x in lines), action])
+
+
 # Photos and Excel files arrive base64 inside the gateway webhook; the
 # processor then asks download_media for them by id, in the same process.
 # Bounded: media from an unknown sender is never asked for.
@@ -193,6 +230,7 @@ def stash_media(media_id: str, data: bytes, mime_type: str) -> None:
 
 async def _gateway_send(to: str, body: str, log_hint: str) -> None:
     settings = get_settings()
+    body = to_whatsapp(body)
     if _dry_run():
         logger.info("[DRY-RUN outbound WhatsApp gateway] %s", log_hint)
         return

@@ -122,4 +122,4 @@ def refusal_reply(business: Business, user_message: str, topic: str | None = Non
         intro = _INTRO[language].format(topic=topic)
     else:
         intro = _INTRO_NO_TOPIC[language]
-    return f"{intro} {_OFFER[language].format(menu=capability_menu(language))}"
+    return f"{intro}\n\n{_OFFER[language].format(menu=capability_menu(language))}"

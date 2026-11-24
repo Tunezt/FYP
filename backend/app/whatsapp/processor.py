@@ -125,9 +125,9 @@ async def _resolve_business(sender: str, text: str | None = None) -> tuple[Busin
             unclear = "Belum jelas yang mana. " if said and said not in SWITCH_COMMANDS and was_asked(found, phone) else ""
             mark_asked(found, phone)
             return None, None, (
-                f"{unclear}Nomor ini terhubung ke beberapa usaha. Mau pakai data yang mana? Balas angka atau nama usahanya:\n"
-                f"{listing}\n\nNanti ketik *ganti toko* untuk pindah. "
-                "(This number reaches several businesses: reply with a number or the name; type *switch business* to change.)"
+                f"{unclear}Nomor ini terhubung ke beberapa usaha. Mau pakai data yang mana?\n\n"
+                f"{listing}\n\nBalas angka atau nama usahanya. Ketik *ganti toko* kapan saja untuk pindah.\n"
+                "_(This number reaches several businesses: reply with a number or the name; type *switch business* to change.)_"
             )
         return current, f"🏪 {current.name}", None
 
@@ -165,8 +165,8 @@ async def _process_message(message: dict, held_since: float | None = None) -> No
             if held_since is not None:
                 return  # still no cafe after a reply: the list was just sent, keep waiting quietly
             pick_reply += (
-                "\n\nFotonya kusimpan dulu, kubaca begitu kamu pilih. "
-                "(I kept your photo and will read it as soon as you pick.)"
+                "\n\n📷 Fotonya kusimpan dulu, kubaca begitu kamu pilih.\n"
+                "_(I kept your photo and will read it as soon as you pick.)_"
             )
         await send_text(sender, pick_reply)
         logger.info("Asked %s which cafe to use (type=%s)", sender, msg_type)
@@ -199,8 +199,8 @@ async def _process_message(message: dict, held_since: float | None = None) -> No
             intent, reply = await _handle_document(business, message)
         else:
             reply = (
-                "Maaf, aku baru bisa baca teks, foto struk/nota, dan file Excel. "
-                "(I can handle text, receipt photos, and Excel files.)"
+                "Maaf, aku baru bisa baca teks, foto struk/nota, dan file Excel.\n"
+                "_(I can handle text, receipt photos, and Excel files.)_"
             )
         if reply:
             await send_text(sender, f"{header}\n{reply}" if header else reply)
@@ -218,8 +218,8 @@ async def _process_message(message: dict, held_since: float | None = None) -> No
         try:
             await send_text(
                 sender,
-                "Waduh, ada gangguan sebentar — coba kirim lagi ya. "
-                "(Something went wrong, please try again.)",
+                "Waduh, ada gangguan sebentar. Coba kirim lagi ya.\n"
+                "_(Something went wrong, please try again.)_",
             )
         except Exception:
             logger.exception("Failed to send error reply")
@@ -256,15 +256,14 @@ def quota_reply(exc: QuotaExhausted) -> str:
         wib = exc.resets_at.astimezone(timezone(timedelta(hours=7)))
         at = f"{wib:%H.%M} WIB ({wib + timedelta(hours=1):%H.%M} WITA)"
         return (
-            "Maaf, asisten sudah kena batas pemakaian AI gratis untuk hari ini, "
-            f"jadi belum bisa menjawab. Biasanya aktif lagi sekitar jam {at}. "
-            "Data kamu aman, coba kirim lagi setelah itu ya 🙏\n"
-            f"(The assistant has hit today's free AI usage limit. It resets around {at}; "
-            "please try again after that.)"
+            "Maaf, asisten sudah kena batas pemakaian AI gratis untuk hari ini, jadi belum bisa menjawab.\n"
+            f"Biasanya aktif lagi sekitar jam *{at}*. Kirim lagi setelah itu ya, data kamu aman 🙏\n\n"
+            f"_(The assistant has hit today's free AI usage limit. It resets around {at}; "
+            "please try again after that.)_"
         )
     return (
-        "Asisten lagi terlalu ramai, coba kirim lagi sekitar 1 menit ya 🙏\n"
-        "(The assistant is busy right now, please try again in about a minute.)"
+        "Asisten lagi terlalu ramai. Coba kirim lagi sekitar *1 menit* lagi ya 🙏\n"
+        "_(The assistant is busy right now, please try again in about a minute.)_"
     )
 
 
@@ -402,9 +401,9 @@ async def _handle_image(business: Business, message: dict) -> tuple[str, str | N
     if parsed.get("document_type") == "other" or not parsed.get("items"):
         return (
             "vision",
-            "Hmm, itu kayaknya bukan nota atau buku stok — aku nggak nemu daftar "
-            "barang di fotonya. Coba foto ulang yang lebih jelas ya 🙏 "
-            "(Kalau ini foto daftar menu, kirim ulang dengan keterangan *menu*.)",
+            "Hmm, aku nggak nemu daftar barang di fotonya: kayaknya bukan nota atau buku stok.\n"
+            "Coba foto ulang yang lebih jelas ya 🙏\n\n"
+            "Kalau ini foto daftar menu, kirim ulang dengan keterangan *menu*.",
         )
 
     # Never write stock from a photo without confirmation (roadmap M5-T4): every
@@ -465,8 +464,8 @@ async def _handle_document(business: Business, message: dict) -> tuple[str, str 
     if doc.get("mime_type") not in _XLSX_MIMES and not filename.endswith((".xlsx", ".xls")):
         return (
             "document",
-            "File itu belum bisa kubaca — kirim file Excel (.xlsx) pakai template "
-            "stok ya. Templatnya bisa diunduh dari dashboard 📄",
+            "File itu belum bisa kubaca.\n"
+            "Kirim file Excel (.xlsx) pakai template stok ya. Templatnya bisa diunduh dari dashboard 📄",
         )
 
     data, _mime = await download_media(doc.get("id", ""))
@@ -475,7 +474,7 @@ async def _handle_document(business: Business, message: dict) -> tuple[str, str 
     except StockTemplateError:
         return (
             "document",
-            "Excelnya kebuka, tapi aku nggak nemu kolom *nama* dan *jumlah*. "
+            "Excelnya kebuka, tapi aku nggak nemu kolom *nama* dan *jumlah*.\n"
             "Pakai template dari dashboard ya, atau pastikan baris pertama berisi "
             "judul kolom.",
         )
@@ -496,7 +495,7 @@ async def _handle_document(business: Business, message: dict) -> tuple[str, str 
 def stock_import_reply(facts: dict, warnings: list) -> str:
     """Fixed Indonesian confirmation of a committed stock import (no AI)."""
     made, updated = len(facts.get("items_created", [])), len(facts.get("items_updated", []))
-    text = f"Stok dari Excel sudah tersimpan ✅ {updated} barang diperbarui, {made} barang baru."
+    text = f"✅ *Stok dari Excel sudah tersimpan*\n- {updated} barang diperbarui\n- {made} barang baru"
     if warnings:
-        text += f" Ada {len(warnings)} baris yang perlu dicek."
+        text += f"\n\n⚠️ Ada {len(warnings)} baris yang perlu dicek."
     return text

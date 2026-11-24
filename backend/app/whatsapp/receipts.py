@@ -39,10 +39,15 @@ RATE_WINDOW = 600
 _recent: dict[str, deque[float]] = {}
 
 NOT_FOUND = (
-    "Struk dengan kode itu tidak ditemukan. Pindai ulang kode QR dari kasir, "
-    "lalu kirim pesannya tanpa diubah ya. / Receipt not found."
+    "Struk dengan kode itu tidak ditemukan.\n"
+    "Pindai ulang kode QR dari kasir, lalu kirim pesannya tanpa diubah ya.\n"
+    "_(Receipt not found.)_"
 )
-TOO_MANY = "Terlalu banyak permintaan struk dari nomor ini — coba lagi beberapa menit lagi ya. / Too many requests."
+TOO_MANY = (
+    "Terlalu banyak permintaan struk dari nomor ini.\n"
+    "Coba lagi beberapa menit lagi ya.\n"
+    "_(Too many requests.)_"
+)
 
 
 def receipt_code_in(text: str | None) -> str | None:

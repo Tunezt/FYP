@@ -59,12 +59,14 @@ def summarize_parse(parsed: dict) -> str:
         unit = item.get("unit", "")
         price = item.get("line_total") or 0
         price_part = f" — Rp {price:,.0f}".replace(",", ".") if price else ""
-        lines.append(f"• {qty} {unit} {item.get('name', '?')}{price_part}")
+        lines.append(f"- {qty} {unit} {item.get('name', '?')}{price_part}")
+    total = parsed.get("total_amount") or 0
+    if lines and (parsed.get("supplier") or total):
+        lines.append("")
     if parsed.get("supplier"):
         lines.append(f"Supplier: {parsed['supplier']}")
-    total = parsed.get("total_amount") or 0
     if total:
-        lines.append(f"Total: Rp {total:,.0f}".replace(",", "."))
+        lines.append(f"*Total: Rp {total:,.0f}*".replace(",", "."))
     return "\n".join(lines) if lines else "(tidak ada item terbaca)"
 
 
@@ -269,11 +271,11 @@ def duplicate_warning(dup: Receipt) -> str:
     when = f"{wib.day} {_MONTHS[wib.month - 1]}"
     amount = f"Rp {dup.total_amount:,.0f}".replace(",", ".") if dup.total_amount else "tanpa total"
     return (
-        f"⚠️ Nota ini mirip nota {who} {when} {amount} yang sudah tersimpan. "
-        "Kalau dicatat lagi, pengeluaran dan stok jadi dobel. "
+        f"⚠️ *Nota ini mirip nota {who} {when} {amount} yang sudah tersimpan.*\n"
+        "Kalau dicatat lagi, pengeluaran dan stok jadi dobel.\n"
         "Balas *YA* kalau ini pembelian baru, atau *BATAL*.\n"
-        f"(This looks like the receipt already saved: {who}, {when}, {amount}. Saving it again "
-        "doubles the expense and stock. Reply YA only if it is a new purchase, or BATAL.)"
+        f"_(This looks like the receipt already saved: {who}, {when}, {amount}. Saving it again "
+        "doubles the expense and stock. Reply YA only if it is a new purchase, or BATAL.)_"
     )
 
 

@@ -69,19 +69,22 @@ async def build_summary(session: AsyncSession, business: Business, now: datetime
         yest = yest_cmp.previous.value if yest_cmp.previous else 0
         avg = revenue / count
         lines = [
-            f"📊 Ringkasan hari ini, {_DAYS[today.weekday()]} {_date(today)} ({business.name})",
-            f"Penjualan {rp(revenue)} dari {count} transaksi (rata-rata {rp(avg)}).",
+            f"📊 *Ringkasan hari ini, {_DAYS[today.weekday()]} {_date(today)}*",
+            f"_{business.name}_",
+            "",
+            f"Penjualan *{rp(revenue)} dari {count} transaksi*",
+            f"Rata-rata {rp(avg)} per transaksi",
         ]
         change = _change(revenue, yest)
         if change:
-            lines.append(f"Dibanding kemarin jam yang sama: {change} ({rp(yest)}).")
+            lines.append(f"Dibanding kemarin jam yang sama: {change} ({rp(yest)})")
         expense = await compute(session, business, "expense_total", period="today", now=now)
         profit = await compute(session, business, "net_profit", period="today", now=now)
         if expense.value:
-            lines.append(f"Pengeluaran {rp(expense.value)}, laba bersih {rp(profit.value)}.")
+            lines.append(f"Pengeluaran {rp(expense.value)} · laba bersih *{rp(profit.value)}*")
         top = await compute(session, business, "top_items_by_revenue", period="today", limit=3, now=now)
         if top.rows:
-            lines.append("Terlaris: " + ", ".join(f"{r['name']} ({r['quantity']:g})" for r in top.rows) + ".")
+            lines.append("Terlaris: " + ", ".join(f"{r['name']} ({r['quantity']:g})" for r in top.rows))
         parts.append("\n".join(lines))
 
     if today.weekday() == 0:  # Monday: the week that just ended
@@ -92,15 +95,16 @@ async def build_summary(session: AsyncSession, business: Business, now: datetime
             first = business_day(start, business.timezone, business.day_start_hour)
             last = first + timedelta(days=6)
             lines = [
-                f"📅 Ringkasan minggu lalu, {_date(first)} - {_date(last)}",
-                f"Penjualan {rp(w_rev)} dari {w_count} transaksi.",
+                f"📅 *Ringkasan minggu lalu, {_date(first)} - {_date(last)}*",
+                "",
+                f"Penjualan *{rp(w_rev)} dari {w_count} transaksi*",
             ]
             change = _change(w_rev, p_rev)
             if change:
-                lines.append(f"Dibanding minggu sebelumnya: {change} ({rp(p_rev)}).")
+                lines.append(f"Dibanding minggu sebelumnya: {change} ({rp(p_rev)})")
             top = await compute(session, business, "top_items_by_revenue", since=start, until=end, limit=3)
             if top.rows:
-                lines.append("Terlaris: " + ", ".join(f"{r['name']} ({r['quantity']:g})" for r in top.rows) + ".")
+                lines.append("Terlaris: " + ", ".join(f"{r['name']} ({r['quantity']:g})" for r in top.rows))
             parts.append("\n".join(lines))
 
     return "\n\n".join(parts) or None

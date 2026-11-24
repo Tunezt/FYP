@@ -67,7 +67,7 @@ async def deliver_unsent(session: AsyncSession, business: Business) -> int:
     await send_template(
         business.owner_phone,
         settings.whatsapp_alert_template,
-        [" & ".join(kinds), business.name, "; ".join(detail_lines)],
+        [" & ".join(kinds), business.name, "\n".join(detail_lines)],  # the client makes these "; " for the Cloud template
         language=business.language_preference,
     )
     for alert in unsent:

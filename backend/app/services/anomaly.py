@@ -162,7 +162,7 @@ async def detect_anomalies(session: AsyncSession, business: Business) -> list[An
         label = "Penjualan" if metric == "daily_revenue" else "Pengeluaran"
         message = (
             f"{label} hari ini Rp {today_value:,.0f} — jauh {direction} normal "
-            f"(rata-rata 30 hari Rp {mean:,.0f}, z={z:.1f})"
+            f"(rata-rata 30 hari Rp {mean:,.0f})"
         ).replace(",", ".")
         finding = AnomalyFinding(
             metric=metric,
