@@ -8,7 +8,8 @@ import { useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { ApiError } from "@/lib/api";
 import { ORDER_TYPE_LABEL, type Business, type LoyaltySettings, type OrderType, type PricingSettings, type StaffMember } from "@/lib/types";
 import { CopyField, MoneyInput, Plate, Sheet, Skeleton } from "@/components/ui";
-import { SectionIndex } from "@/components/SectionIndex";
+import { SectionIndex, useHashLanding } from "@/components/SectionIndex";
+import { SETTINGS_INDEX } from "@/lib/settings-sections";
 import { HelpTip } from "@/components/HelpTip";
 import { PinLockouts } from "@/components/PinLockouts";
 import { PrinterTokens } from "@/components/PrinterTokens";
@@ -55,22 +56,6 @@ function toForm(p: PricingSettings | null | undefined): PricingForm {
   };
 }
 
-/** The page's contents, in its order: what the index on the side (or the
- * chips on a phone) lists and follows. */
-const SETTINGS_INDEX = [
-  { id: "profil", label: "Profil usaha" },
-  { id: "whatsapp", label: "WhatsApp asisten" },
-  { id: "struk", label: "Data di struk" },
-  { id: "pajak", label: "Pajak & service" },
-  { id: "poin", label: "Program poin" },
-  { id: "staf", label: "Staf kasir" },
-  { id: "kasir", label: "Layar kasir" },
-  { id: "printer", label: "Printer" },
-  { id: "menu-qr", label: "Menu QR" },
-  { id: "template", label: "Template stok" },
-  { id: "impor", label: "Impor katalog" },
-];
-
 type LoyaltyForm = { is_active: boolean; rupiah_per_point: string; point_value: string; min_redeem_points: string };
 
 function toLoyaltyForm(l: LoyaltySettings | null | undefined): LoyaltyForm {
@@ -83,6 +68,7 @@ function toLoyaltyForm(l: LoyaltySettings | null | undefined): LoyaltyForm {
 }
 
 export default function SettingsPage() {
+  useHashLanding();
   const business = useOwnerData<Business>("/api/business");
   const staff = useOwnerData<StaffMember[]>("/auth/staff");
   const pricing = useOwnerData<PricingSettings>("/api/pricing-settings");
@@ -330,10 +316,9 @@ export default function SettingsPage() {
       <h1 className="page-title mb-5 xl:mb-7">Pengaturan</h1>
       {/* Sticky to the page itself, so it stays under the thumb all the way down. */}
       <div className="index-chips sticky top-0 z-20 -mx-4 px-4 py-2.5 md:-mx-6 md:px-6 xl:hidden">
-        <SectionIndex entries={SETTINGS_INDEX} variant="chips" />
+        <SectionIndex entries={SETTINGS_INDEX} />
       </div>
-      <div className="mt-4 xl:mt-0 xl:grid xl:grid-cols-[minmax(0,48rem)_12.5rem] xl:gap-14 2xl:gap-20">
-      <div className="settings-flow min-w-0 max-w-3xl">
+      <div className="settings-flow mt-4 min-w-0 max-w-4xl xl:mt-0">
 
       {/* Business profile */}
       <section id="profil">
@@ -416,11 +401,6 @@ export default function SettingsPage() {
       {/* wa-gw-4: more numbers that get the owner's assistant on WhatsApp */}
       <div id="whatsapp">
         <AssistantNumbers business={b} loading={business.loading} onSaved={business.reload} />
-      </div>
-
-      {/* till-5a: the café's details printed under its name on every receipt */}
-      <div id="struk">
-        <ReceiptDetails business={b} loading={business.loading} onSaved={business.reload} />
       </div>
 
       {/* Pricing (M7-T4): tax, service charge, rounding, discount gate */}
@@ -880,6 +860,11 @@ export default function SettingsPage() {
         <PrinterTokens />
       </div>
 
+      {/* till-5a: the café's details printed under its name on every receipt */}
+      <div id="struk">
+        <ReceiptDetails business={b} loading={business.loading} onSaved={business.reload} />
+      </div>
+
       {/* QR e-menu (M11-T1) */}
       <section id="menu-qr">
         <h2 className="mb-2 flex items-center gap-2 section-title">
@@ -1000,12 +985,6 @@ export default function SettingsPage() {
         )}
       </section>
 
-      </div>
-      <aside className="hidden xl:block">
-        <div className="sticky top-8">
-          <SectionIndex entries={SETTINGS_INDEX} variant="rail" />
-        </div>
-      </aside>
       </div>
 
       <Sheet open={pinFor !== null} onClose={() => setPinFor(null)} title={`Ganti PIN ${pinFor?.name ?? ""}`}>

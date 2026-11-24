@@ -1949,28 +1949,50 @@ table {
   outline: none;
 }
 
-.index-link {
-  position: relative;
-  border-radius: 999px;
-  padding: 0.4rem 0.875rem;
-  font-size: 13.5px;
-  line-height: 1.35;
-  color: var(--ink-faint);
-  transition: color 160ms ease-out;
+/* The Pengaturan sections nested under their sidebar link
+   (components/SettingsSubnav.tsx): a hairline guide, small labels, the
+   section being read lit. Reads from the shell tokens. */
+.shell-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--shell-divider) transparent;
+  overscroll-behavior: contain;
 }
 
-.index-link:hover {
-  color: var(--ink);
+.subnav {
+  margin: 0.25rem 0 0.5rem 1.5rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--shell-divider);
 }
 
-.index-link[aria-current="location"] {
-  color: var(--ink);
+.subnav-label {
+  padding: 0.7rem 0.75rem 0.25rem;
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--shell-ink-soft);
+  opacity: 0.8;
 }
 
-.index-mark {
-  border-radius: 999px;
-  background: var(--accent-soft);
+.subnav-link {
+  display: block;
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--shell-ink-soft);
+  transition: background-color 160ms ease-out, color 160ms ease-out;
+}
+
+.subnav-link:hover {
+  background: var(--shell-hover);
+  color: var(--shell-ink);
+}
+
+.subnav-link[aria-current="location"] {
+  background: var(--shell-active);
+  color: var(--shell-active-ink);
+  font-weight: 600;
 }
 
 .index-chips {

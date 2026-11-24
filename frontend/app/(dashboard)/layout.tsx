@@ -9,6 +9,7 @@ import { useOwnerData } from "@/lib/hooks";
 import { initials } from "@/lib/format";
 import type { AlertRow, StaffMember } from "@/lib/types";
 import { IconBell, IconBox, IconChart, IconChevronRight, IconGear, IconHome, IconLogout, IconMore, IconSpark, IconUsers, IconWallet } from "@/components/icons";
+import { SettingsSubnav } from "@/components/SettingsSubnav";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { BrandMark, Sheet } from "@/components/ui";
 import { Monogram, Wordmark } from "@/components/Wordmark";
@@ -128,12 +129,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <div className="shell-divider mx-3 mb-3 h-px" aria-hidden />
 
-          <nav className="has-slide flex flex-col gap-1 max-xl:items-center" data-tour="nav" aria-label="Menu utama">
-            <SlideIndicator className="nav-pill" watch={pathname} />
-            {NAV_DAILY.map(navLink)}
-            <div className="shell-divider mx-3 my-2 h-px self-stretch" aria-hidden />
-            {NAV_MANAGE.map(navLink)}
-          </nav>
+          {/* Scrolls on a short screen, so the Pengaturan sections nested
+              under their link never push the account area off the panel. */}
+          <div className="shell-scroll -mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+            <nav className="has-slide flex flex-col gap-1 max-xl:items-center" data-tour="nav" aria-label="Menu utama">
+              <SlideIndicator className="nav-pill" watch={pathname} />
+              {NAV_DAILY.map(navLink)}
+              <div className="shell-divider mx-3 my-2 h-px self-stretch" aria-hidden />
+              {NAV_MANAGE.map(navLink)}
+            </nav>
+            {pathname.startsWith("/settings") && <SettingsSubnav />}
+          </div>
 
           <div className="shell-well mt-auto flex items-center gap-2.5 rounded-[1.25rem] py-2.5 pl-2.5 pr-1.5 max-xl:flex-col max-xl:gap-1 max-xl:px-0 max-xl:py-2">
             <span

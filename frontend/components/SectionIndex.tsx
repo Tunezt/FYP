@@ -5,22 +5,20 @@ import { SlideIndicator } from "@/components/motion";
 
 export type IndexEntry = { id: string; label: string };
 
-/** Where a long page keeps its contents: a rail beside the sections on a
- * wide screen, a row of chips that stays under the thumb on a narrow one.
- * Either way it follows the reading: the section in view is the one marked
- * (one pill that travels, as in the sidebar), and a tap goes straight there. */
-export function SectionIndex({ entries, variant }: { entries: IndexEntry[]; variant: "rail" | "chips" }) {
+/** Which section of a long page is being read, and a way to jump to one.
+ * The section in view is the last one whose heading has passed the upper
+ * third of the screen; a jump scrolls smoothly and lands focus on the
+ * section for keyboard and screen-reader users. */
+export function useSectionSpy(entries: IndexEntry[]) {
   const [current, setCurrent] = useState(entries[0]?.id ?? "");
-  const rowRef = useRef<HTMLDivElement>(null);
   // While a jump is scrolling, the observer must not drag the mark back
   // through every section on the way.
   const jumping = useRef<number | null>(null);
 
   useEffect(() => {
     let frame = 0;
-    // The section being read is the last one whose heading has passed the
-    // upper third of the screen; once the page can scroll no further, the
-    // last section is, even if it is too short to reach that line.
+    // Once the page can scroll no further, the last section is the one being
+    // read, even if it is too short to reach that line.
     const measure = () => {
       frame = 0;
       if (jumping.current !== null) return;
@@ -49,16 +47,6 @@ export function SectionIndex({ entries, variant }: { entries: IndexEntry[]; vari
     };
   }, [entries]);
 
-  // Keep the marked chip in view as the row scrolls past it.
-  useEffect(() => {
-    if (variant !== "chips") return;
-    const chip = rowRef.current?.querySelector<HTMLElement>(`[data-id="${current}"]`);
-    const row = rowRef.current;
-    if (!chip || !row) return;
-    const left = chip.offsetLeft - row.clientWidth / 2 + chip.clientWidth / 2;
-    row.scrollTo({ left, behavior: "smooth" });
-  }, [current, variant]);
-
   function go(id: string) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -67,32 +55,57 @@ export function SectionIndex({ entries, variant }: { entries: IndexEntry[]; vari
     jumping.current = window.setTimeout(() => (jumping.current = null), 900);
     const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
-    // Land on the section for keyboard and screen-reader users too.
     el.setAttribute("tabindex", "-1");
     el.focus({ preventScroll: true });
   }
 
-  if (variant === "rail")
-    return (
-      <nav aria-label="Isi halaman" className="index-rail has-slide flex flex-col">
-        <SlideIndicator className="index-mark" watch={current} />
-        {entries.map((e) => (
-          <a
-            key={e.id}
-            href={`#${e.id}`}
-            data-slide-active={e.id === current}
-            aria-current={e.id === current ? "location" : undefined}
-            onClick={(ev) => {
-              ev.preventDefault();
-              go(e.id);
-            }}
-            className="index-link"
-          >
-            {e.label}
-          </a>
-        ))}
-      </nav>
-    );
+  return { current, go };
+}
+
+/** A link like /settings#struk: the sections above it are still loading when
+ * the browser first scrolls, so the target moves. Keep landing on it until the
+ * page settles (about 3 s) or the reader takes over by scrolling. */
+export function useHashLanding() {
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (!id) return;
+    const stop = () => window.clearInterval(timer);
+    const land = () => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const want = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+      if (Math.abs(top - want) > 4) window.scrollBy({ top: top - want, behavior: "auto" });
+    };
+    const timer = window.setInterval(land, 250);
+    const quit = window.setTimeout(stop, 3000);
+    const events = ["wheel", "touchstart", "keydown", "mousedown"] as const;
+    for (const e of events) window.addEventListener(e, stop, { once: true, passive: true });
+    land();
+    return () => {
+      stop();
+      window.clearTimeout(quit);
+      for (const e of events) window.removeEventListener(e, stop);
+    };
+  }, []);
+}
+
+/** A long page's contents as a row of chips that stays under the thumb on a
+ * narrow screen. On a wide one the same list lives in the sidebar
+ * (SettingsSubnav). It follows the reading: the section in view is the one
+ * marked (one pill that travels), and a tap goes straight there. */
+export function SectionIndex({ entries }: { entries: IndexEntry[] }) {
+  const { current, go } = useSectionSpy(entries);
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  // Keep the marked chip in view as the row scrolls past it.
+  useEffect(() => {
+    const chip = rowRef.current?.querySelector<HTMLElement>(`[data-id="${current}"]`);
+    const row = rowRef.current;
+    if (!chip || !row) return;
+    const left = chip.offsetLeft - row.clientWidth / 2 + chip.clientWidth / 2;
+    row.scrollTo({ left, behavior: "smooth" });
+  }, [current]);
 
   return (
     <nav aria-label="Isi halaman">

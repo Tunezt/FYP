@@ -2990,3 +2990,17 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Vision read of the new image (gemini-3.5-flash-lite): supplier "TOKO SUPPLY", 3 lines (Gula Aren 5 kg, Susu UHT 12 liter, Biji Arabica 2 kg), total 684000, confidence high.
 **Deviation:** none.
 **Next:** re-run the seed on live before the next presentation so the demo cafe carries the new supplier name.
+
+
+### [ui-settings-nav] Pengaturan section list moves from the right to the left sidebar
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** frontend/components/SettingsSubnav.tsx (new), frontend/lib/settings-sections.ts (new), frontend/components/SectionIndex.tsx (shared scroll-spy hook, `useHashLanding`, rail variant removed), frontend/app/(dashboard)/layout.tsx, frontend/app/(dashboard)/settings/page.tsx (right column removed, "Data di struk" moved after Printer), frontend/app/globals.css
+**Gates:** pytest 894 passed (846 in the full run + 48 re-run: the shared Postgres restarted mid-run and 30 tests errored with "database system is starting up"; the 6 affected files pass alone); alembic up/down/up ok; seed ok; `npm run build` ok. Backend untouched.
+**Notes:**
+- From 1280 px (xl, where the sidebar is the full panel) the 11 sections sit nested under "Pengaturan" in three groups (Usaha, Kasir, Data), the one being read is lit, a click scrolls and moves focus to it. The sidebar region scrolls on a short screen and brings the list up on open.
+- Below 1280 px (icon rail, tablet, phone) the sticky chip row stays at the top of the page, flat, in the same new order. 1024-1279 uses chips too: the sidebar is only an 84 px icon rail there.
+- Deep links (/settings#struk) now land: the browser's own jump missed because the sections above were still loading.
+- Content column widened from 48 to 56 rem.
+**Deviation:** the brief said nested list from 1024 px; the sidebar widens only at 1280, so 1024-1279 keeps chips.
+**Next:** [ui-struk-placeholders].
