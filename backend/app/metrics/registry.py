@@ -28,7 +28,7 @@ from typing import Any, Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.periods import PERIODS, period_range
+from app.ai.periods import PERIODS, pct_change, period_range, previous_range
 from app.models import Business
 
 UNITS = ("rupiah", "count", "pct", "qty", "days", "hour", "list")
@@ -284,3 +284,28 @@ async def compute(
     result.unit = spec.unit
     result.since, result.until, result.period, result.period_label = ctx.since, ctx.until, ctx.period, ctx.period_label
     return result
+
+
+@dataclass
+class Comparison:
+    """A metric for a period beside the same stretch of the one before it."""
+    current: MetricResult
+    previous: MetricResult | None   # None: the earlier stretch is empty (a day that has only just begun)
+    label: str                      # what the earlier stretch is, e.g. "periode sama bulan lalu"
+
+    @property
+    def pct(self) -> float | None:
+        return pct_change(self.current.value, self.previous.value) if self.previous else None
+
+
+async def compare_with_previous(
+    session: AsyncSession, business: Business, name: str, *, period: str, now: datetime | None = None,
+) -> Comparison:
+    """THE rule for "vs before", used by the dashboard tiles, the assistant's
+    tools and the daily summary: a period still running is set against the same
+    stretch of the previous one (1-24 Nov vs 1-24 Oct, today until now vs
+    yesterday until the same hour), never against the whole of it."""
+    current = await compute(session, business, name, period=period, now=now)
+    since, until, label = previous_range(period, business.timezone, now, business.day_start_hour)
+    previous = await compute(session, business, name, since=since, until=until) if until > since else None
+    return Comparison(current=current, previous=previous, label=label)

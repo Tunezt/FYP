@@ -100,3 +100,48 @@ def period_range(
         start, end, label = today, today + timedelta(days=1), "hari ini"
 
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc), label
+
+
+def _month_start(first_of_month: datetime) -> datetime:
+    """The 1st of the month before, at the same hour."""
+    return (first_of_month - timedelta(days=1)).replace(day=1)
+
+
+def previous_range(
+    period: str, tz_name: str, now: datetime | None = None, day_start_hour: int = 0
+) -> tuple[datetime, datetime, str]:
+    """The window a period should be compared against: (start_utc, end_utc, label).
+
+    A period still running is compared with the SAME stretch of the one before,
+    not all of it: 1-24 Nov against 1-24 Oct, today up to 10:00 against
+    yesterday up to 10:00. Setting 24 days of sales against a whole month reads
+    as a café in collapse (the Ringkasan said "-69,8%" on 24 Nov). A finished
+    period is compared with the whole period before it, equal length."""
+    tz = _zone(tz_name)
+    moment = now or datetime.now(timezone.utc)
+    start, end, _ = period_range(period, tz_name, moment, day_start_hour)
+    start_l, end_l = start.astimezone(tz), end.astimezone(tz)
+    elapsed = min(max(moment - start, timedelta(0)), end - start)
+
+    if period == "today":
+        prev = start_l - timedelta(days=1)
+        return prev.astimezone(timezone.utc), (prev + elapsed).astimezone(timezone.utc), "kemarin sampai jam yang sama"
+    if period == "this_week":
+        prev = start_l - timedelta(days=7)
+        return prev.astimezone(timezone.utc), (prev + elapsed).astimezone(timezone.utc), "periode sama minggu lalu"
+    if period == "this_month":
+        prev = _month_start(start_l)
+        return prev.astimezone(timezone.utc), min(prev + elapsed, start_l).astimezone(timezone.utc), "periode sama bulan lalu"
+    if period == "last_month":
+        prev = _month_start(start_l)
+        return prev.astimezone(timezone.utc), start, "dua bulan lalu"
+    length = end - start
+    return start - length, start, "periode sebelumnya"
+
+
+def pct_change(current, previous) -> float | None:
+    """Percent change, one decimal. None when there is no base to compare with.
+    Relative to |previous|, so a loss that halves reads as an improvement."""
+    if previous is None or float(previous) == 0:
+        return None
+    return round((float(current or 0) - float(previous)) / abs(float(previous)) * 100, 1)

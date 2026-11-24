@@ -14,6 +14,14 @@ class OverviewOut(BaseModel):
     month_revenue: float
     month_expenses: float
     month_net: float
+    # "vs before", from the metric layer's one rule: the same stretch of the
+    # previous period (yesterday until the same hour; 1-24 Oct for 1-24 Nov).
+    today_compare_revenue: float
+    today_delta_pct: float | None
+    today_compare_label: str
+    month_compare_net: float
+    month_net_delta_pct: float | None
+    month_compare_label: str
     unacknowledged_alerts: int
     low_stock_items: int
     onboarding_completed: bool

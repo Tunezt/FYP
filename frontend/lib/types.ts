@@ -6,6 +6,13 @@ export type Overview = {
   month_revenue: number;
   month_expenses: number;
   month_net: number;
+  // "vs before" as the server rules it: the same stretch of the previous period.
+  today_compare_revenue: number;
+  today_delta_pct: number | null;
+  today_compare_label: string;
+  month_compare_net: number;
+  month_net_delta_pct: number | null;
+  month_compare_label: string;
   unacknowledged_alerts: number;
   low_stock_items: number;
   onboarding_completed: boolean;

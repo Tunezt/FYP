@@ -58,6 +58,15 @@ async def test_the_showcase_has_every_alert_and_every_page_filled(session_factor
             assert await count(PrintDevice) == 0   # a printer's state is the live bridge's word, never seeded
             assert await count(Staff, Staff.is_active.is_(False)) == 1 and await count(Staff, Staff.role == "manager") == 1
             assert await count(Receipt, Receipt.embedding.is_not(None)) == len(NOTAS), "run scripts/demo_receipt_embeddings.py"
+            # "Untung bulan ini" must have a real base: last month has costs too, and the café is not collapsing.
+            from app.ai.periods import pct_change
+            from app.metrics import compare_with_previous
+            biz = await s.get(Business, bid)
+            rev = await compare_with_previous(s, biz, "revenue", period="this_month", now=today)
+            exp = await compare_with_previous(s, biz, "expense_total", period="this_month", now=today)
+            assert exp.previous.value > 0, "last month has no expenses: the profit comparison is against a free month"
+            net_change = pct_change(rev.current.value - exp.current.value, rev.previous.value - exp.previous.value)
+            assert net_change is not None and net_change > -30, f"{days_back} days back: profit {net_change}% vs the same days of last month"
         finally:
             await s.rollback()
     async with session_factory() as s:

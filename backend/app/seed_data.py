@@ -125,6 +125,19 @@ EXTRA_EXPENSES = [
     ("pemasaran", "Cetak flyer promo September: sisa stok voucher", 150000, 15),
 ]
 
+# Last month's spending, by day of that month: (category, description, amount, day). Without it
+# the P&L showed October with no costs at all, so "Untung bulan ini" fell 58 % against a month
+# that looked free. Roughly 62 % of the sales, like this month, with the rent on the 22nd.
+PRIOR_MONTH_EXPENSES = [
+    ("bahan baku", "Belanja biji kopi + gula mingguan", 1200000, 6),
+    ("operasional", "Gas 3kg x4", 80000, 9),
+    ("operasional", "Listrik & air bulan lalu", 700000, 12),
+    ("bahan baku", "Susu UHT 2 dus", 900000, 14),
+    ("lainnya", "Perbaikan kursi & meja", 300000, 18),
+    ("sewa", "Sewa ruko bulan lalu", 3500000, 22),
+    ("bahan baku", "Belanja akhir bulan", 800000, 27),
+]
+
 # Earlier nights' alerts the owner already read: (type, severity, days_ago, metric, message, details builder key)
 OLD_ALERTS = [
     ("supplier_price", "medium", 9, "supplier_price",

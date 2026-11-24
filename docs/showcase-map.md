@@ -12,7 +12,7 @@ What the history looks like (so you know what "normal" is): two months of sales,
 
 | Feature | Where to see it | What the supervisor should notice | Proves |
 |---|---|---|---|
-| Ringkasan: today, month profit, trend chart (4 ranges), low stock, alert card | Dashboard → Ringkasan; tap Hari Ini / Minggu Ini / Bulan Ini / Tahun Ini | Yesterday's spike on the chart; "vs bulan lalu" works because October is whole; Bubuk Matcha listed under Stok menipis; the alert card shows the four unread alerts | O3a |
+| Ringkasan: today, month profit, trend chart (4 ranges), low stock, alert card | Dashboard → Ringkasan; tap Hari Ini / Minggu Ini / Bulan Ini / Tahun Ini | Yesterday's spike on the chart; "vs periode sama bulan lalu" sets 1-N Nov against 1-N Oct (fin-fair-compare); today is set against yesterday up to the same hour; Bubuk Matcha listed under Stok menipis; the alert card shows the four unread alerts | O3a |
 | Penjualan: 7 / 30 / 90-day chart, history by day, filters | Dashboard → Penjualan | Each sale says who rang it and which regular bought ("oleh Dewi · Andi Wijaya"); daily "Pesanan 042" numbers; yesterday 55+ transactions | O3a, O3b |
 | Void / refund from the dashboard | Penjualan → "Batalkan atau kembalikan transaksi" | Needs the owner's or manager's PIN; leaves a reversing row, never deletes | O3a, O4a |
 | Stok: value, items needing attention, made-to-order | Dashboard → Stok | Es Kopi Susu / Cappuccino / Matcha / Teh Tarik / Nasi Goreng say "dibuat saat dipesan" with "±N porsi · terbatas: <bahan>"; Croissant and Pisang Goreng show pcs and a per-day rate; Bubuk Matcha is under minimum | O3a, O2d |
@@ -71,7 +71,7 @@ Send from 628115819400 (reply **demo** if the number also owns another café). E
 | get_shift_summary | `ada selisih kas di shift kemarin? siapa kasirnya?` | Sari short Rp 5.000, Dewi and Budi pas | O2a |
 | get_customer_summary | `siapa pelanggan yang paling sering datang? berapa poinnya?` | Andi Wijaya, visits and points | O2a |
 | get_promo_performance | `promo apa yang paling sering dipakai bulan ini?` | The Kopi Arabica BOGO and its count | O2a |
-| draft_purchase_order | `buatkan draft pesanan biji arabica 5 kg ke toko supply` | A draft PO for Toko Supply at the latest price (Rp 165.000/kg, subtotal Rp 825.000). The reply says to send it "dari dashboard (Stok › Pesanan pembelian)", but the dashboard has no purchase-order page yet (known gap: the PO list is the API only) | O2a |
+| draft_purchase_order | `buatkan draft pesanan biji arabica 5 kg ke toko supply` | A draft PO for Toko Supply at the latest price (Rp 165.000/kg, subtotal Rp 825.000). The reply says it is a draft only, to send to the supplier yourself (the dashboard has no purchase-order page: the PO list is the API only), and to photo the nota when the goods arrive (fin-po-link) | O2a |
 
 Purchase orders (no dashboard page; asked by WhatsApp or the API): 6 in every status: received (2), partially received (cups: 600 of 1.000 arrived), ordered (milk, due tomorrow), cancelled (eggs, "telur kosong"), draft (beans at the new price).
 

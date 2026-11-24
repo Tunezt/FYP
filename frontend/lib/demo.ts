@@ -412,6 +412,15 @@ function buildOverview(): Overview {
     month_revenue: thisMonth.revenue,
     month_expenses: thisMonth.expenses,
     month_net: thisMonth.net,
+    today_compare_revenue: dayRevenue(1),
+    today_delta_pct: dayRevenue(1) > 0 ? Math.round(((dayRevenue(0) - dayRevenue(1)) / dayRevenue(1)) * 1000) / 10 : null,
+    today_compare_label: "kemarin sampai jam yang sama",
+    month_compare_net: pnl[pnl.length - 2].net,
+    month_net_delta_pct:
+      Math.abs(pnl[pnl.length - 2].net) > 0
+        ? Math.round(((thisMonth.net - pnl[pnl.length - 2].net) / Math.abs(pnl[pnl.length - 2].net)) * 1000) / 10
+        : null,
+    month_compare_label: "periode sama bulan lalu",
     unacknowledged_alerts: ALERTS.filter((a) => !a.is_acknowledged).length,
     low_stock_items: items.filter((i) => i.below_reorder_threshold).length,
     onboarding_completed: true,

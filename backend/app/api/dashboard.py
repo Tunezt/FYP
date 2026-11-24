@@ -127,8 +127,16 @@ async def _business(ctx) -> Business:
 @router.get("/overview", response_model=OverviewOut)
 async def overview(ctx: OwnerCtx):
     business = await _business(ctx)
-    from app.metrics import compute
+    from app.ai.periods import pct_change
+    from app.metrics import compare_with_previous, compute
 
+    today_cmp = await compare_with_previous(ctx.session, business, "revenue", period="today")
+    month_rev_cmp = await compare_with_previous(ctx.session, business, "revenue", period="this_month")
+    month_exp_cmp = await compare_with_previous(ctx.session, business, "expense_total", period="this_month")
+    prev_net = (
+        float(month_rev_cmp.previous.value or 0) - float(month_exp_cmp.previous.value or 0)
+        if month_rev_cmp.previous and month_exp_cmp.previous else 0.0
+    )
     today_revenue = await compute(ctx.session, business, "revenue", period="today")
     today_tx = await compute(ctx.session, business, "transaction_count", period="today")
     yesterday_revenue = await compute(ctx.session, business, "revenue", period="yesterday")
@@ -149,6 +157,12 @@ async def overview(ctx: OwnerCtx):
         month_revenue=float(month_revenue.value or 0),
         month_expenses=float(month_expenses.value or 0),
         month_net=float(month_revenue.value or 0) - float(month_expenses.value or 0),
+        today_compare_revenue=float(today_cmp.previous.value or 0) if today_cmp.previous else 0.0,
+        today_delta_pct=today_cmp.pct,
+        today_compare_label=today_cmp.label,
+        month_compare_net=prev_net,
+        month_net_delta_pct=pct_change(float(month_revenue.value or 0) - float(month_expenses.value or 0), prev_net),
+        month_compare_label=month_rev_cmp.label,
         unacknowledged_alerts=int(unacked),
         low_stock_items=sum(1 for r in stock.rows if r["below_reorder_threshold"]),
         onboarding_completed=business.onboarding_completed_at is not None,

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.periods import business_day, period_range
 from app.core.config import DEMO_OWNER_PHONE, get_settings
-from app.metrics import compute
+from app.metrics import compare_with_previous, compute
 from app.models import Business
 from app.whatsapp.client import send_template, send_text
 
@@ -64,7 +64,9 @@ async def build_summary(session: AsyncSession, business: Business, now: datetime
 
     revenue, count = await _revenue_and_count(session, business, period="today", now=now)
     if count:
-        yest, _ = await _revenue_and_count(session, business, period="yesterday", now=now)
+        # Yesterday up to the same hour: the message goes out while the day is still running.
+        yest_cmp = await compare_with_previous(session, business, "revenue", period="today", now=now)
+        yest = yest_cmp.previous.value if yest_cmp.previous else 0
         avg = revenue / count
         lines = [
             f"📊 Ringkasan hari ini, {_DAYS[today.weekday()]} {_date(today)} ({business.name})",
@@ -72,7 +74,7 @@ async def build_summary(session: AsyncSession, business: Business, now: datetime
         ]
         change = _change(revenue, yest)
         if change:
-            lines.append(f"Dibanding kemarin: {change} (kemarin {rp(yest)}).")
+            lines.append(f"Dibanding kemarin jam yang sama: {change} ({rp(yest)}).")
         expense = await compute(session, business, "expense_total", period="today", now=now)
         profit = await compute(session, business, "net_profit", period="today", now=now)
         if expense.value:

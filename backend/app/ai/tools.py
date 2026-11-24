@@ -24,7 +24,7 @@ from google.genai import types
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.periods import PERIODS
+from app.ai.periods import PERIODS, pct_change, previous_range
 from app.metrics import compute
 from app.models import Business, Item
 
@@ -126,19 +126,22 @@ _PERIOD_PARAM = types.Schema(
 
 
 async def _sales_facts(
-    session: AsyncSession, business: Business, period: str
+    session: AsyncSession, business: Business, period: str, window: tuple | None = None
 ) -> dict:
     """Revenue, order count, units and top items for a named period — each one
     a registry metric (M9-T2). `transactions` counts orders (voids excluded),
-    which is what the word means; a one-line order reads exactly as before."""
+    which is what the word means; a one-line order reads exactly as before.
+    `window` = (since, until, label) replaces the period's own span, for the
+    earlier side of a fair comparison."""
     period = period if period in PERIODS else "today"
-    revenue = await compute(session, business, "revenue", period=period)
-    orders = await compute(session, business, "transaction_count", period=period)
-    units = await compute(session, business, "item_units_sold", period=period)
-    top = await compute(session, business, "top_items_by_revenue", period=period, limit=5)
+    where = {"since": window[0], "until": window[1]} if window else {"period": period}
+    revenue = await compute(session, business, "revenue", **where)
+    orders = await compute(session, business, "transaction_count", **where)
+    units = await compute(session, business, "item_units_sold", **where)
+    top = await compute(session, business, "top_items_by_revenue", limit=5, **where)
     return {
         "period": period,
-        "period_label": revenue.period_label,
+        "period_label": window[2] if window else revenue.period_label,
         "revenue": _num(revenue.value),
         "transactions": int(orders.value or 0),
         "units_sold": _num(units.value),
@@ -166,6 +169,10 @@ async def get_sales_summary(session: AsyncSession, business: Business, args: dic
     return await _sales_facts(session, business, args.get("period", "today"))
 
 
+# A period still running is compared with the same stretch of the one before.
+_FAIR_PAIRS = {("today", "yesterday"), ("this_week", "last_week"), ("this_month", "last_month")}
+
+
 @tool(
     types.FunctionDeclaration(
         name="compare_periods",
@@ -181,11 +188,22 @@ async def get_sales_summary(session: AsyncSession, business: Business, args: dic
     )
 )
 async def compare_periods(session: AsyncSession, business: Business, args: dict) -> dict:
-    a = await _sales_facts(session, business, args.get("period_a", "this_week"))
-    b = await _sales_facts(session, business, args.get("period_b", "last_week"))
+    pa, pb = args.get("period_a", "this_week"), args.get("period_b", "last_week")
+    window_a = window_b = None
+    if (pa, pb) in _FAIR_PAIRS:
+        window_b = previous_range(pa, business.timezone, None, business.day_start_hour)
+    elif (pb, pa) in _FAIR_PAIRS:
+        window_a = previous_range(pb, business.timezone, None, business.day_start_hour)
+    # A day that has only just begun has no earlier stretch to cut to: use the whole period.
+    window_a = window_a if window_a and window_a[1] > window_a[0] else None
+    window_b = window_b if window_b and window_b[1] > window_b[0] else None
+    a = await _sales_facts(session, business, pa, window_a)
+    b = await _sales_facts(session, business, pb, window_b)
     delta = (a["revenue"] or 0) - (b["revenue"] or 0)
-    pct = round(delta / b["revenue"] * 100, 1) if b["revenue"] else None
-    return {"period_a": a, "period_b": b, "revenue_delta": delta, "revenue_delta_pct": pct}
+    out = {"period_a": a, "period_b": b, "revenue_delta": delta, "revenue_delta_pct": pct_change(a["revenue"], b["revenue"])}
+    if window_a or window_b:
+        out["note"] = "the earlier period is cut to the same stretch as the running one, so the two are comparable"
+    return out
 
 
 @tool(

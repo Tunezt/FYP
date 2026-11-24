@@ -60,7 +60,7 @@ from app.models import (
     StockMovement,
 )
 from app.seed_data import (
-    CUSTOMERS, DEARER_FACTOR, DEARER_THIS_WEEK, EXTRA_EXPENSES, EXTRA_ITEMS, EXTRA_MENU_CATEGORIES,
+    CUSTOMERS, DEARER_FACTOR, PRIOR_MONTH_EXPENSES, DEARER_THIS_WEEK, EXTRA_EXPENSES, EXTRA_ITEMS, EXTRA_MENU_CATEGORIES,
     EXTRA_MODIFIERS, EXTRA_PREP_STATIONS, EXTRA_RECIPES, EXTRA_VARIANTS, HISTORY_DAYS, NOTAS, OLD_ALERTS,
     PURCHASE_ORDERS, RECEIPTS, STAFF_WEIGHTS, SUPPLIERS, VOID_NOTES, VOUCHER_USES,
 )
@@ -778,6 +778,18 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
                 session, business_id, amount=Decimal(amount), category=category,
                 description=description, source="manual", occurred_at=at_local(now, days_ago, 15),
             )
+
+        # Last month's costs, dated by the calendar so "this month vs the same days of last month"
+        # compares like with like on any day the demo is seeded.
+        local_today = now.astimezone(JAK).date()
+        last_month_first = (local_today.replace(day=1) - timedelta(days=1)).replace(day=1)
+        for category, description, amount, day in PRIOR_MONTH_EXPENSES:
+            days_ago = (local_today - last_month_first.replace(day=day)).days
+            if 0 < days_ago <= HISTORY_DAYS:
+                await record_expense(
+                    session, business_id, amount=Decimal(amount), category=category,
+                    description=description, source="manual", occurred_at=at_local(now, days_ago, 15),
+                )
 
         # Kitchen: everything from the last day is handed over except the three newest tickets.
         recent = sorted((o for o in order_rows if o.status == "completed" and o.sold_at >= now - timedelta(hours=24)),

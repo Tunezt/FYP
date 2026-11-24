@@ -75,10 +75,6 @@ export default function OverviewPage() {
   const ownerName = (staff.data ?? []).find((s) => s.role === "owner")?.name;
 
   const o = overview.data;
-  const todayDelta =
-    o && o.yesterday_revenue > 0
-      ? ((o.today_revenue - o.yesterday_revenue) / o.yesterday_revenue) * 100
-      : null;
 
   const visible = (trend.data ?? []).slice(-window);
   const previous = (trend.data ?? []).slice(0, window);
@@ -89,12 +85,6 @@ export default function OverviewPage() {
   const chartReady = visible.length >= 2;
 
   const months = pnl.data ?? [];
-  const thisMonth = months[months.length - 1];
-  const lastMonth = months[months.length - 2];
-  const profitDelta =
-    thisMonth && lastMonth && Math.abs(lastMonth.net) > 0
-      ? ((thisMonth.net - lastMonth.net) / Math.abs(lastMonth.net)) * 100
-      : null;
 
   const atRisk = (items.data ?? [])
     .filter((i) => i.below_reorder_threshold || (i.days_remaining !== null && i.days_remaining <= 3))
@@ -165,13 +155,13 @@ export default function OverviewPage() {
                 label="Penjualan hari ini"
                 help={
                   <HelpTip title="Penjualan hari ini">
-                    Semua transaksi dari layar kasir sejak tengah malam. Pembandingnya total
-                    penjualan kemarin seharian, jadi di pagi hari wajar masih terlihat turun.
+                    Semua transaksi dari layar kasir sejak tengah malam. Pembandingnya penjualan
+                    kemarin sampai jam yang sama, jadi angkanya adil di jam berapa pun dibuka.
                   </HelpTip>
                 }
                 value={<Figure value={o.today_revenue} />}
-                deltaPct={todayDelta}
-                deltaLabel="vs kemarin"
+                deltaPct={o.today_delta_pct}
+                deltaLabel="vs kemarin jam yang sama"
                 spark={days.map((d) => d.revenue)}
               />
               <StatCard
@@ -205,12 +195,13 @@ export default function OverviewPage() {
                   help={
                     <HelpTip title="Untung bulan ini">
                       Semua penjualan dikurangi pengeluaran yang tercatat (manual + dari foto
-                      nota). Makin rajin catat, makin akurat.
+                      nota). Dibandingkan dengan tanggal yang sama bulan lalu (misal 1-24 Nov
+                      lawan 1-24 Okt). Makin rajin catat, makin akurat.
                     </HelpTip>
                   }
                   value={<Figure value={o.month_net} />}
-                  deltaPct={profitDelta}
-                  deltaLabel="vs bulan lalu"
+                  deltaPct={o.month_net_delta_pct}
+                  deltaLabel="vs periode sama bulan lalu"
                   spark={months.map((m) => m.net)}
                 />
               </div>

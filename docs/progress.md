@@ -3027,3 +3027,27 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 **Gates:** fresh local DB: alembic up/down/up, seed, npm build, pytest 882 passed (render queue, one run, 653 s). First run hit a Postgres "out of memory" while a dev server ran beside it; re-run clean.
 **Notes:** "Lorem" remains only in migration 0052 (it must match the old strings) and in older entries of this file. No before screenshot: the old UI is gone from the tree; shots are in Documents/Side Project/FYP-shots-ui-struk-placeholders.
 **Deviation:** none. **Next:** run `alembic upgrade head` on live so Poernama stops printing the examples.
+
+### [fin-fair-compare] "vs before" compares the same stretch, from one place
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/ai/periods.py (`previous_range`, `pct_change`), backend/app/metrics/registry.py + __init__.py (`compare_with_previous`), backend/app/api/dashboard.py + schemas/dashboard.py (/api/overview carries the deltas), backend/app/ai/tools.py (`compare_periods`), backend/app/jobs/summary.py, backend/app/seed.py + seed_data.py (last month's costs), frontend/app/(dashboard)/overview/page.tsx, frontend/lib/types.ts, frontend/lib/demo.ts, backend/tests/test_periods.py, test_fair_compare.py (new), test_showcase_seed.py, docs/showcase-map.md
+**Gates:** pytest in 7 parts under the render lock, all passed (143 + 112 + 111 + 215 + 130 + 92 + 91; the 5 test_invariants cases need the seed and pass after it: 12 passed); alembic up/down/up ok; seed ok; npm run build ok.
+**Notes:**
+- Before: "Untung bulan ini Rp 4.403.000, -69,8% vs bulan lalu" set 24 days of November against all of October; "Penjualan hari ini" set today so far against all of yesterday. Evidence for the rule: Shopify and Stripe dashboards compare the same span.
+- Rule (one place, the metric layer): a running period meets the same stretch of the one before (1-24 Nov vs 1-24 Oct; today until now vs yesterday until the same hour; this week vs last week to the same moment). A finished period meets the whole period before. The dashboard tiles, the compare_periods tool (either order of this/last) and the daily summary use it; labels say so ("vs periode sama bulan lalu", "vs kemarin jam yang sama", "Dibanding kemarin jam yang sama").
+- Fixed-date test (24 Nov 10:00 WIB): November so far 450.000 is -10% against all of October (500.000) and +125% against 1-24 Oct (200.000).
+- Demo seed (local, 24 Nov 15:49): with the rule alone the profit tile still read -58,5% (4.486.000 vs 10.804.000), because the seed had no October expenses at all. The seed now writes last month's costs by calendar day (Rp 7,48 jt for the month, 6,68 jt by the 24th): 4.486.000 vs 4.124.000 = +8,8%. test_showcase_seed asserts last month has costs and profit is not below -30% on three seed days.
+- Today tile: 256.000 vs 787.000 yesterday until 15:49 = -67,5% (yesterday is the planted spike day, 1.413.000 whole).
+**Deviation:** seed data changed (not in the brief) because the fair comparison exposed a free October.
+**Next:** none.
+
+### [fin-po-link] The draft purchase order reply names no page that does not exist
+**Date:** 2026-11-24
+**Status:** done
+**Changed:** backend/app/ai/tools.py, backend/tests/test_bot_points_to_real_pages.py (new), docs/showcase-map.md
+**Gates:** same run as [fin-fair-compare].
+**Notes:**
+- The dashboard has no purchase-order page (the PO list is API only), so there was nothing real to point at. The reply now says it is a draft, to send to the supplier yourself, and to photo the nota when the goods arrive (stock on the Stok page rises). The test finds every "halaman X" and "A › B" in user-facing strings and checks X is a left-nav entry and B exists in that page's source.
+**Deviation:** none. A real purchase-order page remains a gap.
+**Next:** none.
