@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useMinWidth, useOwnerData, useOwnerMutation } from "@/lib/hooks";
 import { formatQty, formatRupiah } from "@/lib/format";
-import { PREP_STATION_LABEL, type InventoryItem, type PrepStation } from "@/lib/types";
+import { PREP_STATION_LABEL, runsOutBeforeDelivery, type InventoryItem, type PrepStation } from "@/lib/types";
 import { EmptyState, ErrorState, Glass, ItemIcon, MoneyInput, RowChevron, Sheet, Skeleton } from "@/components/ui";
 import { HelpTip } from "@/components/HelpTip";
 import { FormHint } from "@/components/FormHint";
@@ -36,7 +36,9 @@ const EMPTY_DRAFT: Draft = {
 function isAtRisk(item: InventoryItem): boolean {
   if (item.made_to_order) return item.servings_left === 0;
   return (
-    item.below_reorder_threshold || (item.days_remaining !== null && item.days_remaining <= 3)
+    item.below_reorder_threshold ||
+    (item.days_remaining !== null && item.days_remaining <= 3) ||
+    runsOutBeforeDelivery(item)
   );
 }
 
@@ -53,6 +55,7 @@ function riskPill(item: InventoryItem): { text: string; cls: string } {
   if (item.days_remaining !== null && item.days_remaining <= 3)
     return { text: `±${item.days_remaining} hari`, cls: "pill-warn" };
   if (item.below_reorder_threshold) return { text: "di bawah minimum", cls: "pill-warn" };
+  if (runsOutBeforeDelivery(item)) return { text: "habis sebelum kiriman", cls: "pill-warn" };
   return { text: "aman", cls: "pill-good" };
 }
 
@@ -417,11 +420,18 @@ function ItemRows({
                 <p className="truncate text-sm font-medium">{item.name}</p>
                 <p className="ink-faint truncate text-xs">
                   {Number(item.sell_price) > 0
-                    ? `jual ${formatRupiah(item.sell_price)}${item.menu_category ? ` · ${item.menu_category}` : ""} · ${item.prep_station ? PREP_STATION_LABEL[item.prep_station] : "tujuan belum diatur"}`
+                    ? `menu · jual ${formatRupiah(item.sell_price)}${item.menu_category ? ` · ${item.menu_category}` : ""} · ${item.prep_station ? PREP_STATION_LABEL[item.prep_station] : "tujuan belum diatur"}`
                     : "bahan baku"}
-                  {item.made_to_order && item.limiting_ingredient ? ` · terbatas: ${item.limiting_ingredient}` : ""}
-                  {!item.made_to_order && item.avg_daily_usage ? ` · ±${formatQty(Number(item.avg_daily_usage).toFixed(1))} ${item.unit}/hari` : ""}
                 </p>
+                {/* Its own line, never truncated: on a phone this is the part the
+                    owner came to read (which ingredient limits the item, the usage). */}
+                {(item.made_to_order && item.limiting_ingredient) || (!item.made_to_order && item.avg_daily_usage) ? (
+                  <p className="ink-faint text-xs">
+                    {item.made_to_order
+                      ? `terbatas bahan: ${item.limiting_ingredient}`
+                      : `±${formatQty(Number(item.avg_daily_usage).toFixed(1))} ${item.unit}/hari`}
+                  </p>
+                ) : null}
               </div>
               <div className="shrink-0 text-right">
                 {item.made_to_order ? (

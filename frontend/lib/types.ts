@@ -42,6 +42,7 @@ export type InventoryItem = {
   reorder_threshold: string;
   avg_daily_usage: number | null;
   days_remaining: number | null;
+  delivery_days?: number | null; // p2-5: the next-delivery horizon the Peringatan rule uses
   below_reorder_threshold: boolean;
   made_to_order?: boolean; // has a recipe: current_stock is not a figure; ingredients are
   servings_left?: number | null;
@@ -49,6 +50,17 @@ export type InventoryItem = {
   prep_station?: PrepStation | null; // prt-2: null = not decided yet
   menu_category?: string | null; // till-10: the till's and QR menu's section
 };
+
+/** Runs out before the next delivery: the same rule as the stock-out alert
+ * (days left < the item's typical delivery gap), so Stok and Peringatan agree. */
+export function runsOutBeforeDelivery(item: InventoryItem): boolean {
+  return (
+    !item.made_to_order &&
+    item.days_remaining != null &&
+    item.delivery_days != null &&
+    item.days_remaining < item.delivery_days
+  );
+}
 
 export type PrepStation = "bar" | "kitchen" | "none";
 export const PREP_STATION_LABEL: Record<PrepStation, string> = {

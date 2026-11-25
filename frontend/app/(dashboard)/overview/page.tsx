@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useOwnerData } from "@/lib/hooks";
 import { formatQty } from "@/lib/format";
-import type { AlertRow, InventoryItem, Overview, PnlMonth, StaffMember, TrendPoint } from "@/lib/types";
+import { runsOutBeforeDelivery, type AlertRow, type InventoryItem, type Overview, type PnlMonth, type StaffMember, type TrendPoint } from "@/lib/types";
 import { AlertIcon, EmptyState, ErrorState, Glass, ItemIcon, RowChevron, Segmented, SeverityBadge, Skeleton } from "@/components/ui";
 import {
   IconArrowDown,
@@ -26,10 +26,12 @@ import { TrendChart } from "@/components/charts";
 /** Reporting period for the "Tren penjualan" pane — the segmented control in
  * that pane's header, beside the chart it drives. */
 const PERIODS = [
-  { value: "today", label: "Hari Ini", days: 1 },
-  { value: "week", label: "Minggu Ini", days: 7 },
-  { value: "month", label: "Bulan Ini", days: 30 },
-  { value: "year", label: "Tahun Ini", days: 365 },
+  // p2-2: these are rolling windows ending today, not calendar weeks or months
+  // (the WhatsApp bot's "minggu ini" is the calendar week, Sen-Min), so they say so.
+  { value: "today", label: "Hari Ini", days: 1, prior: "kemarin" },
+  { value: "week", label: "7 Hari", days: 7, prior: "7 hari sebelumnya" },
+  { value: "month", label: "30 Hari", days: 30, prior: "30 hari sebelumnya" },
+  { value: "year", label: "365 Hari", days: 365, prior: "365 hari sebelumnya" },
 ] as const;
 type PeriodValue = (typeof PERIODS)[number]["value"];
 
@@ -87,7 +89,12 @@ export default function OverviewPage() {
   const months = pnl.data ?? [];
 
   const atRisk = (items.data ?? [])
-    .filter((i) => i.below_reorder_threshold || (i.days_remaining !== null && i.days_remaining <= 3))
+    .filter(
+      (i) =>
+        i.below_reorder_threshold ||
+        (i.days_remaining !== null && i.days_remaining <= 3) ||
+        runsOutBeforeDelivery(i),
+    )
     .sort((a, b) => Number(a.current_stock) - Number(b.current_stock));
   const unacked = (alerts.data ?? []).filter((a) => !a.is_acknowledged);
 
@@ -152,11 +159,17 @@ export default function OverviewPage() {
           {o ? (
             <div className="glass-card grid divide-y divide-[color:var(--hairline)] lg:grid-cols-3 lg:divide-x lg:divide-y-0">
               <StatCard
-                label="Penjualan hari ini"
+                label={
+                  <>
+                    Penjualan hari ini <span className="ink-faint font-normal">· sebelum pajak</span>
+                  </>
+                }
                 help={
                   <HelpTip title="Penjualan hari ini">
-                    Semua transaksi dari layar kasir sejak tengah malam. Pembandingnya penjualan
-                    kemarin sampai jam yang sama, jadi angkanya adil di jam berapa pun dibuka.
+                    Semua transaksi dari layar kasir sejak tengah malam, sebelum pajak (PB1). Riwayat
+                    transaksi di halaman Penjualan menampilkan yang dibayar pelanggan, sudah termasuk
+                    pajak, jadi angkanya bisa lebih besar. Pembandingnya penjualan kemarin sampai jam
+                    yang sama, jadi angkanya adil di jam berapa pun dibuka.
                   </HelpTip>
                 }
                 value={<Figure value={o.today_revenue} />}
@@ -168,8 +181,8 @@ export default function OverviewPage() {
                 label="Stok menipis"
                 help={
                   <HelpTip title="Stok menipis">
-                    Barang di bawah batas minimum, atau yang habis dalam ±3 hari kalau laju
-                    penjualan 14 hari terakhir bertahan.
+                    Barang di bawah batas minimum, yang habis dalam ±3 hari, atau yang habis
+                    sebelum kiriman berikutnya, kalau laju penjualan 14 hari terakhir bertahan.
                   </HelpTip>
                 }
                 value={
@@ -221,7 +234,7 @@ export default function OverviewPage() {
                   <p className="figure text-[2rem] md:text-[2.375rem]">
                     <Figure value={visibleTotal} />
                   </p>
-                  <Delta pct={trendDelta} label={`vs ${periodDef.label.toLowerCase()} sebelumnya`} />
+                  <Delta pct={trendDelta} label={`vs ${periodDef.prior}`} />
                 </div>
               ) : (
                 <Skeleton className="mt-2 h-10 w-52" />
@@ -256,7 +269,7 @@ export default function OverviewPage() {
                     onClick={() => setPeriod("week")}
                     className="btn-quiet shrink-0 px-4 py-2 text-sm"
                   >
-                    Lihat Minggu Ini
+                    Lihat 7 hari
                   </button>
                 )}
               </div>

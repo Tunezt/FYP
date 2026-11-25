@@ -78,7 +78,7 @@ def period_range(
         start, end, label = today - timedelta(days=1), today, "kemarin"
     elif period == "this_week":  # Monday-based, on the business day
         start = today - timedelta(days=today_date.weekday())
-        start, end, label = start, start + timedelta(days=7), "minggu ini"
+        start, end, label = start, start + timedelta(days=7), "minggu ini (Sen-Min)"
     elif period == "last_week":
         this_monday = today - timedelta(days=today_date.weekday())
         start, end, label = this_monday - timedelta(days=7), this_monday, "minggu lalu"

@@ -63,6 +63,7 @@ class InventoryItem(BaseModel):
     reorder_threshold: Decimal
     avg_daily_usage: float | None
     days_remaining: float | None
+    delivery_days: int | None = None  # p2-5: the stock-out alert's horizon; None = no daily usage
     below_reorder_threshold: bool
     made_to_order: bool = False       # P0-4: has a recipe, so current_stock is not a figure
     servings_left: int | None = None

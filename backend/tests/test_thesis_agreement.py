@@ -194,3 +194,5 @@ async def test_profit_tool_and_money_page_agree_and_stock_matches_the_registry(s
         registry = {r["name"]: r for r in (await compute(s, biz, "stock_days_remaining")).rows}
         assert by_name["Kopi Arabica"].days_remaining == registry["Kopi Arabica"]["days_remaining"]
         assert by_name["Kopi Arabica"].avg_daily_usage == registry["Kopi Arabica"]["daily_usage"]
+        # p2-5: Stok shows the delivery horizon Peringatan uses (default 7 days, no receipts)
+        assert by_name["Kopi Arabica"].delivery_days == 7 and by_name["Kopi Arabica"].days_remaining is not None

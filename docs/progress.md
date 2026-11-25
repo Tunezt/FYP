@@ -3065,3 +3065,12 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Kept on purpose because tests pin them: the OTP line, the single-alert template wording, "Terlaris: a (n), b (n)" inline, the "🏪 <cafe>" header line, and the refusal's comma list of capabilities.
 **Deviation:** none.
 **Next:** none.
+
+## p2-dash: dashboard and numbers polish (P2-3, P2-8, P2-14, N3, N4, N5)
+- Top items: ranked by units sold, ties by revenue (`top_items_by_revenue`), so the WhatsApp answer and the daily/weekly "Terlaris" line no longer list 17, 10, 12. The dashboard has no top-items list.
+- "Minggu ini": the overview chart control now says what it counts (Hari Ini / 7 Hari / 30 Hari / 365 Hari, rolling); the bot's calendar week is labelled "minggu ini (Sen-Min)".
+- Stok list: sellable rows read "menu · jual …", ingredients "bahan baku", the limiting ingredient "terbatas bahan: …" on its own line (no longer truncated at 390 px).
+- Ringkasan "Penjualan hari ini · sebelum pajak"; Penjualan page says the history totals are what customers paid, tax included.
+- Stok status uses the Peringatan rule: `/api/items` carries `delivery_days`; days left under it reads "habis sebelum kiriman", counts as "Perlu perhatian" and in Ringkasan "Stok menipis".
+- Gates: pytest 929 passed, 1 failed (`test_showcase_seed ... [2]`: profit -32.2% vs last month at 2 days back; fails identically on HEAD without these changes, date-dependent, not from this work); alembic up/down/up, `npm run build`, seed clean. Evidence: Documents/Side Project/FYP-showcase-evidence/p2.
+**Deviation:** none. **Next:** none.

@@ -16,7 +16,7 @@ export function StatCard({
   spark,
   footer,
 }: {
-  label: string;
+  label: React.ReactNode;
   help?: React.ReactNode;
   value: React.ReactNode;
   deltaPct?: number | null;

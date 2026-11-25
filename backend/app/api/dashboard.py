@@ -257,12 +257,16 @@ async def inventory(ctx: OwnerCtx):
     business = await _business(ctx)
     from app.metrics import compute
 
+    from app.jobs.rules import _typical_delivery_days
+
     reading = await compute(ctx.session, business, "stock_days_remaining")
     by_id = {r["item_id"]: r for r in reading.rows}
     items = (await ctx.session.execute(select(Item).order_by(Item.name))).scalars().all()
     out: list[InventoryItem] = []
     for item in items:
         r = by_id.get(item.id, {})
+        # The same horizon the Peringatan rule uses, so Stok and alerts agree.
+        horizon = await _typical_delivery_days(ctx.session, item.id) if r.get("days_remaining") is not None else None
         daily = r.get("daily_usage") or 0.0
         out.append(
             InventoryItem(
@@ -275,6 +279,7 @@ async def inventory(ctx: OwnerCtx):
                 reorder_threshold=item.reorder_threshold,
                 avg_daily_usage=round(daily, 3) if daily > 0 else None,
                 days_remaining=r.get("days_remaining"),
+                delivery_days=horizon,
                 below_reorder_threshold=bool(r.get("below_reorder_threshold", item.current_stock <= item.reorder_threshold)),
                 made_to_order=bool(r.get("made_to_order", False)),
                 servings_left=r.get("servings_left"),

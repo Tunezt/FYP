@@ -70,6 +70,7 @@ export default function SalesPage() {
         <Glass className="flex flex-col p-5 md:p-6 xl:order-2 xl:col-span-4">
           <h2 className="ink-soft text-sm font-medium">
             Total {trend.data ? trend.data.length : range} hari terakhir
+            <span className="ink-faint font-normal"> · sebelum pajak</span>
           </h2>
           {trend.data ? (
             <>
@@ -149,6 +150,9 @@ export default function SalesPage() {
             )}
           </h2>
         </div>
+        <p className="ink-faint mt-1 text-[13px]">
+          Total tiap struk dan tiap hari di bawah ini adalah yang dibayar pelanggan, sudah termasuk pajak.
+        </p>
         <HistoryFilters
           className="mt-3"
           optionLabel="Kasir"
