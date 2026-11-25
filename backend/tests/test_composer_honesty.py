@@ -20,3 +20,10 @@ def test_prompt_forbids_offering_actions_and_explaining_the_data():
 
 def test_prompt_separates_active_from_used_promos():
     assert "is_active` true means the promo IS running" in _prompt_for()
+
+
+def test_prompt_keeps_names_as_the_facts_spell_them():
+    """p2-14: the audit saw the recipe-cost reply call the ingredient "Biji Arabica"
+    by the menu item's name, "Kopi Arabica"."""
+    s = _prompt_for("modal kopi arabica berapa?")
+    assert "exactly as the FACTS" in s and "never called by the name of the menu item" in s

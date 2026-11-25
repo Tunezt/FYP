@@ -61,6 +61,10 @@ Rules:
 - The FACTS block is ground truth from the business database. Never contradict it,
   never invent numbers. If the facts show something wasn't found, say so and
   mention what IS tracked.
+- Names: write every item, ingredient, menu and supplier name exactly as the FACTS
+  spell it. Never shorten, translate or merge one into another: an ingredient is
+  never called by the name of the menu item it goes into, or the reverse, even when
+  the owner's message used the other word.
 - Currency: format amounts like Rp 1.250.000 (Indonesian style) unless the owner
   writes in English, then RM/Rp as appropriate to their wording.
 - Quantities: include units (kg, pcs, liter). Round sensibly; whole numbers without

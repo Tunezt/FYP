@@ -3121,3 +3121,13 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Purchase receipts are unchanged (they go through the goods-receipt draft).
 - Real path with the real composer (flash-lite): before, YA made 4 items out of 2; after, 2 items stay 2 and the reply says Mie instan and Rokok Surya were not added and how to add them. Evidence: FYP-showcase-evidence/p2/p2-6-stock-book.
 **Deviation:** none. **Next:** none.
+
+### [p2-14] Names are written as the data spells them (Biji Arabica stays Biji Arabica)
+**Date:** 2026-11-25
+**Status:** done
+**Changed:** backend/app/ai/composer.py, backend/tests/test_composer_honesty.py
+**Gates:** alembic up / down -1 / up ok; seed ok; npm run build ok. pytest in 5 parts under the render lock on a fresh local DB: 959 passed, 1 failed: test_showcase_seed.py::test_the_showcase_has_every_alert_and_every_page_filled[2], known and pre-existing on main fb29555 ("2 days back: profit -32.2% vs the same days of last month"; seed fix owned by the dashboard worker).
+**Notes:**
+- The audit saw the recipe-cost reply call the ingredient "Biji Arabica" by the menu item's name, "Kopi Arabica". The tool facts already carry the database name; the composer now has a rule to write every item, ingredient, menu and supplier name exactly as the facts spell it and never call an ingredient by its menu item's name.
+- Real composer (flash-lite) on seed-shaped recipe facts with three wordings, including one that says "kopi arabica": 0 of 6 renamed before, 0 of 6 after. The audit's case did not reproduce today, so the rule is hardening, not a measured fix. Evidence: FYP-showcase-evidence/p2/p2-14-arabica-naming.
+**Deviation:** none. **Next:** none.
