@@ -181,8 +181,8 @@ async def test_every_sales_metric_on_the_known_day(session_factory, day):
         assert units.value == D("7.000") and [(r["name"], r["quantity"]) for r in units.rows] == [("Roti", 4.0), ("Kopi", 3.0)]
         assert (await _value(s, c, "item_units_sold", item_id=c["roti"])).value == D("4.000")
         top = await _value(s, c, "top_items_by_revenue")
-        assert [(r["name"], r["revenue"]) for r in top.rows] == [("Kopi", 60000.0), ("Roti", 60000.0)] or \
-               [(r["name"], r["revenue"]) for r in top.rows] == [("Roti", 60000.0), ("Kopi", 60000.0)]
+        # p2-1: best sellers by units sold (Roti 4 before Kopi 3), though revenue ties
+        assert [(r["name"], r["quantity"], r["revenue"]) for r in top.rows] == [("Roti", 4.0, 60000.0), ("Kopi", 3.0, 60000.0)]
         margin = await _value(s, c, "top_items_by_margin")
         assert [(r["name"], r["gross_profit"]) for r in margin.rows] == [("Kopi", 36000.0), ("Roti", 36000.0)] or \
                [(r["name"], r["gross_profit"]) for r in margin.rows] == [("Roti", 36000.0), ("Kopi", 36000.0)]

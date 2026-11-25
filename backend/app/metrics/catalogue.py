@@ -165,13 +165,13 @@ async def item_units_sold(session: AsyncSession, ctx: MetricContext) -> MetricRe
     return MetricResult(name="item_units_sold", unit="qty", value=Decimal(total).quantize(Decimal("0.001")), rows=rows)
 
 
-@metric("top_items_by_revenue", description_id="Barang dengan penjualan tertinggi dalam periode",
-        description_en="Items ranked by revenue in the period", unit="list")
+@metric("top_items_by_revenue", description_id="Barang terlaris dalam periode: urut jumlah terjual, seri diurut omzet (rows memuat jumlah dan omzet)",
+        description_en="Best sellers in the period: ranked by units sold, ties by revenue (rows carry both)", unit="list")
 async def top_items_by_revenue(session: AsyncSession, ctx: MetricContext) -> MetricResult:
     rows = (await session.execute(
         select(Item.id, Item.name, func.sum(Sale.quantity).label("qty"), func.sum(Sale.total_price).label("amount"))
         .join(Item, Item.id == Sale.item_id).where(*_in_window(ctx))
-        .group_by(Item.id, Item.name).order_by(desc("amount")).limit(ctx.limit)
+        .group_by(Item.id, Item.name).order_by(desc("qty"), desc("amount")).limit(ctx.limit)
     )).all()
     return MetricResult(name="top_items_by_revenue", unit="list", rows=[
         {"item_id": iid, "name": name, "quantity": float(q), "revenue": float(_money(a))} for iid, name, q, a in rows
