@@ -2,13 +2,14 @@
 
 The demo runs on the live business **Poernama Demo** (invented data, never the real restaurant), owned by the developer's own WhatsApp number. Written for the FYP presentation of 26 Nov 2026; every figure below is what the seed produces.
 
-## Before the demo (do this the evening before, ~15 min)
+## Before the demo (the evening before, ~5 min)
 
 1. **Re-seed the live demo** so the dates move up to now, the alerts exist and today has sales (the owner runs this in PowerShell, with `DATABASE_URL` from `backend/.env.production`):
    `python -m app.seed --phone 0811… --name "Poernama Demo" --owner "Pemilik" --yes`
-   The run ends with `Nightly pass: 5 alert(s) ready: ['anomaly', 'margin_drop', 'stockout_risk', 'supplier_price', 'void_rate']` (it takes a few minutes on the live database: two months of sales). The seed now fills every page and every bot tool, not only this script's path: `docs/showcase-map.md` is the guide to all of it. Each run makes a new business id, so log in again afterwards.
-2. **Send the staged receipt once, now.** From the demo number on WhatsApp send `docs/demo-receipt-toko-supply.jpg` (Toko Supply: Gula Aren 5 kg, Susu UHT 12 liter, Biji Arabica 2 kg, total Rp 684.000), then reply **YA** (the very first send: no warning). This is what makes Act 2's duplicate warning appear (the same photo is sent again there). The receipt-history question (Act 2) no longer depends on it: the seed already holds four photographed receipts with their search vectors, two of them from Toko Supply. The seed itself never calls Gemini (the vectors were made once, by `scripts/demo_receipt_embeddings.py`); this one photo is the only setup that does.
-3. The WhatsApp number is on two cafes (the family restaurant and the demo): the first message gets a list "Balas angka atau nama usahanya". Reply **demo**. `ganti toko` switches back.
+   The run ends with `Nightly pass: 5 alert(s) ready: ['anomaly', 'margin_drop', 'stockout_risk', 'supplier_price', 'void_rate']` (it takes a few minutes on the live database: two months of sales). The seed now fills every page and every bot tool, not only this script's path: `docs/showcase-map.md` is the guide to all of it.
+   **Nothing to do after it (p2-reseed).** The demo keeps its business id and its staff ids, so a dashboard or till session that was open stays logged in, and the WhatsApp cafe pick carries over. The seed also saves the staged receipt `docs/demo-receipt-toko-supply.jpg` (Toko Supply, printed 20/11/2026: Gula Aren 5 kg, Susu UHT 12 liter, Biji Arabica 2 kg, total Rp 684.000) exactly as the owner's photo + YA would: stored photo, receipt, stock in, expense and search vector (one Gemini embedding call, the only one the seed makes). Its output says `Staged receipt saved: Toko Supply Rp 684.000, 3 line(s) into stock`. That receipt is what makes Act 2's duplicate warning appear (the same photo is sent again there). If a line starts with `WARNING:`, read it: a failed photo upload is covered (the receipt keeps the dashboard's bundled copy of the photo); a missing search vector means re-run the seed once Gemini answers.
+2. (Gone: sending the staged receipt by hand. The seed does it.)
+3. The WhatsApp number is on two cafes (the family restaurant and the demo). Only if the bot answers with the list "Balas angka atau nama usahanya" (the number last picked the restaurant), reply **demo**. `ganti toko` switches back.
 4. Gemini: use the billed key (the free tier allows only a few requests a minute and a few a day, enough for rehearsal but not for a live room). Space the bot questions a few seconds apart.
 5. Open: dashboard `poernama-zeta.vercel.app/login` (owner number + PIN `1234`; or the WhatsApp code), the kiosk tab (Settings → Layar kasir), and WhatsApp on the phone.
 
@@ -62,6 +63,6 @@ On WhatsApp (owner phone), send in sequence:
 
 ## Reset between rehearsals
 
-Re-run the seed command from "Before the demo" (wipes and recreates the demo café, new business id), then re-send the staged receipt once and reply YA. Local rehearsal without the live site: `cd backend && python -m app.seed` creates **Poernama** (owner 0812-000-1111).
+Re-run the seed command from "Before the demo" (wipes and refills the demo café under the same business id, staged receipt included); nothing else. Local rehearsal without the live site: `cd backend && python -m app.seed` creates **Poernama** (owner 0812-000-1111).
 
 To re-trigger the first-run tour: `update businesses set onboarding_completed_at = null where name = 'Poernama Demo';`

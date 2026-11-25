@@ -15,17 +15,24 @@ and WhatsApp tool has something real to show (docs/showcase-map.md says where):
 - the nightly pass run once, so all five alert rules have fired; plus older alerts
   the owner already read
 
-Idempotent: re-running deletes and recreates the demo business (cascade), so
-its dates move up to today. Re-run it before each presentation.
+Idempotent: re-running wipes and refills the demo business (cascade), so its
+dates move up to today. Re-run it before each presentation. The business keeps
+its id, and the owner and staff keep theirs (p2-reseed): a dashboard or till
+session open before the re-seed still works after it, and the WhatsApp cafe
+pick, extra owner numbers, till pairing and bound tablet carry over.
 
 A demo on a real number (the FYP presentation, 26 Nov 2026):
   python -m app.seed --phone 0811... --name "Poernama Demo" --owner "Pemilik" --yes
 It refuses when the number owns any other cafe, so it can only ever replace
 its own demo business. Being an extra assistant number elsewhere is fine.
 
-Never calls Gemini or WhatsApp. Receipt embeddings come from
+Never calls WhatsApp. Receipt embeddings come from
 app/seed_receipt_embeddings.json (made once by scripts/demo_receipt_embeddings.py);
-a receipt whose text changed has none, and the seed says so.
+a receipt whose text changed has none, and the seed says so. Run from the command
+line it also saves docs/demo-receipt-toko-supply.jpg as if the owner had sent it
+and replied YA (stored photo, receipt, goods receipt, expense): that one receipt
+costs one Gemini embedding call, and if storage or the embedding fails the seed
+still finishes and says what to do.
 
 **Development only.** It refuses to run with ENVIRONMENT=production, and asks
 before touching any database that is not on this machine, because deleting and
@@ -62,7 +69,7 @@ from app.models import (
 from app.seed_data import (
     CUSTOMERS, DEARER_FACTOR, PRIOR_MONTH_EXPENSES, DEARER_THIS_WEEK, EXTRA_EXPENSES, EXTRA_ITEMS, EXTRA_MENU_CATEGORIES,
     EXTRA_MODIFIERS, EXTRA_PREP_STATIONS, EXTRA_RECIPES, EXTRA_VARIANTS, HISTORY_DAYS, NOTAS, OLD_ALERTS,
-    PURCHASE_ORDERS, RECEIPTS, STAFF_WEIGHTS, SUPPLIERS, VOID_NOTES, VOUCHER_USES,
+    PURCHASE_ORDERS, RECEIPTS, STAFF_WEIGHTS, STAGED_RECEIPT, SUPPLIERS, VOID_NOTES, VOUCHER_USES,
 )
 from app.services.catalog import (
     create_modifier, create_modifier_group, create_variant, ensure_default_variant, set_recipe_line,
@@ -164,6 +171,11 @@ EXPENSES = [
 ] + EXTRA_EXPENSES
 
 EMBEDDINGS_FILE = Path(__file__).with_name("seed_receipt_embeddings.json")
+STAGED_PHOTO = Path(__file__).resolve().parents[2] / "docs" / "demo-receipt-toko-supply.jpg"
+# What a re-seed keeps of the business row (p2-reseed): the id every owner and till token carries,
+# the till pairing they were issued under, the WhatsApp cafe pick and extra numbers, the bound tablet.
+KEPT_ON_RESEED = ("id", "pairing_generation", "extra_owner_numbers", "active_owner_numbers",
+                  "till_device_lock", "till_device_hash", "till_device_bound_at")
 JAK = ZoneInfo("Asia/Jakarta")
 TWO = Decimal("0.01")
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -231,10 +243,58 @@ def embedding_for(text_: str) -> list[float] | None:
     return json.loads(EMBEDDINGS_FILE.read_text(encoding="utf-8")).get(hashlib.sha256(text_.encode()).hexdigest())
 
 
+async def stage_demo_receipt(business_id: uuid.UUID, now: datetime) -> list[str]:
+    """Saves docs/demo-receipt-toko-supply.jpg the way the owner's photo + YA on WhatsApp saves it:
+    the photo uploaded to storage, then the same draft and confirm as the YA (receipt row, goods
+    receipt with the stock in, the expense, the search vector). Returns the warnings, if any."""
+    from app.ai.vision import normalize_parse
+    from app.services.invoice_draft import build_draft, confirm_draft
+    from app.services.receipts import image_hash
+    from app.whatsapp import storage
+
+    parsed = normalize_parse(json.loads(json.dumps(STAGED_RECEIPT)))   # a fresh copy: the confirm stores it
+    if date.fromisoformat(parsed["date"]) > now.astimezone(JAK).date():
+        return []   # the photo's printed date has not come yet on the day being seeded
+    try:
+        photo = STAGED_PHOTO.read_bytes()
+    except OSError as exc:
+        return [f"staged receipt NOT saved: {exc}; send the photo from the demo WhatsApp number and reply YA"]
+    parsed["image_sha256"] = image_hash(photo)
+    # The dashboard also ships this photo (frontend/public/demo-receipts), so the receipt keeps its
+    # thumbnail when the bucket is unreachable or this machine has no storage credentials.
+    bundled = f"{storage.DEMO_PREFIX}{STAGED_PHOTO.name}"
+    warnings = []
+    if storage._dry_run():
+        image_path = bundled
+    else:
+        try:
+            image_path = await storage.upload_receipt_image(business_id, photo, "image/jpeg")
+        except Exception as exc:
+            image_path = bundled
+            warnings.append(f"the staged receipt's photo upload failed ({type(exc).__name__}: {exc}); "
+                            "the receipt is saved with the dashboard's bundled copy of the photo")
+    async with tenant_session(business_id) as session:
+        business = await session.get(Business, business_id)
+        draft = await build_draft(session, business, parsed)
+        facts = await confirm_draft(session, business, draft, image_path, parsed)
+        receipt = await session.get(Receipt, uuid.UUID(facts["receipt_id"]))
+        embedded = receipt.embedding is not None
+    total = f"{int(parsed['total_amount']):,}".replace(",", ".")
+    print(f"Staged receipt saved: Toko Supply Rp {total}, {len(draft['matched'])} line(s) into stock")
+    if draft["questions"]:
+        warnings.append(f"staged receipt saved, but {len(draft['questions'])} line(s) matched no item: {draft['questions']}")
+    if not embedded:
+        warnings.append("staged receipt saved WITHOUT its search vector (the Gemini embedding call failed, see the log "
+                        "above): the receipt question will not find it. Re-run the seed when Gemini answers.")
+    return warnings
+
+
 async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: str = "Poernama",
-               owner_name: str = "Ibu Diah", today: datetime | None = None) -> list[str]:
+               owner_name: str = "Ibu Diah", today: datetime | None = None, stage_receipt: bool = False) -> list[str]:
     """Returns the alert types the nightly pass wrote. `today` is for tests: the demo as it would
-    look on another day (the weekday pattern changes, the alert rules must still all fire)."""
+    look on another day (the weekday pattern changes, the alert rules must still all fire).
+    `stage_receipt` also saves the staged Toko Supply receipt (one Gemini embedding call); the
+    command line turns it on."""
     guard_demo_data(confirm)
     try:
         phone = clean_owner_number(phone)
@@ -246,10 +306,22 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
 
     async with plain_session() as session:
         existing = await demo_business_to_replace(session, phone, business_name)
-        if existing:
-            await session.delete(existing)  # cascades to all business data
-            await session.flush()
+        kept = {col: getattr(existing, col) for col in KEPT_ON_RESEED} if existing else {}
+    kept_staff: dict = {}   # "owner" or a cashier's name -> the id their till/dashboard session carries
+    if kept:
+        async with tenant_session(kept["id"]) as session:
+            for sid, sname, role in (await session.execute(select(Staff.id, Staff.name, Staff.role))).all():
+                kept_staff["owner" if role == "owner" else sname] = sid
+
+    def same_id(key: str) -> dict:
+        return {"id": kept_staff[key]} if key in kept_staff else {}
+
+    async with plain_session() as session:
+        if kept:
+            # Cascades to all business data; the row comes back below under the same id.
+            await session.execute(delete(Business).where(Business.id == kept["id"]))
         business = Business(
+            **kept,
             name=business_name,
             business_type="cafe",
             owner_phone=phone,
@@ -275,11 +347,11 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
         business_id = business.id
 
     async with tenant_session(business_id) as session:
-        owner = Staff(business_id=business_id, name=owner_name, role="owner", phone=phone, pin_hash=hash_pin("1234"))
-        sari = Staff(business_id=business_id, name="Sari", pin_hash=hash_pin("2345"))
-        budi = Staff(business_id=business_id, name="Budi", pin_hash=hash_pin("3456"))
-        dewi = Staff(business_id=business_id, name="Dewi", role="manager", pin_hash=hash_pin("4567"))
-        rudi = Staff(business_id=business_id, name="Rudi", pin_hash=hash_pin("5678"), is_active=False)  # left in October
+        owner = Staff(**same_id("owner"), business_id=business_id, name=owner_name, role="owner", phone=phone, pin_hash=hash_pin("1234"))
+        sari = Staff(**same_id("Sari"), business_id=business_id, name="Sari", pin_hash=hash_pin("2345"))
+        budi = Staff(**same_id("Budi"), business_id=business_id, name="Budi", pin_hash=hash_pin("3456"))
+        dewi = Staff(**same_id("Dewi"), business_id=business_id, name="Dewi", role="manager", pin_hash=hash_pin("4567"))
+        rudi = Staff(**same_id("Rudi"), business_id=business_id, name="Rudi", pin_hash=hash_pin("5678"), is_active=False)  # left in October
         session.add_all([owner, sari, budi, dewi, rudi])
         await session.flush()
         by_staff = {"owner": owner, "Sari": sari, "Budi": budi, "Dewi": dewi}
@@ -861,6 +933,9 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
             read_first.is_acknowledged = True
     print(f"Nightly pass: {len(written)} alert(s) ready: {fired}")
     print(f"Voids by Budi: {voids['n']} | embeddings missing: {missing_embeddings} of {len(nota_receipts)} receipts")
+    if stage_receipt:   # after the seed, as the owner's photo came after it
+        for warning in await stage_demo_receipt(business_id, now):
+            print(f"WARNING: {warning}")
 
     print(f"Seeded '{business_name}' (business_id={business_id})")
     print(f"Owner phone {phone} | owner PIN 1234 | Sari 2345 | Budi 3456 | Dewi (manager) 4567")
@@ -875,6 +950,7 @@ if __name__ == "__main__":
     parser.add_argument("--owner", default="Ibu Diah", help="the demo owner's name")
     args = parser.parse_args()
     try:
-        asyncio.run(seed(confirm=args.yes, phone=args.phone, business_name=args.name, owner_name=args.owner))
+        asyncio.run(seed(confirm=args.yes, phone=args.phone, business_name=args.name, owner_name=args.owner,
+                         stage_receipt=True))
     except ProductionRefusal as exc:
         raise SystemExit(f"Refused: {exc}")

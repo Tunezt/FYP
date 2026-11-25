@@ -82,6 +82,18 @@ NOTAS = [
     ("nota-pak-udin", "Pak Udin Sayur", "2026-11-17", 7, [("Telur Ayam", 4, "kg", 28000)], "hand"),
     ("nota-toko-supply-2", "Toko Supply", "2026-11-22", 11, [("Bubuk Matcha", 1, "kg", 320000)], "hand"),
 ]
+# p2-reseed: docs/demo-receipt-toko-supply.jpg as the vision step reads it. The owner used to send this
+# photo from WhatsApp and reply YA after every re-seed (the receipt question and Act 2's duplicate warning
+# need it); `python -m app.seed` now saves it through that same YA path. Act 2 sends the photo again.
+STAGED_RECEIPT = {
+    "document_type": "receipt", "supplier": "Toko Supply", "date": "2026-11-20",
+    "items": [
+        {"name": "Gula Aren", "quantity": 5, "unit": "kg", "unit_price": 38000, "line_total": 190000},
+        {"name": "Susu UHT", "quantity": 12, "unit": "liter", "unit_price": 17000, "line_total": 204000},
+        {"name": "Biji Arabica", "quantity": 2, "unit": "kg", "unit_price": 145000, "line_total": 290000},
+    ],
+    "total_amount": 684000, "confidence": "high", "ambiguities": [],
+}
 NOTA_ADDRESS = {
     "Toko Supply": "Pasar Anyar Blok C-4",
     "Grosir Barokah": "Jl. Melati No. 12",
