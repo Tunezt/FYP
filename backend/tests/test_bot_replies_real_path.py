@@ -90,3 +90,16 @@ async def test_p2_1_an_out_of_scope_question_gets_the_whole_grouped_menu(cafe, s
     declared = [d.name for d in tools_module.TOOL_DECLARATIONS]
     assert all(CAPABILITIES[n]["id"] in reply for n in declared)       # 15 of 15, not 8
     assert "- *Penjualan:*" in reply and "- *Stok:*" in reply and "- *Belanja:*" in reply and "- *Kirim:*" in reply
+
+
+async def test_p2_2_a_drifting_model_answer_reaches_the_phone_with_one_emoji(cafe, sent):
+    call = SimpleNamespace(name="get_sales_summary", args={"period": "today"})
+    drift = "Siap Boss! Penjualan hari ini *Rp 1.250.000* 🎉🎉\n\n- 42 transaksi 🔥\n⚠️ Stok gula tipis 😅"
+    with (
+        gateway(),
+        patch("app.ai.router.force_tool_call", new=AsyncMock(return_value=call)),
+        patch("app.ai.router.compose_reply", new=AsyncMock(return_value=drift)) as compose,
+    ):
+        await processor.process_webhook_payload(_text(cafe.owner_phone, "penjualan hari ini?"))
+    assert compose.await_count == 1
+    assert sent == ["Siap! Penjualan hari ini *Rp 1.250.000* 🎉\n\n- 42 transaksi\n⚠️ Stok gula tipis"]

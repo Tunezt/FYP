@@ -28,6 +28,25 @@ _STRIKE2 = re.compile(r"~~(?=\S)(.+?)(?<=\S)~~")
 _LINK = re.compile(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)")
 _RUPIAH = re.compile(r"\bRp\.?\s*(\d[\d.,]*\d|\d)")
 
+# One emoji with its skin tone, variation selector and ZWJ joins. Arrows, "•",
+# "·", "…" and "—" are not emoji and never match.
+_E = "[\U0001F000-\U0001FAFF☀-➿⭐⭕⌚⌛⏩-⏺]"
+_EMOJI = re.compile(f"{_E}[\U0001F3FB-\U0001F3FF]?️?(?:‍{_E}[\U0001F3FB-\U0001F3FF]?️?)*")
+_MARKER = re.compile(r"^\s*(?:- )?" + _EMOJI.pattern)
+# A title or nickname used to address the owner ("Siap Boss!", "Halo Kak, ...",
+# "oke bos."): only after a greeting or reply word, a comma or at a line start, and
+# only when it closes the phrase, so an item named "Roti Gan" or "Kopi Bos Besar" stays.
+_NICKNAME = re.compile(
+    r"(?:(?P<word>\b(?:siap|halo|hai|hi|hello|oke|ok|okay|baik|makasih|kasih|thanks|ya|yah|iya|nih|dong|deh|sip"
+    r"|mantap|pagi|siang|sore|malam|nah|wah)),?|,|^)[ \t]*(?:boss?(?:ku)?|kak(?:ak)?|gan|bro|sis)"
+    r"(?=[ \t]*[!?.]|[ \t]*$|,)(?P<comma>,[ \t]*)?",
+    re.I | re.M,
+)
+
+
+def _no_nickname(m: re.Match) -> str:
+    return (m["word"] or "") + (", " if m["word"] and m["comma"] else "")
+
 
 def _rupiah_number(n: str) -> str:
     """'1250000' / '1,250,000' / '1.250.000,00' -> '1.250.000'. Anything else (a
@@ -71,6 +90,32 @@ def _segment(text: str) -> str:
     return "\n".join(x for x in (_line(l) for l in text.split("\n")) if x is not None)
 
 
+def _one_emoji(text: str) -> str:
+    """P2-2, one voice: an emoji that starts a line is a marker (the cafe header
+    🏪, ✅/❓ per line of a receipt read-back, ⚠️ on a warning) and stays. Of the
+    rest, the decoration, a message keeps only its first."""
+    kept = False
+    out = []
+    for line in text.split("\n"):
+        head = ""
+        if m := _MARKER.match(line):
+            head, line = m[0], line[m.end():]
+
+        def drop(e: re.Match) -> str:
+            nonlocal kept
+            if kept:
+                return ""
+            kept = True
+            return e[0]
+
+        body = _EMOJI.sub(drop, line)
+        if body != line:
+            body = re.sub(r"(?<=\S) {2,}", " ", body).rstrip()
+            body = re.sub(r" +([!?.,])", r"\1", body)
+        out.append(head + body)
+    return "\n".join(out)
+
+
 def to_whatsapp(text: str) -> str:
     """The text as WhatsApp should show it. Code fences are left untouched."""
     if not text:
@@ -80,4 +125,4 @@ def to_whatsapp(text: str) -> str:
     out = _segment(pieces[0])
     for fence, piece in zip(fences, pieces[1:]):
         out += fence + _segment(piece)
-    return re.sub(r"\n{3,}", "\n\n", out).strip("\n")
+    return _one_emoji(_NICKNAME.sub(_no_nickname, re.sub(r"\n{3,}", "\n\n", out).strip("\n")))

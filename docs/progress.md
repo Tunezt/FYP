@@ -3085,3 +3085,14 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Now: every tool, one line per group (*Penjualan*, *Stok*, *Belanja*) plus a *Kirim* line for what the owner can send (receipt photo, stock-book photo, stock Excel, menu photo captioned "menu"); 8 lines in all, Indonesian in the bot's own "aku" voice. Malay and English follow the same layout. Still assembled from the phrase table, no model call, no figure.
 - Real path (process_webhook_payload, gateway captured): the reply lists 15 of 15. Evidence: Documents/Side Project/FYP-showcase-evidence/p2/p2-1-refusal-menu (before.png, after.png).
 **Deviation:** none. **Next:** none.
+
+### [p2-2] One voice on every reply: "aku"/"kamu", no Boss or Kak, one decorative emoji
+**Date:** 2026-11-25
+**Status:** done
+**Changed:** backend/app/ai/composer.py (VOICE_RULE), backend/app/ai/router.py (clarify text gets the same rule), backend/app/whatsapp/markup.py (one-emoji and nickname pass in the shared formatter), backend/tests/test_bot_voice.py (new), backend/tests/test_bot_replies_real_path.py
+**Gates:** alembic up / down -1 / up ok; seed ok; npm run build ok. pytest in 5 parts under the render lock on a fresh local DB: 952 passed, 1 failed: test_showcase_seed.py::test_the_showcase_has_every_alert_and_every_page_filled[2], known and pre-existing on main fb29555 ("2 days back: profit -32.2% vs the same days of last month"; seed fix owned by the dashboard worker).
+**Notes:**
+- The audit saw "Boss", "Kak" and "bos" in one chat and emoji varying per reply. Two layers now: the composer and the classifier's clarify text share one voice rule (the cafe's own friendly assistant, "aku"/"kamu", no title or nickname, no "Siap!" opener), and the formatter in front of every send enforces what can be enforced without a model: at most one decorative emoji per message, and "Boss/bos/Kak/Gan/Bro/Sis" dropped where they address the owner (after a greeting or reply word, a comma, or at a line start; a name like "Roti Gan" or "Kopi Bos Besar" stays).
+- An emoji that starts a line is a marker, not decoration, and stays: the 🏪 cafe header, ✅/❓ per line of the receipt read-back the demo shows, ⚠️ on the duplicate warning. A test checks every fixed text in app/ is already within the rule.
+- Real model (gemini-3.5-flash-lite, 5 prompts before and after): before, the greeting said "Ada yang bisa saya bantu"; after, "aku". No nickname in either run. Evidence: FYP-showcase-evidence/p2/p2-2-voice (stubbed drifting answer through the real path + the real greeting) and p2-2-voice-model (all 5 real replies, JSON).
+**Deviation:** none. **Next:** none.

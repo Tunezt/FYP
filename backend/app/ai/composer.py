@@ -39,7 +39,7 @@ You are texting with the owner. Compose ONE short WhatsApp reply.
 
 Rules:
 - {language_rule}
-- Sound like a capable human assistant texting: warm, direct, no corporate tone.
+- {voice_rule}
 - Layout for a busy owner reading on a phone:
   * The FIRST LINE answers the question in one short, complete sentence that names
     what was asked about, with the key figure in bold: e.g. "Stok <item> masih
@@ -56,8 +56,8 @@ Rules:
     figures, always with their unit (*5 kg*, *Rp 180.000*), never a bare digit;
     _italic_ for a side note. Never **double asterisks**, never # headings, never
     [text](link), never tables: WhatsApp shows those literally.
-  * Emoji: at most one, as a marker at the start of a line (⚠️ for a warning, ✅ for
-    done), never as decoration at the end.
+  * Emoji: at most one in the whole reply, as a marker at the start of a line (⚠️ for
+    a warning, ✅ for done), never as decoration at the end.
 - The FACTS block is ground truth from the business database. Never contradict it,
   never invent numbers. If the facts show something wasn't found, say so and
   mention what IS tracked.
@@ -80,6 +80,16 @@ Rules:
 """
 
 
+# P2-2: one voice on every reply, whichever path wrote it (the classifier's
+# clarify text uses the same rule). The audit saw "Boss", "Kak" and "bos" in one chat.
+VOICE_RULE = (
+    "Voice: the cafe's own friendly assistant, warm and direct, never corporate. In "
+    "Indonesian call yourself \"aku\" and the owner \"kamu\"; in English, \"I\" and \"you\". "
+    "Never address the owner with a title or nickname (no Boss, bos, Kak, Bapak, Ibu, Anda, "
+    "Bro, Sis), and never open with an exclamation like \"Siap!\" or \"Wah!\"."
+)
+
+
 def _language_rule(message: str, default: str) -> str:
     detected = detect_language(message)
     if detected == "English":
@@ -99,6 +109,7 @@ async def compose_reply(
         business_name=business.name,
         business_type=business.business_type,
         language_rule=_language_rule(user_message, business.language_preference),
+        voice_rule=VOICE_RULE,
     )
     prompt = (
         f"Owner's message: {user_message}\n\n"

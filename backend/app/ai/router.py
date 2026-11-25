@@ -17,7 +17,7 @@ from google.genai import types
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai import tools as tools_module
-from app.ai.composer import compose_reply
+from app.ai.composer import VOICE_RULE, compose_reply
 from app.ai.gemini import force_tool_call
 from app.ai.refusal import looks_like_a_figure, refusal_reply
 from app.models import Business
@@ -42,7 +42,10 @@ CLARIFY = types.FunctionDeclaration(
         properties={
             "reply": types.Schema(
                 type=types.Type.STRING,
-                description="The clarification or greeting to send, in the owner's language.",
+                description=(
+                    "The clarification or greeting to send, in the owner's language, short, "
+                    "with at most one emoji. " + VOICE_RULE
+                ),
             )
         },
         required=["reply"],
