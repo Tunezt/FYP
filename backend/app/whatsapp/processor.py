@@ -9,28 +9,22 @@ Pipeline per message:
 """
 import logging
 import time
-from collections import OrderedDict
 from datetime import timedelta, timezone
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
 from app.ai.gemini import QuotaExhausted
 from app.core.db import plain_session, tenant_session
-from app.models import Business, RequestLog
+from app.models import Business, ProcessedMessage, RequestLog
 from app.whatsapp.client import normalize_phone, send_text
 
 logger = logging.getLogger("processor")
 
-# Meta redelivers webhooks it thinks failed; a small LRU of seen message ids
-# keeps a retry from double-running a stock correction or double-replying.
-_seen_ids: OrderedDict[str, None] = OrderedDict()
-_SEEN_MAX = 2048
-
-
 # fin-n2-photo-before-pick: a photo from a number on several cafes arrives before
 # a cafe is picked. One per number is kept (the latest) and read right after the
-# pick; it expires after 15 minutes. In memory like the dedupe above: a restart
-# inside those minutes loses it, and the owner just resends.
+# pick; it expires after 15 minutes. In memory: a restart inside those minutes
+# loses it, and the owner just resends.
 _PHOTO_WAIT_SECONDS = 15 * 60
 _held_photos: dict[str, tuple[float, dict]] = {}
 
@@ -42,13 +36,22 @@ def _take_held_photo(phone: str) -> tuple[float, dict] | None:
     return held
 
 
-def _already_processed(message_id: str) -> bool:
-    if message_id in _seen_ids:
-        return True
-    _seen_ids[message_id] = None
-    if len(_seen_ids) > _SEEN_MAX:
-        _seen_ids.popitem(last=False)
-    return False
+async def _already_processed(message_id: str) -> bool:
+    """Meta and the gateway redeliver a webhook they think failed. Each message id
+    is claimed in processed_messages before it is handled (p2-12); a redelivery,
+    even after a restart, finds the id taken and is skipped. One atomic insert, so
+    two deliveries racing each other cannot both win."""
+    async with plain_session() as session:
+        claimed = (
+            await session.execute(
+                insert(ProcessedMessage)
+                .values(message_id=message_id)
+                .on_conflict_do_nothing(index_elements=["message_id"])
+                .returning(ProcessedMessage.message_id)
+            )
+        ).scalar_one_or_none()
+    # shortcut: rows are never pruned (one short row per inbound message); add a nightly delete past 30 days if it grows.
+    return claimed is None
 
 
 async def process_webhook_payload(payload: dict) -> None:
@@ -135,7 +138,7 @@ async def _resolve_business(sender: str, text: str | None = None) -> tuple[Busin
 async def _process_message(message: dict, held_since: float | None = None) -> None:
     """`held_since` is set when a photo held before the cafe pick is read again."""
     message_id = message.get("id", "")
-    if held_since is None and message_id and _already_processed(message_id):
+    if held_since is None and message_id and await _already_processed(message_id):
         logger.info("Skipping duplicate webhook delivery %s", message_id)
         return
 

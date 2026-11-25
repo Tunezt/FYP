@@ -3,6 +3,7 @@ through process_webhook_payload (owner lookup, pending check, router, the
 formatter in send_text) against the local database, with the model call
 stubbed and the gateway's HTTP call captured, never sent.
 """
+import asyncio
 import json
 import os
 import uuid
@@ -103,3 +104,36 @@ async def test_p2_2_a_drifting_model_answer_reaches_the_phone_with_one_emoji(caf
         await processor.process_webhook_payload(_text(cafe.owner_phone, "penjualan hari ini?"))
     assert compose.await_count == 1
     assert sent == ["Siap! Penjualan hari ini *Rp 1.250.000* 🎉\n\n- 42 transaksi\n⚠️ Stok gula tipis"]
+
+
+async def test_p2_12_a_redelivered_message_is_answered_once_even_after_a_restart(session_factory, cafe, sent):
+    import importlib
+
+    from sqlalchemy import select, text
+
+    from app.models import ProcessedMessage, RequestLog
+
+    message_id = f"wamid.p2-12-{uuid.uuid4().hex}"
+    call = SimpleNamespace(name="clarify", args={"reply": "Halo! Mau cek apa hari ini?"})
+    with gateway(), patch("app.ai.router.force_tool_call", new=AsyncMock(return_value=call)) as router:
+        await processor.process_webhook_payload(_text(cafe.owner_phone, "halo", message_id))
+        importlib.reload(processor)   # what a restart or a deploy does to anything kept in memory
+        await processor.process_webhook_payload(_text(cafe.owner_phone, "halo", message_id))
+        # Two deliveries racing each other: still one answer.
+        racing = f"wamid.p2-12-{uuid.uuid4().hex}"
+        await asyncio.gather(*(processor.process_webhook_payload(_text(cafe.owner_phone, "halo", racing)) for _ in range(2)))
+    assert router.await_count == 2 and len(sent) == 2
+    async with session_factory() as s:
+        claimed = (await s.execute(select(ProcessedMessage.message_id).where(ProcessedMessage.message_id.in_([message_id, racing])))).scalars().all()
+        await s.execute(text("select set_config('app.current_business_id', :b, true)"), {"b": str(cafe.id)})
+        logs = (await s.execute(select(RequestLog).where(RequestLog.business_id == cafe.id))).scalars().all()
+    assert sorted(claimed) == sorted([message_id, racing])
+    assert len(logs) == 2   # one request log per message, not per delivery
+
+
+async def test_p2_12_a_new_message_id_is_still_answered(cafe, sent):
+    call = SimpleNamespace(name="clarify", args={"reply": "Halo!"})
+    with gateway(), patch("app.ai.router.force_tool_call", new=AsyncMock(return_value=call)):
+        await processor.process_webhook_payload(_text(cafe.owner_phone, "halo"))
+        await processor.process_webhook_payload(_text(cafe.owner_phone, "halo"))
+    assert sent == ["Halo!", "Halo!"]

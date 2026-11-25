@@ -348,6 +348,18 @@ class LoginOtp(Base):
     created_at: Mapped[datetime] = _now()
 
 
+class ProcessedMessage(Base):
+    """One row per inbound WhatsApp message id, claimed before the message is
+    handled, so a redelivery is skipped even after a restart (migration 0053,
+    p2-12). Claimed before the sender is matched to a cafe, so not
+    business-scoped and no RLS, like login_otps. Holds no content."""
+
+    __tablename__ = "processed_messages"
+
+    message_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    received_at: Mapped[datetime] = _now()
+
+
 # ── Roadmap v2 tables (docs/BUILD-ROADMAP.md §5) ──────────────────────────────
 
 

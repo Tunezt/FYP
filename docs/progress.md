@@ -3096,3 +3096,16 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - An emoji that starts a line is a marker, not decoration, and stays: the 🏪 cafe header, ✅/❓ per line of the receipt read-back the demo shows, ⚠️ on the duplicate warning. A test checks every fixed text in app/ is already within the rule.
 - Real model (gemini-3.5-flash-lite, 5 prompts before and after): before, the greeting said "Ada yang bisa saya bantu"; after, "aku". No nickname in either run. Evidence: FYP-showcase-evidence/p2/p2-2-voice (stubbed drifting answer through the real path + the real greeting) and p2-2-voice-model (all 5 real replies, JSON).
 **Deviation:** none. **Next:** none.
+
+### [p2-12] A redelivered WhatsApp message is answered once, even after a restart (0053)
+**Date:** 2026-11-25
+**Status:** done
+**Changed:** backend/alembic/versions/0053_processed_messages.py (new), backend/app/models/models.py + __init__.py (ProcessedMessage), backend/app/whatsapp/processor.py, backend/tests/test_bot_replies_real_path.py
+**Gates:** alembic up / down -1 / up ok (0053 dropped and recreated); seed ok; npm run build ok. pytest in 5 parts under the render lock on a fresh local DB: 954 passed, 1 failed: test_showcase_seed.py::test_the_showcase_has_every_alert_and_every_page_filled[2], known and pre-existing on main fb29555 ("2 days back: profit -32.2% vs the same days of last month"; seed fix owned by the dashboard worker).
+**Notes:**
+- Before: seen message ids lived in an in-memory LRU, so a webhook redelivered after a restart or deploy ran again (a stock correction twice, a question answered twice).
+- Now each message id is claimed in `processed_messages` (message_id primary key, received_at) by one `insert … on conflict do nothing returning` before the message is handled; a taken id is skipped. Two deliveries racing each other: one wins (tested with asyncio.gather).
+- Not business-scoped, like login_otps: the claim happens before the sender is matched to a cafe. Holds no content and no phone. RLS explicitly disabled in the migration; the RLS invariant scans business_id tables only, so its allowlist is unchanged. Railway runs `alembic upgrade head` on start, so live gets the table on deploy.
+- Rows are never pruned (shortcut comment in processor): one short row per inbound message.
+- Real path: first delivery answered, the same id after `importlib.reload(processor)` (a restart) gets no reply and no second request log. Evidence: FYP-showcase-evidence/p2/p2-12-dedup.
+**Deviation:** none. **Next:** none.

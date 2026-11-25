@@ -17,6 +17,7 @@ from app.models.models import (  # noqa: F401
     PrintJob,
     PrintDevice,
     LoginOtp,
+    ProcessedMessage,
     MetricBaseline,
     Modifier,
     ModifierGroup,
