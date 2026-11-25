@@ -195,7 +195,7 @@ async def _process_message(message: dict, held_since: float | None = None) -> No
     try:
         if msg_type == "text":
             raw_query = message.get("text", {}).get("body", "")
-            intent, reply = await _handle_text(business, raw_query)
+            intent, reply = await _handle_text(business, raw_query, phone=normalize_phone(sender))
         elif msg_type == "image":
             intent, reply = await _handle_image(business, message)
         elif msg_type == "document":
@@ -293,7 +293,8 @@ def _confirmation_prompt(parsed: dict, new_items: list[str] = ()) -> str:
     )
 
 
-async def _handle_text(business: Business, text: str) -> tuple[str, str]:
+async def _handle_text(business: Business, text: str, phone: str | None = None) -> tuple[str, str]:
+    """`phone`: the sender, whose last turns with this cafe resolve follow-ups (p2-9)."""
     from app.ai.composer import compose_reply
     from app.ai.router import handle_text as route_text
     from app.ai.vision import revise_parse
@@ -380,7 +381,12 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
                 )
             # Unrelated → keep the pending and answer normally below.
 
-        routed = await route_text(session, business, text)
+        from app.ai import memory
+
+        key = memory.chat_key(phone, business.id) if phone else None
+        routed = await route_text(session, business, text, history=memory.recent(key) if key else None)
+        if key and routed.tool:
+            memory.remember(key, text, routed.tool, routed.args, routed.reply)
         return routed.intent, routed.reply
 
 

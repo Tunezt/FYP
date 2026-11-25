@@ -11,7 +11,7 @@ data cannot answer — handled deterministically from a phrase table, in the
 owner's language, offering what the assistant can answer instead.
 """
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from google.genai import types
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai import tools as tools_module
 from app.ai.composer import VOICE_RULE, compose_reply
 from app.ai.gemini import force_tool_call
+from app.ai.memory import with_history
 from app.ai.refusal import looks_like_a_figure, refusal_reply
 from app.models import Business
 
@@ -82,21 +83,45 @@ opinion or outside fact, choose out_of_scope — never invent a figure.
 Choose clarify only for greetings and messages that are genuinely unclear."""
 
 
+# p2-9: shown only when earlier turns are passed in (app/ai/memory.py).
+_FOLLOW_UP_RULE = """
+
+Earlier turns of this chat may come before the current message. Use them only
+when the current message is a follow-up that leaves something out ("kalau minggu
+lalu?", "kalau croissant?", "yang tadi berapa?", "and yesterday?"): keep what the
+follow-up does not change (the function, the item, the period) and change what it
+names. A message that is complete on its own is routed on its own."""
+
+
 @dataclass
 class RoutedReply:
     intent: str
     reply: str
+    tool: str = ""
+    args: dict = field(default_factory=dict)
 
 
 def _declarations() -> list[types.FunctionDeclaration]:
     return [*tools_module.TOOL_DECLARATIONS, OUT_OF_SCOPE, CLARIFY]
 
 
-async def handle_text(session: AsyncSession, business: Business, text: str) -> RoutedReply:
+async def handle_text(
+    session: AsyncSession, business: Business, text: str, history: list[dict] | None = None
+) -> RoutedReply:
+    """`history`: the chat's last turns (app/ai/memory.py), for follow-ups."""
     system = _CLASSIFIER_SYSTEM.format(
         business_name=business.name, business_type=business.business_type
     )
-    call = await force_tool_call(system=system, message=text, tools=_declarations())
+    if history:
+        system += _FOLLOW_UP_RULE
+    call = await force_tool_call(system=system, message=with_history(text, history or []), tools=_declarations())
+    routed = await _answer(session, business, text, call)
+    if call is not None:
+        routed.tool, routed.args = call.name, dict(call.args or {})
+    return routed
+
+
+async def _answer(session: AsyncSession, business: Business, text: str, call) -> RoutedReply:
 
     if call is not None and call.name == "out_of_scope":
         # Deterministic: no model writes this reply, so it cannot carry a figure.
