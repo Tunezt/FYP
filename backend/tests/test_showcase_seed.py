@@ -2,8 +2,8 @@
 
 The nightly rules (margin drop, stock-out, void rate, supplier price, takings) depend on
 weekday patterns and thresholds, so a seed that fired all five today could fire four next
-Wednesday. This seeds the demo as if it were three different days and checks the whole
-showcase each time: all five alert types, both read and unread, and the data behind every
+Wednesday. This seeds the demo as if it were each day of the last two months and checks the
+whole showcase each time: all five alert types, both read and unread, and the data behind every
 page. Needs the local Postgres (roadmap §2). No skip marker.
 """
 from datetime import datetime, timedelta, timezone
@@ -15,7 +15,7 @@ from app.models import (
     Alert, Approval, Business, Customer, GoodsReceipt, Order, PointsMovement, PrintDevice, PromoApplication,
     PurchaseOrder, Receipt, Shift, Staff, Supplier, Voucher,
 )
-from app.seed import EMBEDDINGS_FILE, nota_parsed, seed
+from app.seed import EMBEDDINGS_FILE, JAK, nota_parsed, seed
 from app.seed_data import NOTAS
 from tests.test_service_journey import engine, session_factory  # noqa: F401 (fixtures)
 
@@ -30,7 +30,9 @@ async def _scoped(session_factory, bid):
     return s, session
 
 
-@pytest.mark.parametrize("days_back", [0, 2, 5])
+# Every day of the last two months: two month starts, a 31st and every weekday, so no calendar
+# day tells a different story (seeded as of 23 Nov, the profit once read -32 %).
+@pytest.mark.parametrize("days_back", range(63))
 async def test_the_showcase_has_every_alert_and_every_page_filled(session_factory, days_back):
     today = datetime.now(timezone.utc) - timedelta(days=days_back)
     fired = await seed(confirm=True, phone=PHONE, business_name=NAME, owner_name="Pemilik", today=today)
@@ -44,7 +46,8 @@ async def test_the_showcase_has_every_alert_and_every_page_filled(session_factor
         try:
             assert set(fired) == ALERT_TYPES, f"{days_back} days back: {fired}"
             assert await count(Alert, Alert.is_acknowledged.is_(True)) >= 3 and await count(Alert, Alert.is_acknowledged.is_(False)) >= 4
-            assert await count(Supplier) == 5 and await count(Receipt) == len(NOTAS)
+            taken = [n for n in NOTAS if nota_parsed(n)[1] <= today]   # a photo dated after the seeded day is not there yet
+            assert await count(Supplier) == 5 and await count(Receipt) == len(taken)
             statuses = set((await s.execute(select(PurchaseOrder.status))).scalars().all())
             assert statuses == {"draft", "ordered", "partially_received", "received", "cancelled"}
             assert await count(GoodsReceipt) >= 10
@@ -57,8 +60,8 @@ async def test_the_showcase_has_every_alert_and_every_page_filled(session_factor
             assert await count(Order, Order.status == "open") == 2   # two guests waiting from the table QR
             assert await count(PrintDevice) == 0   # a printer's state is the live bridge's word, never seeded
             assert await count(Staff, Staff.is_active.is_(False)) == 1 and await count(Staff, Staff.role == "manager") == 1
-            assert await count(Receipt, Receipt.embedding.is_not(None)) == len(NOTAS), "run scripts/demo_receipt_embeddings.py"
-            # "Untung bulan ini" must have a real base: last month has costs too, and the café is not collapsing.
+            assert await count(Receipt, Receipt.embedding.is_not(None)) == len(taken), "run scripts/demo_receipt_embeddings.py"
+            # "Untung bulan ini" must have a real base (last month has costs too) and be UP on any day: the café is not collapsing.
             from app.ai.periods import pct_change
             from app.metrics import compare_with_previous
             biz = await s.get(Business, bid)
@@ -66,7 +69,7 @@ async def test_the_showcase_has_every_alert_and_every_page_filled(session_factor
             exp = await compare_with_previous(s, biz, "expense_total", period="this_month", now=today)
             assert exp.previous.value > 0, "last month has no expenses: the profit comparison is against a free month"
             net_change = pct_change(rev.current.value - exp.current.value, rev.previous.value - exp.previous.value)
-            assert net_change is not None and net_change > -30, f"{days_back} days back: profit {net_change}% vs the same days of last month"
+            assert net_change is not None and net_change >= 0, f"{days_back} days back: profit {net_change}% vs the same days of last month"
         finally:
             await s.rollback()
     async with session_factory() as s:
@@ -74,6 +77,19 @@ async def test_the_showcase_has_every_alert_and_every_page_filled(session_factor
         if row:
             await s.delete(row)
         await s.commit()
+
+
+def test_by_any_day_of_the_month_last_month_had_spent_at_least_as_much():
+    """The twin rule behind "Untung bulan ini" going up on any day (seed_data.PRIOR_MONTH_EXPENSES)."""
+    from app.seed import EXPENSES
+    from app.seed_data import PRIOR_MONTH_EXPENSES
+
+    this_month = [(day, amount) for _c, _d, amount, day in EXPENSES]
+    this_month += [(nota_parsed(n)[1].astimezone(JAK).day, nota_parsed(n)[2]) for n in NOTAS]
+    last_month = [(day, amount) for _c, _d, amount, day in PRIOR_MONTH_EXPENSES]
+    for day in range(1, 32):
+        spent, spent_before = (sum(a for d, a in costs if d <= day) for costs in (this_month, last_month))
+        assert spent <= spent_before, f"by the {day}th this month spent {spent}, last month only {spent_before}"
 
 
 def test_the_stored_receipt_vectors_match_the_receipt_text():

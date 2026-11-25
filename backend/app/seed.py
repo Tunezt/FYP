@@ -151,11 +151,15 @@ ITEMS = [
     ("Susu UHT", "liter", 24, 17000, 0, 10, 0),
 ] + EXTRA_ITEMS
 
+# This month's costs: (category, description, amount, day of the month). Each one, and each nota in
+# seed_data.NOTAS, has a twin on the same day of last month that is at least as large
+# (PRIOR_MONTH_EXPENSES), so "Untung bulan ini" is up on whatever day the demo is seeded.
 EXPENSES = [
-    ("bahan baku", "Belanja biji kopi + gula mingguan", 1450000, 6),
-    ("operasional", "Listrik & air bulan ini", 850000, 12),
+    ("operasional", "Galon air minum + es batu", 45000, 1),
     ("bahan baku", "Susu UHT 2 dus", 408000, 3),
+    ("bahan baku", "Belanja biji kopi + gula mingguan", 750000, 6),
     ("operasional", "Gas 3kg x4", 88000, 9),
+    ("operasional", "Listrik & air bulan ini", 850000, 10),
     ("lainnya", "Service mesin espresso", 350000, 18),
 ] + EXTRA_EXPENSES
 
@@ -393,6 +397,8 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
         for nota in NOTAS:
             fname, sname, _d, _h, nlines, _style = nota
             parsed, when, total = nota_parsed(nota)
+            if when > now:   # a photo dated after the day being seeded does not exist yet
+                continue
             receipt = Receipt(
                 business_id=business_id, image_url=f"demo/{fname}.jpg", parsed_data=parsed, supplier=sname,
                 total_amount=total, occurred_at=when, created_at=when,
@@ -477,6 +483,11 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
                 return None
             return rng.choices([c for c, _w in pool], weights=[w for _c, w in pool])[0]
 
+        try:   # the same date last month (none on the 31st after a 30-day month)
+            month_ago_date = (local_now.date().replace(day=1) - timedelta(days=1)).replace(day=local_now.day)
+        except ValueError:
+            month_ago_date = None
+        today_takings = month_ago_takings = Decimal(0)
         for day_offset in range(HISTORY_DAYS, -1, -1):   # 0 = today, up to the current hour (audit P1-5)
             day = now - timedelta(days=day_offset)
             local_date = day.astimezone(JAK).date()
@@ -488,7 +499,11 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
             if day_offset == 0:
                 open_hours = min(max(local_now.hour - 6, 0), 14)   # the café trades 07:00-20:59
                 n_sales = round(n_sales * open_hours / 14)
-            for _ in range(n_sales):
+            sold = 0
+            # Today also sells at least what the same date last month had sold by this hour, so on the 1st
+            # (one part-day against one part-day, a Sunday against a Tuesday) the month still reads as growing.
+            while sold < n_sales or (day_offset == 0 and today_takings < month_ago_takings):
+                sold += 1
                 item, _w = rng.choices(sellable, weights=[w for _, w in sellable])[0]
                 qty = Decimal(rng.choices([1, 1, 1, 2], weights=[6, 6, 6, 2])[0])
                 # Business hours in the café's own timezone (07:00–20:59 WIB),
@@ -547,6 +562,11 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
                     voucher_total = Decimal(voucher.value) if voucher.kind == "amount_off" else min(
                         (base_amount * Decimal(voucher.value)).quantize(TWO), Decimal(voucher.max_discount or base_amount))
                 total = subtotal - promo_total - voucher_total
+                if status == "completed":
+                    if day_offset == 0:
+                        today_takings += total
+                    elif local_date == month_ago_date and local_sold.time() < local_now.time():
+                        month_ago_takings += total
                 order_type = rng.choices(["dine_in", "takeaway", "delivery"], weights=[5, 4, 1])[0]
                 method = rng.choices(["cash", "qris"], weights=[7, 3])[0]
                 order = Order(
@@ -773,23 +793,26 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
                              memo=f"poin pelanggan {_day.isoformat()}", posted_at=posted_at)
 
         # Expenses go through the one writer (M6-T6), so they are on the P&L.
-        for category, description, amount, days_ago in EXPENSES:
-            await record_expense(
-                session, business_id, amount=Decimal(amount), category=category,
-                description=description, source="manual", occurred_at=at_local(now, days_ago, 15),
-            )
-
-        # Last month's costs, dated by the calendar so "this month vs the same days of last month"
-        # compares like with like on any day the demo is seeded.
+        # Dated by the calendar, only once the day has come (a bill is not on the books before
+        # its day), so "this month vs the same days of last month" compares like with like on
+        # any day the demo is seeded.
         local_today = now.astimezone(JAK).date()
+        for category, description, amount, day in EXPENSES:
+            if day <= local_today.day:
+                await record_expense(
+                    session, business_id, amount=Decimal(amount), category=category,
+                    description=description, source="manual",
+                    occurred_at=at_local(now, local_today.day - day, 0),   # 00:00, inside the month from its first minute
+                )
+
+        # Last month's costs, by the same calendar.
         last_month_first = (local_today.replace(day=1) - timedelta(days=1)).replace(day=1)
         for category, description, amount, day in PRIOR_MONTH_EXPENSES:
             days_ago = (local_today - last_month_first.replace(day=day)).days
-            if 0 < days_ago <= HISTORY_DAYS:
-                await record_expense(
-                    session, business_id, amount=Decimal(amount), category=category,
-                    description=description, source="manual", occurred_at=at_local(now, days_ago, 15),
-                )
+            await record_expense(   # every one, even past the sales history: the twins hold on the 31st too
+                session, business_id, amount=Decimal(amount), category=category,
+                description=description, source="manual", occurred_at=at_local(now, days_ago, 0),
+            )
 
         # Kitchen: everything from the last day is handed over except the three newest tickets.
         recent = sorted((o for o in order_rows if o.status == "completed" and o.sold_at >= now - timedelta(hours=24)),
@@ -837,7 +860,7 @@ async def seed(confirm: bool = False, phone: str = OWNER_PHONE, business_name: s
         if read_first is not None:
             read_first.is_acknowledged = True
     print(f"Nightly pass: {len(written)} alert(s) ready: {fired}")
-    print(f"Voids by Budi: {voids['n']} | embeddings missing: {missing_embeddings} of {len(NOTAS)} receipts")
+    print(f"Voids by Budi: {voids['n']} | embeddings missing: {missing_embeddings} of {len(nota_receipts)} receipts")
 
     print(f"Seeded '{business_name}' (business_id={business_id})")
     print(f"Owner phone {phone} | owner PIN 1234 | Sari 2345 | Budi 3456 | Dewi (manager) 4567")

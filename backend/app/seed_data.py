@@ -119,23 +119,40 @@ PURCHASE_ORDERS = {
     "po-toko-draft": ("Toko Supply", "draft", 1, 3, "Pesanan minggu depan, tunggu harga baru dari Toko Supply", [("Biji Arabica", 5, 165000), ("Gula Aren", 5, 38000)]),
 }
 
-# Extra expenses besides the five in seed.py: (category, description, amount, days_ago)
+# Extra expenses besides the ones in seed.py: (category, description, amount, day of the month).
+# Rent is paid weekly from the 7th: one big bill in a night is an expense "anomaly", and rent on
+# the 1st would put the first days of every month in the red. Costs are spread over the month and
+# stay near half the sales, so the profit's change against last month reads as a believable
+# percentage, not +3000 % against a near-zero base.
 EXTRA_EXPENSES = [
-    ("sewa", "Sewa ruko bulan ini", 3500000, 22),
+    ("sewa", "Sewa ruko, cicilan minggu 1", 600000, 7),
+    ("sewa", "Sewa ruko, cicilan minggu 2", 600000, 14),
+    ("sewa", "Sewa ruko, cicilan minggu 3", 600000, 21),
+    ("sewa", "Sewa ruko, cicilan minggu 4", 600000, 28),
     ("pemasaran", "Cetak flyer promo September: sisa stok voucher", 150000, 15),
 ]
 
 # Last month's spending, by day of that month: (category, description, amount, day). Without it
 # the P&L showed October with no costs at all, so "Untung bulan ini" fell 58 % against a month
-# that looked free. Roughly 62 % of the sales, like this month, with the rent on the 22nd.
+# that looked free. The rule: every cost this month (seed.EXPENSES, EXTRA_EXPENSES, NOTAS) has a
+# twin here on the same day that is a little larger, so by any day of the month last month had
+# spent at least as much, and the café's growing sales show as a growing profit.
 PRIOR_MONTH_EXPENSES = [
-    ("bahan baku", "Belanja biji kopi + gula mingguan", 1200000, 6),
-    ("operasional", "Gas 3kg x4", 80000, 9),
-    ("operasional", "Listrik & air bulan lalu", 700000, 12),
-    ("bahan baku", "Susu UHT 2 dus", 900000, 14),
-    ("lainnya", "Perbaikan kursi & meja", 300000, 18),
-    ("sewa", "Sewa ruko bulan lalu", 3500000, 22),
-    ("bahan baku", "Belanja akhir bulan", 800000, 27),
+    ("operasional", "Galon air minum + es batu", 50000, 1),
+    ("bahan baku", "Susu UHT 2 dus", 420000, 3),
+    ("bahan baku", "Belanja biji kopi + gula mingguan", 780000, 6),
+    ("sewa", "Sewa ruko, cicilan minggu 1", 600000, 7),
+    ("bahan baku", "Belanja bahan di pasar", 500000, 8),             # twin of the 8th's nota
+    ("operasional", "Gas 3kg x4", 90000, 9),
+    ("operasional", "Listrik & air bulan lalu", 870000, 10),
+    ("bahan baku", "Cup plastik + teh", 480000, 12),                 # twin of the 12th's nota
+    ("sewa", "Sewa ruko, cicilan minggu 2", 600000, 14),
+    ("pemasaran", "Cetak menu baru", 150000, 15),
+    ("bahan baku", "Telur + sayur di pasar", 200000, 17),             # twin of the 17th's nota
+    ("lainnya", "Perbaikan kursi & meja", 450000, 18),
+    ("sewa", "Sewa ruko, cicilan minggu 3", 600000, 21),
+    ("bahan baku", "Belanja bahan mingguan", 500000, 22),            # twin of the 22nd's nota
+    ("sewa", "Sewa ruko, cicilan minggu 4", 600000, 28),
 ]
 
 # Earlier nights' alerts the owner already read: (type, severity, days_ago, metric, message, details builder key)
