@@ -277,20 +277,73 @@ textarea {
   caret-color: var(--ink);
 }
 
-/* Quiet scrollbars inside scrolling panels (sheets, popovers, tables). */
+/* No scrollbar anywhere (owner, 2026-11-25): scrolling itself (wheel, touch,
+   keys, assistive tech) is untouched, only the bar is hidden. Where an inner
+   area is cut off, a soft fade at the edge says there is more (below). */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-
-/* A row of chips that scrolls sideways (menu categories, till-10): swiped, so
-   no bar under it. */
-.chip-row {
   scrollbar-width: none;
 }
 
-.chip-row::-webkit-scrollbar {
+*::-webkit-scrollbar {
   display: none;
+}
+
+/* The fade: the edge dims only on the side that still has content, driven by
+   the scroll position itself. Browsers without scroll-driven animation get no
+   fade (the lengths stay 0) and still scroll. */
+@property --fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes edge-fade {
+  0% {
+    --fade-start: 0px;
+    --fade-end: 1.75rem;
+  }
+  4% {
+    --fade-start: 1.75rem;
+  }
+  96% {
+    --fade-end: 1.75rem;
+  }
+  100% {
+    --fade-start: 1.75rem;
+    --fade-end: 0px;
+  }
+}
+
+/* Inner scrollers that sit inside a surface. Sheets and cards that carry their
+   own shadow are left out: a mask would clip the shadow. */
+:where(.overflow-y-auto, .overflow-auto):not(.sheet-panel, .glass-card) {
+  animation: edge-fade linear both;
+  animation-timeline: scroll(self block);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent 100%
+  );
+}
+
+.chip-row {
+  animation: edge-fade linear both;
+  animation-timeline: scroll(self inline);
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent 100%
+  );
 }
 
 /* Numbers in this product are money and stock: they always align. */
@@ -1953,8 +2006,6 @@ table {
    (components/SettingsSubnav.tsx): a hairline guide, small labels, the
    section being read lit. Reads from the shell tokens. */
 .shell-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--shell-divider) transparent;
   overscroll-behavior: contain;
 }
 
