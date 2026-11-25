@@ -29,37 +29,54 @@ LANGUAGES = ("id", "ms", "en")
 # correcting stock, drafting a purchase order) are offered too — they are
 # things the owner can ask for. `search_history` is the RAG path.
 CAPABILITIES: dict[str, dict[str, str]] = {
-    "get_sales_summary": {"id": "penjualan hari ini / minggu ini", "ms": "jualan hari ini / minggu ini", "en": "today's or this week's sales"},
-    "compare_periods": {"id": "banding penjualan antar periode", "ms": "banding jualan antara tempoh", "en": "compare sales between periods"},
+    "get_sales_summary": {"id": "omzet per hari / minggu / bulan", "ms": "jualan harian / mingguan / bulanan", "en": "totals by day, week or month"},
+    "compare_periods": {"id": "banding antar periode", "ms": "banding antara tempoh", "en": "period comparisons"},
     "get_profit": {"id": "untung rugi", "ms": "untung rugi", "en": "profit and loss"},
     "get_stock": {"id": "sisa stok", "ms": "baki stok", "en": "stock on hand"},
-    "get_low_stock": {"id": "stok yang hampir habis", "ms": "stok yang hampir habis", "en": "items about to run out"},
-    "correct_stock": {"id": "koreksi stok setelah hitung fisik", "ms": "betulkan stok selepas kiraan", "en": "correct a stock count"},
-    "record_expense": {"id": "catat pengeluaran", "ms": "catat perbelanjaan", "en": "record an expense"},
-    "search_history": {"id": "cari catatan lama", "ms": "cari rekod lama", "en": "search past records"},
-    "get_purchase_history": {"id": "riwayat belanja ke supplier", "ms": "sejarah belian dari pembekal", "en": "purchase history by supplier"},
-    "get_supplier_prices": {"id": "harga beli terakhir per supplier", "ms": "harga belian terakhir ikut pembekal", "en": "last purchase prices by supplier"},
-    "get_recipe_cost": {"id": "modal per porsi dari resep", "ms": "kos setiap hidangan dari resipi", "en": "recipe cost per serving"},
-    "get_shift_summary": {"id": "rekap shift kasir dan selisih kas", "ms": "ringkasan syif juruwang dan beza tunai", "en": "till shifts and cash variance"},
-    "get_customer_summary": {"id": "ringkasan pelanggan dan poin", "ms": "ringkasan pelanggan dan mata", "en": "customer summary and points"},
-    "get_promo_performance": {"id": "kinerja promo", "ms": "prestasi promosi", "en": "promo performance"},
-    "draft_purchase_order": {"id": "buat draf pesanan ke supplier", "ms": "sediakan draf pesanan kepada pembekal", "en": "draft a purchase order"},
+    "get_low_stock": {"id": "yang hampir habis", "ms": "yang hampir habis", "en": "items running low"},
+    "correct_stock": {"id": "koreksi stok", "ms": "betulkan stok", "en": "stock corrections"},
+    "record_expense": {"id": "catat pengeluaran", "ms": "catat perbelanjaan", "en": "recording an expense"},
+    "search_history": {"id": "cari nota lama", "ms": "cari resit lama", "en": "searching past receipts"},
+    "get_purchase_history": {"id": "riwayat belanja", "ms": "sejarah belian", "en": "purchase history"},
+    "get_supplier_prices": {"id": "harga supplier", "ms": "harga pembekal", "en": "supplier prices"},
+    "get_recipe_cost": {"id": "modal per porsi", "ms": "kos setiap hidangan", "en": "cost per serving"},
+    "get_shift_summary": {"id": "shift kasir & selisih kas", "ms": "syif juruwang & beza tunai", "en": "till shifts and cash gaps"},
+    "get_customer_summary": {"id": "pelanggan & poin", "ms": "pelanggan & mata", "en": "customers and points"},
+    "get_promo_performance": {"id": "promo", "ms": "promosi", "en": "promos"},
+    "draft_purchase_order": {"id": "draf pesanan ke supplier", "ms": "draf pesanan kepada pembekal", "en": "purchase order drafts"},
+}
+
+# P2-1: the menu is grouped, one line per group, so all of it fits a phone screen.
+# A tool in no group still shows, under the last heading (the test keeps it complete).
+_GROUPS: tuple[tuple[dict[str, str], tuple[str, ...]], ...] = (
+    ({"id": "Penjualan", "ms": "Jualan", "en": "Sales"},
+     ("get_sales_summary", "compare_periods", "get_profit", "get_promo_performance", "get_customer_summary", "get_shift_summary")),
+    ({"id": "Stok", "ms": "Stok", "en": "Stock"},
+     ("get_stock", "get_low_stock", "correct_stock", "get_recipe_cost")),
+    ({"id": "Belanja", "ms": "Belian", "en": "Purchasing"},
+     ("get_purchase_history", "get_supplier_prices", "draft_purchase_order", "record_expense", "search_history")),
+)
+# Not tools but things the owner can send (processor.py: photos and the stock Excel).
+_SEND = {
+    "id": "- *Kirim:* foto nota belanja, foto buku stok, file Excel stok, atau foto menu dengan keterangan _menu_",
+    "ms": "- *Hantar:* foto resit belian, foto buku stok, fail Excel stok, atau foto menu dengan kapsyen _menu_",
+    "en": "- *Send:* a purchase receipt photo, a stock-book photo, the stock Excel file, or a menu photo captioned _menu_",
 }
 
 _INTRO = {
-    "id": "Maaf, data usaha yang saya pegang tidak mencakup {topic}, jadi saya tidak bisa menjawab itu dengan angka.",
+    "id": "Maaf, data usaha yang aku pegang belum mencakup {topic}, jadi aku nggak bisa jawab itu pakai angka.",
     "ms": "Maaf, data perniagaan yang saya ada tidak merangkumi {topic}, jadi saya tidak boleh menjawabnya dengan angka.",
-    "en": "Sorry — the business data I hold does not cover {topic}, so I can't give you a figure for that.",
+    "en": "Sorry, the business data I hold does not cover {topic}, so I can't give you a figure for that.",
 }
 _INTRO_NO_TOPIC = {
-    "id": "Maaf, itu di luar data usaha yang saya pegang, jadi saya tidak bisa menjawabnya dengan angka.",
+    "id": "Maaf, itu di luar data usaha yang aku pegang, jadi aku nggak bisa jawab pakai angka.",
     "ms": "Maaf, itu di luar data perniagaan yang saya ada, jadi saya tidak boleh menjawabnya dengan angka.",
-    "en": "Sorry — that is outside the business data I hold, so I can't give you a figure for it.",
+    "en": "Sorry, that is outside the business data I hold, so I can't give you a figure for it.",
 }
 _OFFER = {
-    "id": "Yang bisa saya jawab: {menu}.",
-    "ms": "Yang boleh saya jawab: {menu}.",
-    "en": "What I can answer: {menu}.",
+    "id": "Yang bisa kubantu:",
+    "ms": "Yang boleh saya bantu:",
+    "en": "What I can answer:",
 }
 
 # Marker words that belong to ONE language. Words shared by Indonesian and
@@ -104,13 +121,19 @@ def looks_like_a_figure(reply: str) -> bool:
     return bool(_FIGURE.search(reply or ""))
 
 
-def capability_menu(language: str, limit: int = 8) -> str:
-    """The things the assistant can do, in the order the tools are declared
-    (so the most-used come first), for every declared tool with a phrase."""
+def capability_menu(language: str) -> str:
+    """Everything the assistant can do: one line per group of tools, then what
+    the owner can send. Every declared tool with a phrase is listed."""
     language = language if language in LANGUAGES else "id"
-    names = [d.name for d in tools_module.TOOL_DECLARATIONS]
-    phrases = [CAPABILITIES[n][language] for n in names if n in CAPABILITIES]
-    return ", ".join(phrases[:limit])
+    declared = [d.name for d in tools_module.TOOL_DECLARATIONS if d.name in CAPABILITIES]
+    grouped = {n for _label, names in _GROUPS for n in names}
+    lines = []
+    for i, (label, names) in enumerate(_GROUPS):
+        tools = [n for n in names if n in declared]
+        if i == len(_GROUPS) - 1:
+            tools += [n for n in declared if n not in grouped]
+        lines.append(f"- *{label[language]}:* " + ", ".join(CAPABILITIES[n][language] for n in tools))
+    return "\n".join([*lines, _SEND[language]])
 
 
 def refusal_reply(business: Business, user_message: str, topic: str | None = None) -> str:
@@ -122,4 +145,4 @@ def refusal_reply(business: Business, user_message: str, topic: str | None = Non
         intro = _INTRO[language].format(topic=topic)
     else:
         intro = _INTRO_NO_TOPIC[language]
-    return f"{intro}\n\n{_OFFER[language].format(menu=capability_menu(language))}"
+    return f"{intro}\n\n{_OFFER[language]}\n{capability_menu(language)}"

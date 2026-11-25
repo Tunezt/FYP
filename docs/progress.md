@@ -3074,3 +3074,14 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Stok status uses the Peringatan rule: `/api/items` carries `delivery_days`; days left under it reads "habis sebelum kiriman", counts as "Perlu perhatian" and in Ringkasan "Stok menipis".
 - Gates: pytest 929 passed, 1 failed (`test_showcase_seed ... [2]`: profit -32.2% vs last month at 2 days back; fails identically on HEAD without these changes, date-dependent, not from this work); alembic up/down/up, `npm run build`, seed clean. Evidence: Documents/Side Project/FYP-showcase-evidence/p2.
 **Deviation:** none. **Next:** none.
+
+### [p2-1] The "can't answer that" reply lists everything the assistant can do, grouped
+**Date:** 2026-11-25
+**Status:** done
+**Changed:** backend/app/ai/refusal.py, backend/tests/test_refusal.py, backend/tests/test_bot_replies_real_path.py (new)
+**Gates:** alembic up / down -1 / up ok; seed ok; npm run build ok. pytest in 5 parts under the render lock on a fresh local DB: 932 passed, 2 failed. Known, not this change: test_showcase_seed.py::test_the_showcase_has_every_alert_and_every_page_filled[2] fails the same way on untouched main fb29555 ("2 days back: profit -32.2% vs the same days of last month"; the seed fix belongs to the dashboard worker), and test_print_bridge.py::test_the_probe_is_honest_about_a_printer_that_answers_nothing is the load-sensitive probe (the file passes 39/39 alone on this commit).
+**Notes:**
+- Before: the refusal cut the capability list at 8 of the 15 tools, as one comma paragraph ("sisa stok, penjualan hari ini / minggu ini, …"), in a formal "saya" voice the rest of the bot does not use.
+- Now: every tool, one line per group (*Penjualan*, *Stok*, *Belanja*) plus a *Kirim* line for what the owner can send (receipt photo, stock-book photo, stock Excel, menu photo captioned "menu"); 8 lines in all, Indonesian in the bot's own "aku" voice. Malay and English follow the same layout. Still assembled from the phrase table, no model call, no figure.
+- Real path (process_webhook_payload, gateway captured): the reply lists 15 of 15. Evidence: Documents/Side Project/FYP-showcase-evidence/p2/p2-1-refusal-menu (before.png, after.png).
+**Deviation:** none. **Next:** none.

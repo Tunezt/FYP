@@ -93,7 +93,7 @@ def test_every_tool_is_offered_in_every_language_so_the_menu_cannot_fall_behind(
         assert set(phrases) == set(LANGUAGES), name
         assert all(p.strip() and not DIGITS.search(p) for p in phrases.values()), name
     for lang in LANGUAGES:
-        menu = capability_menu(lang, limit=100)
+        menu = capability_menu(lang)
         assert all(CAPABILITIES[n][lang] in menu for n in declared)
     # The escape hatches are declared alongside the tools; `out_of_scope` never carries a reply text.
     names = [d.name for d in _declarations()]
@@ -112,3 +112,17 @@ def test_language_detection_follows_the_message_then_the_business():
     assert reply.startswith("Sorry") and "What I can answer" in reply
     # A topic that itself smuggles a number is dropped, not echoed.
     assert not DIGITS.search(refusal_reply(_business(), "berapa?", topic="omzet 50 juta bulan depan"))
+
+
+@pytest.mark.parametrize("lang,question", [("id", "cuaca besok?"), ("ms", "baki cuaca esok?"), ("en", "what is the weather tomorrow")])
+def test_the_refusal_names_every_ability_grouped_short_enough_for_a_phone(lang, question):
+    """P2-1: the refusal used to cut the menu at 8 of the 15 tools. Now every
+    tool is offered, grouped one line per heading, plus what the owner can send."""
+    reply = refusal_reply(_business(lang), question, topic=None)
+    declared = {d.name for d in tools_module.TOOL_DECLARATIONS}
+    assert all(CAPABILITIES[n][lang] in reply for n in declared), [n for n in declared if CAPABILITIES[n][lang] not in reply]
+    menu = [line for line in reply.splitlines() if line.startswith("- *")]
+    assert len(menu) == 4                                   # three groups + the send line
+    assert "menu" in menu[-1] and "Excel" in menu[-1]
+    assert len(reply.splitlines()) <= 8 and all(len(line) <= 140 for line in menu)
+    assert "**" not in reply and not DIGITS.search(reply)
