@@ -3109,3 +3109,15 @@ Entries below follow roadmap §6. One task per commit, `[<task-id>] <description
 - Rows are never pruned (shortcut comment in processor): one short row per inbound message.
 - Real path: first delivery answered, the same id after `importlib.reload(processor)` (a restart) gets no reply and no second request log. Evidence: FYP-showcase-evidence/p2/p2-12-dedup.
 **Deviation:** none. **Next:** none.
+
+### [p2-6] A stock-book photo updates existing items; new names are added only on "YA SEMUA"
+**Date:** 2026-11-25
+**Status:** done
+**Changed:** backend/app/services/receipts.py (find_item, new_ledger_items, commit_parse(add_new_items), "YA SEMUA" keyword), backend/app/whatsapp/processor.py, backend/tests/test_stock_book_photo.py (new)
+**Gates:** alembic up / down -1 / up ok; seed ok; npm run build ok. pytest in 5 parts under the render lock on a fresh local DB: 958 passed, 1 failed: test_showcase_seed.py::test_the_showcase_has_every_alert_and_every_page_filled[2], known and pre-existing on main fb29555 ("2 days back: profit -32.2% vs the same days of last month"; seed fix owned by the dashboard worker).
+**Notes:**
+- Before: YA on a stock-book photo created every unknown line as a catalogue item (the audit saw "Mie instan" and "Rokok Surya" appear), so a random photo could fill the item list.
+- The Stok page tells owners a stock-book photo is one way to add items (onboarding), so the brief's "ask" option was taken over "never add": the read-back names the lines not in the item list ("*Belum ada di daftar barang:* Mie instan, Rokok Surya"); YA updates the existing items only; YA SEMUA also adds the new ones. After YA, the composer is told which were not saved and how to add them.
+- Purchase receipts are unchanged (they go through the goods-receipt draft).
+- Real path with the real composer (flash-lite): before, YA made 4 items out of 2; after, 2 items stay 2 and the reply says Mie instan and Rokok Surya were not added and how to add them. Evidence: FYP-showcase-evidence/p2/p2-6-stock-book.
+**Deviation:** none. **Next:** none.

@@ -270,7 +270,9 @@ def quota_reply(exc: QuotaExhausted) -> str:
     )
 
 
-def _confirmation_prompt(parsed: dict) -> str:
+def _confirmation_prompt(parsed: dict, new_items: list[str] = ()) -> str:
+    """`new_items`: names on a stock-book photo not in the item list yet (p2-6).
+    A plain YA leaves them out; YA SEMUA adds them as new items."""
     from app.services.receipts import summarize_parse
 
     header = (
@@ -278,6 +280,13 @@ def _confirmation_prompt(parsed: dict) -> str:
         if parsed.get("document_type") == "stock_ledger"
         else "Ini yang aku baca dari notanya 👀"
     )
+    if new_items:
+        return (
+            f"{header}\n\n{summarize_parse(parsed)}\n\n"
+            f"*Belum ada di daftar barang:* {', '.join(new_items)}\n\n"
+            "Balas *YA* untuk simpan stok barang yang sudah ada saja, atau *YA SEMUA* untuk sekalian "
+            "menambahkan yang belum ada sebagai barang baru. Ada yang salah? Kasih tau bagiannya."
+        )
     return (
         f"{header}\n\n{summarize_parse(parsed)}\n\n"
         "Sudah benar? Balas *YA* untuk simpan, atau kasih tau bagian yang salah."
@@ -294,6 +303,7 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
         create_pending,
         discard_pending,
         get_active_pending,
+        new_ledger_items,
     )
 
     async with tenant_session(business.id) as session:
@@ -303,7 +313,7 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
             verdict = classify_reply_keyword(text)
             payload = pending.payload
 
-            if verdict == "confirm":
+            if verdict in ("confirm", "confirm_all"):
                 if pending.kind == "goods_receipt":
                     # Supplier invoice (M5-T4): the matched lines become a goods
                     # receipt; questions were skipped and are named in the reply.
@@ -322,7 +332,8 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
                     return "vision_menu_confirm", reply
                 else:
                     facts = await commit_parse(
-                        session, business, payload["parsed"], payload["image_path"]
+                        session, business, payload["parsed"], payload["image_path"],
+                        add_new_items=verdict == "confirm_all",
                     )
                 await discard_pending(session, pending)
                 reply = await compose_reply(business, text, "vision_confirm", facts)
@@ -364,7 +375,9 @@ async def _handle_text(business: Business, text: str) -> tuple[str, str]:
                         session, revision["parsed"], _draft_prompt(draft)
                     )
                 await create_pending(session, business, revision["parsed"], payload["image_path"])
-                return "vision_revise", _confirmation_prompt(revision["parsed"])
+                return "vision_revise", _confirmation_prompt(
+                    revision["parsed"], await new_ledger_items(session, revision["parsed"])
+                )
             # Unrelated → keep the pending and answer normally below.
 
         routed = await route_text(session, business, text)
@@ -420,8 +433,10 @@ async def _handle_image(business: Business, message: dict) -> tuple[str, str | N
             await create_pending(session, business, parsed, image_path, kind="goods_receipt", extra={"draft": draft})
             return "vision", await with_duplicate_note(session, parsed, _draft_prompt(draft))
 
+        from app.services.receipts import new_ledger_items
+
         await create_pending(session, business, parsed, image_path)
-        prompt = _confirmation_prompt(parsed)
+        prompt = _confirmation_prompt(parsed, await new_ledger_items(session, parsed))
         if needs_confirmation(parsed):
             prompt = "⚠️ Ada bagian yang kurang jelas, tolong dicek.\n\n" + prompt
         return "vision", prompt

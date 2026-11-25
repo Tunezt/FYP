@@ -41,9 +41,17 @@ def needs_confirmation(parsed: dict) -> bool:
     )
 
 
+# p2-6: "yes, and add the new items too" for a stock-book photo with items not yet
+# in the item list. A plain YA updates the existing items only.
+AFFIRMATIVE_ALL = {"ya semua", "ya semuanya", "semua", "semuanya", "ya tambah semua", "tambah semua",
+                   "ya tambahkan semua", "yes all", "all"}
+
+
 def classify_reply_keyword(text: str) -> str:
-    """'confirm' | 'deny' | 'other' — pure keyword fast path."""
-    word = text.strip().lower().rstrip("!.…")
+    """'confirm' | 'confirm_all' | 'deny' | 'other' — pure keyword fast path."""
+    word = " ".join(text.lower().replace(",", " ").split()).rstrip("!.…")
+    if word in AFFIRMATIVE_ALL:
+        return "confirm_all"
     if word in AFFIRMATIVE:
         return "confirm"
     if word in NEGATIVE:
@@ -86,14 +94,32 @@ def _parse_date(raw: str | None) -> datetime | None:
         return None
 
 
+async def find_item(session: AsyncSession, name: str) -> Item | None:
+    """The item a name read off a photo refers to (loose: a contained name matches)."""
+    return (
+        await session.execute(select(Item).where(Item.name.ilike(f"%{name}%")).order_by(Item.name).limit(1))
+    ).scalar_one_or_none()
+
+
+async def new_ledger_items(session: AsyncSession, parsed: dict) -> list[str]:
+    """Names on a stock-book photo that are not in the item list yet (p2-6)."""
+    if parsed.get("document_type") != "stock_ledger":
+        return []
+    names = [(e.get("name") or "").strip() for e in parsed.get("items", [])]
+    return [n for n in names if n and await find_item(session, n) is None]
+
+
 async def commit_parse(
-    session: AsyncSession, business: Business, parsed: dict, image_path: str
+    session: AsyncSession, business: Business, parsed: dict, image_path: str, add_new_items: bool = False
 ) -> dict:
     """Write receipt (+ expense for purchases) and apply stock effects.
 
     receipt      → purchased quantities are ADDED to matching items' stock
                    (unmatched items are created so the purchase isn't lost)
-    stock_ledger → quantities are ABSOLUTE (a stock count), set not added
+    stock_ledger → quantities are ABSOLUTE (a stock count), set not added.
+                   A name not in the item list is skipped unless the owner
+                   asked for new items too (`add_new_items`, "YA SEMUA"; p2-6):
+                   a random photo must not fill the catalogue.
     """
     doc_type = parsed.get("document_type", "receipt")
     occurred_at = _parse_date(parsed.get("date")) or datetime.now(timezone.utc)
@@ -114,6 +140,7 @@ async def commit_parse(
     await link_receipt(session, receipt)
 
     stock_effects: list[dict] = []
+    skipped: list[str] = []
     capitalised = Decimal(0)  # stock taken in at a written price (M6-T6)
     for entry in parsed.get("items", []):
         name = (entry.get("name") or "").strip()
@@ -123,11 +150,10 @@ async def commit_parse(
         unit = (entry.get("unit") or "pcs").strip()
         unit_price = _dec(entry.get("unit_price"))
 
-        match = (
-            await session.execute(
-                select(Item).where(Item.name.ilike(f"%{name}%")).order_by(Item.name).limit(1)
-            )
-        ).scalar_one_or_none()
+        match = await find_item(session, name)
+        if match is None and doc_type == "stock_ledger" and not add_new_items:
+            skipped.append(name)
+            continue
 
         # Every branch below writes its stock_movements row in this same
         # transaction (M2-T2). A purchase price is the unit cost when written;
@@ -210,6 +236,9 @@ async def commit_parse(
         "stock_effects": stock_effects,
         "receipt_id": str(receipt.id),
     }
+    if skipped:
+        facts["not_saved_not_in_item_list"] = skipped
+        facts["to_add_them"] = "kirim ulang fotonya lalu balas YA SEMUA, atau Tambah barang di halaman Stok"
 
     # Embed for RAG (Phase 4). Import here so a Gemini outage can't break the
     # commit itself — embedding failures degrade search, not data.
